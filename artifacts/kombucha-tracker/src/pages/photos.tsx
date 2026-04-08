@@ -84,8 +84,11 @@ function BatchPhotos({ batchId, batchName }: { batchId: number; batchName: strin
         </p>
       )}
 
-      <Link href={`/batches/${batchId}`}>
-        <a className="text-xs text-primary hover:underline mt-2 inline-block">View batch</a>
+      <Link
+        href={`/batches/${batchId}`}
+        className="text-xs text-primary hover:underline mt-2 inline-block"
+      >
+        View batch
       </Link>
     </div>
   );

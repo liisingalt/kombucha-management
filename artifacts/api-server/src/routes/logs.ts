@@ -4,6 +4,12 @@ import { batchesTable, logsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { openai } from "@workspace/integrations-openai-ai-server";
+import {
+  ListLogsParams,
+  CreateLogParams,
+  CreateLogBody,
+  GetLogParams,
+} from "@workspace/api-zod";
 
 const router = Router({ mergeParams: true });
 
@@ -28,10 +34,7 @@ async function generateLogTip(log: {
           content:
             "You are a helpful kombucha expert. Give a short, practical tip (1-2 sentences) based on the user's daily fermentation log. Be direct and actionable. Do not greet or be verbose.",
         },
-        {
-          role: "user",
-          content: parts.join(" "),
-        },
+        { role: "user", content: parts.join(" ") },
       ],
     });
 
@@ -43,7 +46,12 @@ async function generateLogTip(log: {
 
 router.get("/batches/:batchId/logs", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
-  const batchId = parseInt(String(req.params.batchId));
+  const paramsParsed = ListLogsParams.safeParse({ batchId: Number(req.params.batchId) });
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid batchId" });
+    return;
+  }
+  const { batchId } = paramsParsed.data;
 
   try {
     const batch = await db.query.batchesTable.findFirst({
@@ -69,13 +77,19 @@ router.get("/batches/:batchId/logs", requireAuth, async (req, res) => {
 
 router.post("/batches/:batchId/logs", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
-  const batchId = parseInt(String(req.params.batchId));
-  const { dayNumber, temperature, scobylook, smell, color, notes, loggedAt } = req.body;
-
-  if (dayNumber === undefined) {
-    res.status(400).json({ error: "dayNumber is required" });
+  const paramsParsed = CreateLogParams.safeParse({ batchId: Number(req.params.batchId) });
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid batchId" });
     return;
   }
+  const { batchId } = paramsParsed.data;
+
+  const bodyParsed = CreateLogBody.safeParse(req.body);
+  if (!bodyParsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: bodyParsed.error.flatten() });
+    return;
+  }
+  const { dayNumber, temperature, scobylook, smell, color, notes, loggedAt } = bodyParsed.data;
 
   try {
     const batch = await db.query.batchesTable.findFirst({
@@ -110,8 +124,15 @@ router.post("/batches/:batchId/logs", requireAuth, async (req, res) => {
 
 router.get("/batches/:batchId/logs/:logId", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
-  const batchId = parseInt(String(req.params.batchId));
-  const logId = parseInt(String(req.params.logId));
+  const paramsParsed = GetLogParams.safeParse({
+    batchId: Number(req.params.batchId),
+    logId: Number(req.params.logId),
+  });
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid params" });
+    return;
+  }
+  const { batchId, logId } = paramsParsed.data;
 
   try {
     const batch = await db.query.batchesTable.findFirst({

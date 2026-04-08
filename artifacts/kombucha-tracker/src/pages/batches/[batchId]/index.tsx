@@ -135,10 +135,11 @@ export default function BatchDetailPage() {
       <div className="p-6 max-w-3xl mx-auto">
         {/* Header */}
         <div className="flex items-start gap-3 mb-6">
-          <Link href="/batches">
-            <a className="p-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors mt-1">
-              <ArrowLeft size={18} />
-            </a>
+          <Link
+            href="/batches"
+            className="p-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors mt-1"
+          >
+            <ArrowLeft size={18} />
           </Link>
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">

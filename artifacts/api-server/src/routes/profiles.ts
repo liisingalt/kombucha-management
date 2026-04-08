@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { profilesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { UpdateProfileBody } from "@workspace/api-zod";
 
 const router = Router();
 
@@ -24,6 +25,13 @@ router.get("/profile", requireAuth, async (req, res) => {
 
 router.put("/profile", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
+
+  const parsed = UpdateProfileBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
+    return;
+  }
+
   const {
     hasCompletedOnboarding,
     hasMadeBefore,
@@ -33,7 +41,7 @@ router.put("/profile", requireAuth, async (req, res) => {
     flavorPreference,
     onboardingAdvice,
     ttsEnabled,
-  } = req.body;
+  } = parsed.data;
 
   try {
     const updates: Record<string, unknown> = { updatedAt: new Date() };

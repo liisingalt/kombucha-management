@@ -57,10 +57,11 @@ export default function NewBatchPage() {
     <Layout>
       <div className="p-6 max-w-lg mx-auto">
         <div className="flex items-center gap-3 mb-8">
-          <Link href="/batches">
-            <a className="p-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors">
-              <ArrowLeft size={18} />
-            </a>
+          <Link
+            href="/batches"
+            className="p-2 rounded-lg hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft size={18} />
           </Link>
           <div>
             <h1 className="text-3xl font-serif font-semibold">New batch</h1>

@@ -45,32 +45,32 @@ export default function BatchesPage() {
         ) : batches.data && batches.data.length > 0 ? (
           <div className="space-y-3">
             {batches.data.map((batch) => (
-              <Link key={batch.id} href={`/batches/${batch.id}`}>
-                <a
-                  data-testid={`card-batch-${batch.id}`}
-                  className="block p-4 rounded-2xl border border-card-border bg-card hover:border-primary/30 hover:shadow-sm transition-all"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Beaker size={18} className="text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-semibold text-foreground">{batch.name}</h3>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[batch.status] ?? "bg-muted text-muted-foreground"}`}>
-                          {statusLabels[batch.status] ?? batch.status}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                        {batch.teaType && <span>{batch.teaType}</span>}
-                        <span className="flex items-center gap-1"><Clock size={11} /> Day {batch.daysSinceStart}</span>
-                        <span>{batch.logCount} log{batch.logCount !== 1 ? "s" : ""}</span>
-                        <span>{batch.photoCount} photo{batch.photoCount !== 1 ? "s" : ""}</span>
-                      </div>
-                    </div>
-                    <ArrowRight size={16} className="text-muted-foreground flex-shrink-0" />
+              <Link
+                key={batch.id}
+                href={`/batches/${batch.id}`}
+                data-testid={`card-batch-${batch.id}`}
+                className="block p-4 rounded-2xl border border-card-border bg-card hover:border-primary/30 hover:shadow-sm transition-all"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Beaker size={18} className="text-primary" />
                   </div>
-                </a>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-semibold text-foreground">{batch.name}</h3>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[batch.status] ?? "bg-muted text-muted-foreground"}`}>
+                        {statusLabels[batch.status] ?? batch.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      {batch.teaType && <span>{batch.teaType}</span>}
+                      <span className="flex items-center gap-1"><Clock size={11} /> Day {batch.daysSinceStart}</span>
+                      <span>{batch.logCount} log{batch.logCount !== 1 ? "s" : ""}</span>
+                      <span>{batch.photoCount} photo{batch.photoCount !== 1 ? "s" : ""}</span>
+                    </div>
+                  </div>
+                  <ArrowRight size={16} className="text-muted-foreground flex-shrink-0" />
+                </div>
               </Link>
             ))}
           </div>

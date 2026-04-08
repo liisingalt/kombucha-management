@@ -1,26 +1,69 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { batchesTable, logsTable, chatMessagesTable } from "@workspace/db";
+import { batchesTable, logsTable, chatMessagesTable, photosTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { textToSpeech } from "@workspace/integrations-openai-ai-server/audio";
-
 import { ObjectStorageService } from "../lib/objectStorage";
+import { getObjectAclPolicy } from "../lib/objectAcl";
+import {
+  AnalyzePhotoBody,
+  GetOnboardingAdviceBody,
+  ChatWithAdvisorBody,
+  TextToSpeechBody,
+  GetFlavoringGuideQueryParams,
+} from "@workspace/api-zod";
 
 const router = Router();
 const storageService = new ObjectStorageService();
 
+/**
+ * POST /ai/analyze-photo
+ *
+ * Analyze a photo by objectPath, but only if the ACL owner matches the
+ * authenticated user (prevents cross-user IDOR via arbitrary objectPath).
+ */
 router.post("/ai/analyze-photo", requireAuth, async (req, res) => {
-  const { objectPath } = req.body;
-  if (!objectPath) {
-    res.status(400).json({ error: "objectPath is required" });
+  const { userId } = req as AuthenticatedRequest;
+
+  const parsed = AnalyzePhotoBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
     return;
   }
+  const { objectPath } = parsed.data;
 
   try {
-    const file = await storageService.getObjectEntityFile(objectPath);
-    const downloadResponse = await storageService.downloadObject(file);
+    // Verify this photo exists in the DB and belongs to the requesting user
+    const photo = await db.query.photosTable.findFirst({
+      where: eq(photosTable.objectPath, objectPath),
+    });
+
+    if (!photo) {
+      res.status(404).json({ error: "Photo not found" });
+      return;
+    }
+
+    // Verify the batch belongs to this user
+    const batch = await db.query.batchesTable.findFirst({
+      where: and(eq(batchesTable.id, photo.batchId), eq(batchesTable.userId, userId)),
+    });
+
+    if (!batch) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    // Additionally verify ACL ownership on the stored object
+    const objectFile = await storageService.getObjectEntityFile(objectPath);
+    const aclPolicy = await getObjectAclPolicy(objectFile);
+    if (aclPolicy && aclPolicy.owner !== userId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const downloadResponse = await storageService.downloadObject(objectFile);
     const buffer = Buffer.from(await downloadResponse.arrayBuffer());
     const base64 = buffer.toString("base64");
     const mimeType = downloadResponse.headers.get("content-type") || "image/jpeg";
@@ -41,10 +84,7 @@ router.post("/ai/analyze-photo", requireAuth, async (req, res) => {
               type: "image_url",
               image_url: { url: `data:${mimeType};base64,${base64}` },
             },
-            {
-              type: "text",
-              text: "Please analyze this kombucha SCOBY or fermentation vessel photo.",
-            },
+            { type: "text", text: "Please analyze this kombucha SCOBY or fermentation vessel photo." },
           ],
         },
       ],
@@ -59,7 +99,12 @@ router.post("/ai/analyze-photo", requireAuth, async (req, res) => {
 });
 
 router.post("/ai/onboarding-advice", requireAuth, async (req, res) => {
-  const { hasMadeBefore, hasScoby, currentStage, experienceLevel } = req.body;
+  const parsed = GetOnboardingAdviceBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
+    return;
+  }
+  const { hasMadeBefore, hasScoby, currentStage, experienceLevel } = parsed.data;
 
   try {
     const parts: string[] = [];
@@ -85,10 +130,7 @@ router.post("/ai/onboarding-advice", requireAuth, async (req, res) => {
           content:
             "You are a warm and knowledgeable kombucha mentor. Based on the user's profile, give them a personalized welcome guide — practical first steps, what to watch for, and encouragement. Keep it friendly, 3-4 sentences. Do not be generic.",
         },
-        {
-          role: "user",
-          content: parts.join(" "),
-        },
+        { role: "user", content: parts.join(" ") },
       ],
     });
 
@@ -102,12 +144,13 @@ router.post("/ai/onboarding-advice", requireAuth, async (req, res) => {
 
 router.post("/ai/chat", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
-  const { message } = req.body;
 
-  if (!message) {
-    res.status(400).json({ error: "message is required" });
+  const parsed = ChatWithAdvisorBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
     return;
   }
+  const { message } = parsed.data;
 
   try {
     const activeBatches = await db.query.batchesTable.findMany({
@@ -191,11 +234,12 @@ router.get("/ai/chat/history", requireAuth, async (req, res) => {
 });
 
 router.post("/ai/tts", requireAuth, async (req, res) => {
-  const { text } = req.body;
-  if (!text) {
-    res.status(400).json({ error: "text is required" });
+  const parsed = TextToSpeechBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
     return;
   }
+  const { text } = parsed.data;
 
   try {
     const audioBuffer = await textToSpeech(text, "nova", "mp3");
@@ -208,7 +252,8 @@ router.post("/ai/tts", requireAuth, async (req, res) => {
 });
 
 router.get("/ai/flavoring-guide", requireAuth, async (req, res) => {
-  const preference = req.query.preference as string | undefined;
+  const queryParsed = GetFlavoringGuideQueryParams.safeParse(req.query);
+  const preference = queryParsed.success ? queryParsed.data.preference : undefined;
 
   try {
     const prefText = preference ? `The user prefers ${preference} flavors.` : "The user has no specific flavor preference.";

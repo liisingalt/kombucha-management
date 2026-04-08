@@ -4,16 +4,29 @@ import { batchesTable, photosTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { ObjectStorageService } from "../lib/objectStorage";
-import { setObjectAclPolicy } from "../lib/objectAcl";
+import { setObjectAclPolicy, getObjectAclPolicy } from "../lib/objectAcl";
 import { openai } from "@workspace/integrations-openai-ai-server";
+import {
+  ListPhotosParams,
+  CreatePhotoParams,
+  CreatePhotoBody,
+  DeletePhotoParams,
+} from "@workspace/api-zod";
 
 const router = Router({ mergeParams: true });
 const storageService = new ObjectStorageService();
 
-async function analyzePhoto(objectPath: string): Promise<string | null> {
+async function analyzePhotoForOwner(objectPath: string, userId: string): Promise<string | null> {
   try {
-    const file = await storageService.getObjectEntityFile(objectPath);
-    const downloadResponse = await storageService.downloadObject(file);
+    const objectFile = await storageService.getObjectEntityFile(objectPath);
+
+    // Verify ACL ownership before reading
+    const aclPolicy = await getObjectAclPolicy(objectFile);
+    if (!aclPolicy || aclPolicy.owner !== userId) {
+      return null;
+    }
+
+    const downloadResponse = await storageService.downloadObject(objectFile);
     const buffer = Buffer.from(await downloadResponse.arrayBuffer());
     const base64 = buffer.toString("base64");
     const mimeType = downloadResponse.headers.get("content-type") || "image/jpeg";
@@ -48,7 +61,12 @@ async function analyzePhoto(objectPath: string): Promise<string | null> {
 
 router.get("/batches/:batchId/photos", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
-  const batchId = parseInt(String(req.params.batchId));
+  const paramsParsed = ListPhotosParams.safeParse({ batchId: Number(req.params.batchId) });
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid batchId" });
+    return;
+  }
+  const { batchId } = paramsParsed.data;
 
   try {
     const batch = await db.query.batchesTable.findFirst({
@@ -74,13 +92,19 @@ router.get("/batches/:batchId/photos", requireAuth, async (req, res) => {
 
 router.post("/batches/:batchId/photos", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
-  const batchId = parseInt(String(req.params.batchId));
-  const { objectPath, caption, dayNumber, takenAt, analyzeWithAi } = req.body;
-
-  if (!objectPath) {
-    res.status(400).json({ error: "objectPath is required" });
+  const paramsParsed = CreatePhotoParams.safeParse({ batchId: Number(req.params.batchId) });
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid batchId" });
     return;
   }
+  const { batchId } = paramsParsed.data;
+
+  const bodyParsed = CreatePhotoBody.safeParse(req.body);
+  if (!bodyParsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: bodyParsed.error.flatten() });
+    return;
+  }
+  const { objectPath, caption, dayNumber, takenAt, analyzeWithAi } = bodyParsed.data;
 
   try {
     const batch = await db.query.batchesTable.findFirst({
@@ -92,21 +116,31 @@ router.post("/batches/:batchId/photos", requireAuth, async (req, res) => {
       return;
     }
 
-    // Set ACL ownership on the object so only this user can access it
+    // Only set ACL on freshly uploaded (un-owned) objects to prevent ownership hijacking
     try {
       const objectFile = await storageService.getObjectEntityFile(objectPath);
-      await setObjectAclPolicy(objectFile, {
-        owner: userId,
-        visibility: "private",
-      });
+      const existingAcl = await getObjectAclPolicy(objectFile);
+      if (!existingAcl) {
+        // Fresh upload — claim ownership
+        await setObjectAclPolicy(objectFile, {
+          owner: userId,
+          visibility: "private",
+        });
+      } else if (existingAcl.owner !== userId) {
+        // Someone else owns this object — reject
+        res.status(403).json({ error: "Forbidden: object does not belong to you" });
+        return;
+      }
     } catch (aclErr) {
-      req.log.warn({ err: aclErr }, "Failed to set ACL on uploaded photo object");
+      req.log.warn({ err: aclErr }, "Failed to verify/set ACL on uploaded photo object");
+      res.status(400).json({ error: "Unable to verify object ownership" });
+      return;
     }
 
-    // Optionally analyze with AI
+    // Run AI analysis with ownership verification
     let aiAnalysis: string | null = null;
     if (analyzeWithAi) {
-      aiAnalysis = await analyzePhoto(objectPath);
+      aiAnalysis = await analyzePhotoForOwner(objectPath, userId);
     }
 
     const [photo] = await db.insert(photosTable).values({
@@ -127,8 +161,15 @@ router.post("/batches/:batchId/photos", requireAuth, async (req, res) => {
 
 router.delete("/batches/:batchId/photos/:photoId", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
-  const batchId = parseInt(String(req.params.batchId));
-  const photoId = parseInt(String(req.params.photoId));
+  const paramsParsed = DeletePhotoParams.safeParse({
+    batchId: Number(req.params.batchId),
+    photoId: Number(req.params.photoId),
+  });
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid params" });
+    return;
+  }
+  const { batchId, photoId } = paramsParsed.data;
 
   try {
     const batch = await db.query.batchesTable.findFirst({

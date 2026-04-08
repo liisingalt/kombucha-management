@@ -1,8 +1,15 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { batchesTable, logsTable, photosTable } from "@workspace/db";
-import { eq, and, count, desc, sql } from "drizzle-orm";
+import { eq, and, count, desc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import {
+  CreateBatchBody,
+  UpdateBatchBody,
+  GetBatchParams,
+  UpdateBatchParams,
+  DeleteBatchParams,
+} from "@workspace/api-zod";
 
 const router = Router();
 
@@ -45,20 +52,21 @@ router.get("/batches", requireAuth, async (req, res) => {
 
 router.post("/batches", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
-  const { name, startedAt, teaType, notes } = req.body;
-
-  if (!name) {
-    res.status(400).json({ error: "Name is required" });
+  const parsed = CreateBatchBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
     return;
   }
+
+  const { name, startedAt, teaType, notes } = parsed.data;
 
   try {
     const [batch] = await db.insert(batchesTable).values({
       userId,
       name,
       startedAt: startedAt ? new Date(startedAt) : new Date(),
-      teaType,
-      notes,
+      teaType: teaType ?? null,
+      notes: notes ?? null,
       status: "active",
     }).returning();
 
@@ -72,7 +80,12 @@ router.post("/batches", requireAuth, async (req, res) => {
 
 router.get("/batches/:batchId", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
-  const batchId = parseInt(String(req.params.batchId));
+  const paramsParsed = GetBatchParams.safeParse({ batchId: Number(req.params.batchId) });
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid batchId" });
+    return;
+  }
+  const { batchId } = paramsParsed.data;
 
   try {
     const batch = await db.query.batchesTable.findFirst({
@@ -94,8 +107,19 @@ router.get("/batches/:batchId", requireAuth, async (req, res) => {
 
 router.put("/batches/:batchId", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
-  const batchId = parseInt(String(req.params.batchId));
-  const { name, status, teaType, notes } = req.body;
+  const paramsParsed = UpdateBatchParams.safeParse({ batchId: Number(req.params.batchId) });
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid batchId" });
+    return;
+  }
+  const { batchId } = paramsParsed.data;
+
+  const bodyParsed = UpdateBatchBody.safeParse(req.body);
+  if (!bodyParsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: bodyParsed.error.flatten() });
+    return;
+  }
+  const { name, status, teaType, notes } = bodyParsed.data;
 
   try {
     const existing = await db.query.batchesTable.findFirst({
@@ -128,7 +152,12 @@ router.put("/batches/:batchId", requireAuth, async (req, res) => {
 
 router.delete("/batches/:batchId", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
-  const batchId = parseInt(String(req.params.batchId));
+  const paramsParsed = DeleteBatchParams.safeParse({ batchId: Number(req.params.batchId) });
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid batchId" });
+    return;
+  }
+  const { batchId } = paramsParsed.data;
 
   try {
     const existing = await db.query.batchesTable.findFirst({

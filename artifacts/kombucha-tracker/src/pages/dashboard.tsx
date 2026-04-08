@@ -2,9 +2,9 @@ import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useGetDashboardSummary, getGetDashboardSummaryQueryKey, useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
-import { Beaker, Plus, Clock, ArrowRight, BookOpen } from "lucide-react";
+import { Beaker, Plus, Clock, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 
 export default function DashboardPage() {
@@ -64,43 +64,44 @@ export default function DashboardPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-serif font-semibold">Active batches</h2>
-            <Link href="/batches">
-              <a className="text-sm text-primary hover:underline flex items-center gap-1">
-                View all <ArrowRight size={14} />
-              </a>
+            <Link
+              href="/batches"
+              className="text-sm text-primary hover:underline flex items-center gap-1"
+            >
+              View all <ArrowRight size={14} />
             </Link>
           </div>
 
           {data?.activeBatches && data.activeBatches.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2">
               {data.activeBatches.map((batch: {id: number; name: string; daysSinceStart: number; teaType?: string | null; logCount: number}) => (
-                <Link key={batch.id} href={`/batches/${batch.id}`}>
-                  <a
-                    data-testid={`card-batch-${batch.id}`}
-                    className="block p-4 rounded-2xl border border-card-border bg-card hover:border-primary/30 hover:shadow-sm transition-all"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <Beaker size={18} className="text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-sm text-foreground">{batch.name}</h3>
-                          {batch.teaType && <p className="text-xs text-muted-foreground">{batch.teaType}</p>}
-                        </div>
+                <Link
+                  key={batch.id}
+                  href={`/batches/${batch.id}`}
+                  data-testid={`card-batch-${batch.id}`}
+                  className="block p-4 rounded-2xl border border-card-border bg-card hover:border-primary/30 hover:shadow-sm transition-all"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <Beaker size={18} className="text-primary" />
                       </div>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock size={12} />
-                        Day {batch.daysSinceStart}
+                      <div>
+                        <h3 className="font-semibold text-sm text-foreground">{batch.name}</h3>
+                        {batch.teaType && <p className="text-xs text-muted-foreground">{batch.teaType}</p>}
                       </div>
                     </div>
-                    <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{batch.logCount} log{batch.logCount !== 1 ? "s" : ""}</span>
-                      {batch.daysSinceStart >= 7 && (
-                        <span className="text-secondary font-medium">Ready for F2?</span>
-                      )}
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock size={12} />
+                      Day {batch.daysSinceStart}
                     </div>
-                  </a>
+                  </div>
+                  <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+                    <span>{batch.logCount} log{batch.logCount !== 1 ? "s" : ""}</span>
+                    {batch.daysSinceStart >= 7 && (
+                      <span className="text-secondary font-medium">Ready for F2?</span>
+                    )}
+                  </div>
                 </Link>
               ))}
             </div>
