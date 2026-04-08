@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { useGetOnboardingAdvice, useUpdateProfile } from "@workspace/api-client-react";
+import { useGetOnboardingAdvice, useUpdateProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ChevronRight } from "lucide-react";
 
@@ -28,6 +29,7 @@ export default function OnboardingPage() {
   const [advice, setAdvice] = useState<string | null>(null);
 
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const getAdvice = useGetOnboardingAdvice();
   const updateProfile = useUpdateProfile();
 
@@ -50,7 +52,7 @@ export default function OnboardingPage() {
 
   const handleComplete = async () => {
     try {
-      await updateProfile.mutateAsync({
+      const updatedProfile = await updateProfile.mutateAsync({
         data: {
           hasCompletedOnboarding: true,
           hasMadeBefore: data.hasMadeBefore,
@@ -60,6 +62,7 @@ export default function OnboardingPage() {
           onboardingAdvice: advice ?? undefined,
         }
       });
+      queryClient.setQueryData(getGetProfileQueryKey(), updatedProfile);
       setLocation("/dashboard");
     } catch {
       toast({ title: "Could not save profile", variant: "destructive" });
