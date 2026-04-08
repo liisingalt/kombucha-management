@@ -210,6 +210,46 @@ export const GetLogResponse = zod.object({
 });
 
 /**
+ * @summary Update a log entry
+ */
+export const UpdateLogParams = zod.object({
+  batchId: zod.coerce.number(),
+  logId: zod.coerce.number(),
+});
+
+export const UpdateLogBody = zod.object({
+  dayNumber: zod.number().optional(),
+  temperature: zod.number().optional(),
+  scobylook: zod.string().optional(),
+  smell: zod.enum(["good", "sour", "vinegary", "strange"]).optional(),
+  color: zod.string().optional(),
+  notes: zod.string().optional(),
+  loggedAt: zod.coerce.date().optional(),
+});
+
+export const UpdateLogResponse = zod.object({
+  id: zod.number(),
+  batchId: zod.number(),
+  dayNumber: zod.number(),
+  temperature: zod.number().nullish(),
+  scobylook: zod.string().nullish(),
+  smell: zod.string().nullish(),
+  color: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  aiTip: zod.string().nullish(),
+  loggedAt: zod.coerce.date(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete a log entry
+ */
+export const DeleteLogParams = zod.object({
+  batchId: zod.coerce.number(),
+  logId: zod.coerce.number(),
+});
+
+/**
  * @summary List photos for a batch
  */
 export const ListPhotosParams = zod.object({

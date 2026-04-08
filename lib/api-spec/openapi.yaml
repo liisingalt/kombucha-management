@@ -273,6 +273,64 @@ paths:
           description: Unauthorized
         "404":
           description: Not found
+    put:
+      operationId: updateLog
+      tags: [logs]
+      summary: Update a log entry
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: logId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLogBody"
+      responses:
+        "200":
+          description: Updated log entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Log"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteLog
+      tags: [logs]
+      summary: Delete a log entry
+      security:
+        - clerkAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: logId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Log deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
 
   /batches/{batchId}/photos:
     get:
@@ -756,6 +814,26 @@ components:
           format: date-time
       required:
         - dayNumber
+
+    UpdateLogBody:
+      type: object
+      properties:
+        dayNumber:
+          type: integer
+        temperature:
+          type: number
+        scobylook:
+          type: string
+        smell:
+          type: string
+          enum: [good, sour, vinegary, strange]
+        color:
+          type: string
+        notes:
+          type: string
+        loggedAt:
+          type: string
+          format: date-time
 
     Photo:
       type: object

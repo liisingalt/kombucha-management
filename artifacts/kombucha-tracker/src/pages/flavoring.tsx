@@ -17,10 +17,10 @@ export default function FlavoringPage() {
   const [preference, setPreference] = useState("");
 
   const guide = useGetFlavoringGuide(
-    { preference: preference || undefined },
+    { preference: (preference || undefined) as never },
     {
       query: {
-        queryKey: getGetFlavoringGuideQueryKey({ preference: preference || undefined }),
+        queryKey: getGetFlavoringGuideQueryKey({ preference: (preference || undefined) as never }),
         enabled: true,
       }
     }

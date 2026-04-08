@@ -35,4 +35,6 @@ export * from "./ttsBody";
 export * from "./ttsResponse";
 export * from "./updateBatchBody";
 export * from "./updateBatchBodyStatus";
+export * from "./updateLogBody";
+export * from "./updateLogBodySmell";
 export * from "./updateProfileBody";

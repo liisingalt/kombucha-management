@@ -53,7 +53,7 @@ export default function CreateLogPage() {
           dayNumber: values.dayNumber,
           temperature: values.temperature ? parseFloat(values.temperature) : undefined,
           scobylook: values.scobylook || undefined,
-          smell: values.smell || undefined,
+          smell: (values.smell || undefined) as never,
           color: values.color || undefined,
           notes: values.notes || undefined,
         }

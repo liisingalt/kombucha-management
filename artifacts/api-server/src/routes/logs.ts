@@ -9,6 +9,9 @@ import {
   CreateLogParams,
   CreateLogBody,
   GetLogParams,
+  UpdateLogParams,
+  UpdateLogBody,
+  DeleteLogParams,
 } from "@workspace/api-zod";
 
 const router = Router({ mergeParams: true });
@@ -156,6 +159,105 @@ router.get("/batches/:batchId/logs/:logId", requireAuth, async (req, res) => {
     res.json(log);
   } catch (err) {
     req.log.error({ err }, "Failed to get log");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/batches/:batchId/logs/:logId", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const paramsParsed = UpdateLogParams.safeParse({
+    batchId: Number(req.params.batchId),
+    logId: Number(req.params.logId),
+  });
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid params" });
+    return;
+  }
+  const bodyParsed = UpdateLogBody.safeParse(req.body);
+  if (!bodyParsed.success) {
+    res.status(400).json({ error: "Invalid body", details: bodyParsed.error.flatten() });
+    return;
+  }
+  const { batchId, logId } = paramsParsed.data;
+  const { dayNumber, temperature, scobylook, smell, color, notes, loggedAt } = bodyParsed.data;
+
+  try {
+    const batch = await db.query.batchesTable.findFirst({
+      where: and(eq(batchesTable.id, batchId), eq(batchesTable.userId, userId)),
+    });
+
+    if (!batch) {
+      res.status(404).json({ error: "Batch not found" });
+      return;
+    }
+
+    const existing = await db.query.logsTable.findFirst({
+      where: and(eq(logsTable.id, logId), eq(logsTable.batchId, batchId)),
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: "Log not found" });
+      return;
+    }
+
+    const updateValues: Record<string, unknown> = {};
+    if (dayNumber !== undefined) updateValues.dayNumber = dayNumber;
+    if (temperature !== undefined) updateValues.temperature = temperature;
+    if (scobylook !== undefined) updateValues.scobylook = scobylook;
+    if (smell !== undefined) updateValues.smell = smell;
+    if (color !== undefined) updateValues.color = color;
+    if (notes !== undefined) updateValues.notes = notes;
+    if (loggedAt !== undefined) updateValues.loggedAt = new Date(loggedAt);
+
+    const [updated] = await db
+      .update(logsTable)
+      .set(updateValues)
+      .where(and(eq(logsTable.id, logId), eq(logsTable.batchId, batchId)))
+      .returning();
+
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update log");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/batches/:batchId/logs/:logId", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const paramsParsed = DeleteLogParams.safeParse({
+    batchId: Number(req.params.batchId),
+    logId: Number(req.params.logId),
+  });
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid params" });
+    return;
+  }
+  const { batchId, logId } = paramsParsed.data;
+
+  try {
+    const batch = await db.query.batchesTable.findFirst({
+      where: and(eq(batchesTable.id, batchId), eq(batchesTable.userId, userId)),
+    });
+
+    if (!batch) {
+      res.status(404).json({ error: "Batch not found" });
+      return;
+    }
+
+    const existing = await db.query.logsTable.findFirst({
+      where: and(eq(logsTable.id, logId), eq(logsTable.batchId, batchId)),
+    });
+
+    if (!existing) {
+      res.status(404).json({ error: "Log not found" });
+      return;
+    }
+
+    await db.delete(logsTable).where(and(eq(logsTable.id, logId), eq(logsTable.batchId, batchId)));
+
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete log");
     res.status(500).json({ error: "Internal server error" });
   }
 });

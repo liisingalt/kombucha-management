@@ -116,6 +116,26 @@ export interface CreateLogBody {
   loggedAt?: string;
 }
 
+export type UpdateLogBodySmell =
+  (typeof UpdateLogBodySmell)[keyof typeof UpdateLogBodySmell];
+
+export const UpdateLogBodySmell = {
+  good: "good",
+  sour: "sour",
+  vinegary: "vinegary",
+  strange: "strange",
+} as const;
+
+export interface UpdateLogBody {
+  dayNumber?: number;
+  temperature?: number;
+  scobylook?: string;
+  smell?: UpdateLogBodySmell;
+  color?: string;
+  notes?: string;
+  loggedAt?: string;
+}
+
 export interface Photo {
   id: number;
   batchId: number;

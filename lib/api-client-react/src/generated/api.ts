@@ -40,6 +40,7 @@ import type {
   TtsBody,
   TtsResponse,
   UpdateBatchBody,
+  UpdateLogBody,
   UpdateProfileBody,
 } from "./api.schemas";
 
@@ -950,6 +951,179 @@ export function useGetLog<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Update a log entry
+ */
+export const getUpdateLogUrl = (batchId: number, logId: number) => {
+  return `/api/batches/${batchId}/logs/${logId}`;
+};
+
+export const updateLog = async (
+  batchId: number,
+  logId: number,
+  updateLogBody: UpdateLogBody,
+  options?: RequestInit,
+): Promise<Log> => {
+  return customFetch<Log>(getUpdateLogUrl(batchId, logId), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateLogBody),
+  });
+};
+
+export const getUpdateLogMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateLog>>,
+    TError,
+    { batchId: number; logId: number; data: BodyType<UpdateLogBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateLog>>,
+  TError,
+  { batchId: number; logId: number; data: BodyType<UpdateLogBody> },
+  TContext
+> => {
+  const mutationKey = ["updateLog"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateLog>>,
+    { batchId: number; logId: number; data: BodyType<UpdateLogBody> }
+  > = (props) => {
+    const { batchId, logId, data } = props ?? {};
+
+    return updateLog(batchId, logId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateLogMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateLog>>
+>;
+export type UpdateLogMutationBody = BodyType<UpdateLogBody>;
+export type UpdateLogMutationError = ErrorType<void>;
+
+/**
+ * @summary Update a log entry
+ */
+export const useUpdateLog = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateLog>>,
+    TError,
+    { batchId: number; logId: number; data: BodyType<UpdateLogBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateLog>>,
+  TError,
+  { batchId: number; logId: number; data: BodyType<UpdateLogBody> },
+  TContext
+> => {
+  return useMutation(getUpdateLogMutationOptions(options));
+};
+
+/**
+ * @summary Delete a log entry
+ */
+export const getDeleteLogUrl = (batchId: number, logId: number) => {
+  return `/api/batches/${batchId}/logs/${logId}`;
+};
+
+export const deleteLog = async (
+  batchId: number,
+  logId: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteLogUrl(batchId, logId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteLogMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLog>>,
+    TError,
+    { batchId: number; logId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteLog>>,
+  TError,
+  { batchId: number; logId: number },
+  TContext
+> => {
+  const mutationKey = ["deleteLog"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteLog>>,
+    { batchId: number; logId: number }
+  > = (props) => {
+    const { batchId, logId } = props ?? {};
+
+    return deleteLog(batchId, logId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteLogMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteLog>>
+>;
+
+export type DeleteLogMutationError = ErrorType<void>;
+
+/**
+ * @summary Delete a log entry
+ */
+export const useDeleteLog = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteLog>>,
+    TError,
+    { batchId: number; logId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteLog>>,
+  TError,
+  { batchId: number; logId: number },
+  TContext
+> => {
+  return useMutation(getDeleteLogMutationOptions(options));
+};
 
 /**
  * @summary List photos for a batch
