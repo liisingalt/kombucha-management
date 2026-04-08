@@ -24,8 +24,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex flex-col bg-background">
       {/* Mobile header */}
       <header className="sticky top-0 z-40 flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur-sm lg:hidden">
-        <Link href="/dashboard">
-          <span className="font-serif text-xl font-semibold text-primary">Kombucha</span>
+        <Link
+          href="/dashboard"
+          className="font-serif text-xl font-semibold text-primary"
+        >
+          Kombucha
         </Link>
         <button
           data-testid="button-mobile-menu"
@@ -49,20 +52,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex-1 flex flex-col gap-1">
               {navItems.map(({ href, label, icon: Icon }) => (
-                <Link key={href} href={href}>
-                  <a
-                    data-testid={`link-nav-${label.toLowerCase()}`}
-                    onClick={() => setMobileOpen(false)}
-                    className={cn(
-                      "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
-                      location === href || location.startsWith(href + "/")
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                    )}
-                  >
-                    <Icon size={18} />
-                    {label}
-                  </a>
+                <Link
+                  key={href}
+                  href={href}
+                  data-testid={`link-nav-${label.toLowerCase()}`}
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
+                    location === href || location.startsWith(href + "/")
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  )}
+                >
+                  <Icon size={18} />
+                  {label}
                 </Link>
               ))}
             </div>
@@ -94,24 +97,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1">
         {/* Desktop sidebar */}
         <aside className="hidden lg:flex flex-col w-64 border-r border-border bg-background/80 sticky top-0 h-screen p-6">
-          <Link href="/dashboard">
-            <a className="font-serif text-2xl font-semibold text-primary mb-8 block">Kombucha</a>
+          <Link
+            href="/dashboard"
+            className="font-serif text-2xl font-semibold text-primary mb-8 block"
+          >
+            Kombucha
           </Link>
           <nav className="flex-1 flex flex-col gap-1">
             {navItems.map(({ href, label, icon: Icon }) => (
-              <Link key={href} href={href}>
-                <a
-                  data-testid={`link-nav-${label.toLowerCase()}`}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all",
-                    location === href || (href !== "/dashboard" && location.startsWith(href))
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                  )}
-                >
-                  <Icon size={18} />
-                  {label}
-                </a>
+              <Link
+                key={href}
+                href={href}
+                data-testid={`link-nav-${label.toLowerCase()}`}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all",
+                  location === href || (href !== "/dashboard" && location.startsWith(href))
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                )}
+              >
+                <Icon size={18} />
+                {label}
               </Link>
             ))}
           </nav>
