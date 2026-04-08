@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,11 @@ import {
   useGetProfile,
   getGetProfileQueryKey,
 } from "@workspace/api-client-react";
-import { Plus, ArrowRight, CalendarDays, Beaker, Clock, ChevronRight } from "lucide-react";
-import { format, startOfWeek, addDays, isSameDay, isToday } from "date-fns";
+import { Plus, ArrowRight, CalendarDays, Beaker, Clock, ChevronRight, X } from "lucide-react";
+import {
+  format, startOfWeek, addDays, isToday,
+  startOfMonth, endOfMonth, getDay, getDaysInMonth, addMonths, subMonths,
+} from "date-fns";
 import { cn } from "@/lib/utils";
 
 type BatchSummary = {
@@ -29,6 +32,14 @@ type RecentLog = {
   aiTip?: string | null;
   batchId: number;
 };
+
+const FALLBACK_TIPS = [
+  "Taste your brew daily after day 5 to find your perfect acidity balance.",
+  "Keep your vessel away from direct sunlight to maintain a steady temperature.",
+  "The ideal F1 time is 7–14 days depending on your room temperature.",
+  "A healthy SCOBY grows a new layer with each brew — that's normal!",
+  "Use filtered or dechlorinated water to keep your culture happy.",
+];
 
 function WeekStrip({ activeBatch }: { activeBatch?: BatchSummary }) {
   const today = new Date();
@@ -64,7 +75,6 @@ function WeekStrip({ activeBatch }: { activeBatch?: BatchSummary }) {
             >
               {day.getDate()}
             </div>
-            {/* Small dot if this was a brew day */}
             <div className={cn(
               "w-1.5 h-1.5 rounded-full transition-colors",
               isBrewDay && !todayDay ? "bg-primary/40" : "bg-transparent"
@@ -76,10 +86,129 @@ function WeekStrip({ activeBatch }: { activeBatch?: BatchSummary }) {
   );
 }
 
+function MonthViewModal({
+  onClose,
+  activeBatch,
+}: {
+  onClose: () => void;
+  activeBatch?: BatchSummary;
+}) {
+  const [viewMonth, setViewMonth] = useState(new Date());
+  const today = new Date();
+  const monthStart = startOfMonth(viewMonth);
+  const monthEnd = endOfMonth(viewMonth);
+  const totalDays = getDaysInMonth(viewMonth);
+  const startPadding = (getDay(monthStart) + 6) % 7; // Mon-based
+
+  const batchStart = activeBatch?.startedAt ? new Date(activeBatch.startedAt) : null;
+
+  const dayLetters = ["M", "T", "W", "T", "F", "S", "S"];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm bg-background rounded-t-3xl lg:rounded-3xl shadow-2xl mx-4 mb-0 lg:mb-4 pb-safe">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <button
+            onClick={() => setViewMonth(subMonths(viewMonth, 1))}
+            className="p-2 rounded-xl hover:bg-accent transition-colors text-muted-foreground"
+          >
+            <ChevronRight size={18} className="rotate-180" />
+          </button>
+          <h2 className="font-serif font-bold text-lg">
+            {format(viewMonth, "MMMM yyyy")}
+          </h2>
+          <button
+            onClick={() => setViewMonth(addMonths(viewMonth, 1))}
+            className="p-2 rounded-xl hover:bg-accent transition-colors text-muted-foreground"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+
+        {/* Day letters */}
+        <div className="grid grid-cols-7 px-4 mb-1">
+          {dayLetters.map((d, i) => (
+            <div key={i} className="text-center text-[10px] font-semibold text-muted-foreground uppercase py-1">
+              {d}
+            </div>
+          ))}
+        </div>
+
+        {/* Day grid */}
+        <div className="grid grid-cols-7 px-4 pb-6 gap-y-1">
+          {Array.from({ length: startPadding }).map((_, i) => (
+            <div key={`pad-${i}`} />
+          ))}
+          {Array.from({ length: totalDays }, (_, i) => {
+            const dayDate = new Date(monthStart);
+            dayDate.setDate(i + 1);
+            const isTodayDay = isToday(dayDate);
+
+            const fermentationDay = batchStart
+              ? Math.floor((dayDate.getTime() - batchStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
+              : null;
+            const isBrewDay =
+              fermentationDay !== null &&
+              fermentationDay > 0 &&
+              dayDate <= today;
+
+            return (
+              <div key={i} className="flex flex-col items-center py-0.5">
+                <div
+                  className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all",
+                    isTodayDay
+                      ? "bg-primary text-primary-foreground font-bold"
+                      : isBrewDay
+                      ? "bg-primary/15 text-primary font-semibold"
+                      : "text-foreground/80"
+                  )}
+                >
+                  {i + 1}
+                </div>
+                {isBrewDay && !isTodayDay && (
+                  <div className="w-1 h-1 rounded-full bg-primary/50 mt-0.5" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        {batchStart && (
+          <div className="flex items-center gap-4 px-6 pb-6 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-4 rounded-full bg-primary" />
+              <span>Today</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-4 rounded-full bg-primary/15" />
+              <span>Fermentation days</span>
+            </div>
+          </div>
+        )}
+
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 rounded-full bg-muted text-muted-foreground hover:bg-accent transition-colors"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function InsightCards({ activeBatch, recentLog }: {
   activeBatch?: BatchSummary;
   recentLog?: RecentLog;
 }) {
+  const fallbackTip = FALLBACK_TIPS[new Date().getDate() % FALLBACK_TIPS.length];
+  const tipText = recentLog?.aiTip ?? fallbackTip;
+
   return (
     <div className="flex gap-3 overflow-x-auto px-5 pb-2 pt-1 scrollbar-hide snap-x snap-mandatory">
       {/* Card 1: Add a log */}
@@ -148,27 +277,25 @@ function InsightCards({ activeBatch, recentLog }: {
         </div>
       </div>
 
-      {/* Card 4: AI tip */}
-      {recentLog?.aiTip && (
-        <div
-          data-testid="insight-card-ai-tip"
-          className="flex-none w-48 rounded-2xl bg-stone-900 p-4 flex flex-col justify-between min-h-[140px] snap-start"
-        >
-          <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
-            <span className="text-base">✨</span>
-          </div>
-          <div>
-            <p className="text-white/50 text-[10px] uppercase font-semibold tracking-wide mb-0.5">
-              AI tip
-            </p>
-            <p className="text-white/90 text-xs leading-relaxed line-clamp-4">
-              {recentLog.aiTip}
-            </p>
-          </div>
+      {/* Card 4: AI tip — always visible */}
+      <div
+        data-testid="insight-card-ai-tip"
+        className="flex-none w-48 rounded-2xl bg-stone-900 p-4 flex flex-col justify-between min-h-[140px] snap-start"
+      >
+        <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
+          <span className="text-base">✨</span>
         </div>
-      )}
+        <div>
+          <p className="text-white/50 text-[10px] uppercase font-semibold tracking-wide mb-0.5">
+            {recentLog?.aiTip ? "AI tip" : "Brew tip"}
+          </p>
+          <p className="text-white/90 text-xs leading-relaxed line-clamp-4">
+            {tipText}
+          </p>
+        </div>
+      </div>
 
-      {/* Spacer card to peek next */}
+      {/* Spacer to peek next */}
       <div className="flex-none w-2" />
     </div>
   );
@@ -176,6 +303,8 @@ function InsightCards({ activeBatch, recentLog }: {
 
 export default function DashboardPage() {
   const [, setLocation] = useLocation();
+  const [showMonthView, setShowMonthView] = useState(false);
+
   const profile = useGetProfile({ query: { queryKey: getGetProfileQueryKey() } });
   const summary = useGetDashboardSummary({ query: { queryKey: getGetDashboardSummaryQueryKey() } });
 
@@ -209,6 +338,13 @@ export default function DashboardPage() {
 
   return (
     <Layout>
+      {showMonthView && (
+        <MonthViewModal
+          onClose={() => setShowMonthView(false)}
+          activeBatch={primaryBatch}
+        />
+      )}
+
       <div className="max-w-lg mx-auto">
 
         {/* Sticky top: date + week strip */}
@@ -222,11 +358,14 @@ export default function DashboardPage() {
                 {format(today, "MMMM d")}
               </h1>
             </div>
-            <div className="flex items-center gap-2">
-              <Link href="/batches" className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-                <CalendarDays size={20} />
-              </Link>
-            </div>
+            <button
+              data-testid="button-open-month-view"
+              onClick={() => setShowMonthView(true)}
+              className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              aria-label="Open month view"
+            >
+              <CalendarDays size={20} />
+            </button>
           </div>
           <WeekStrip activeBatch={primaryBatch} />
         </div>
@@ -253,7 +392,10 @@ export default function DashboardPage() {
                   <h2 className="text-white font-bold text-3xl font-serif mb-1">
                     Fermentation day {primaryBatch.daysSinceStart}
                   </h2>
-                  <button className="text-white/80 text-sm mb-5 flex items-center gap-1 hover:text-white transition-colors">
+                  <button
+                    className="text-white/80 text-sm mb-5 flex items-center gap-1 hover:text-white transition-colors"
+                    onClick={() => setShowMonthView(true)}
+                  >
                     {primaryBatch.name}
                     <ChevronRight size={14} />
                   </button>

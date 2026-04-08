@@ -13,11 +13,12 @@ import {
 const router = Router();
 
 const PERSONA_ADMIN_SECRET = process.env.PERSONA_ADMIN_SECRET ?? "";
+const INSECURE_DEFAULTS = new Set(["", "change-me-in-production", "changeme", "secret", "admin"]);
 
 function requireAdminKey(req: Request, res: Response, next: NextFunction): void {
   const key = req.headers["x-admin-key"] as string | undefined;
-  if (!PERSONA_ADMIN_SECRET) {
-    res.status(500).json({ error: "Admin secret not configured" });
+  if (INSECURE_DEFAULTS.has(PERSONA_ADMIN_SECRET)) {
+    res.status(503).json({ error: "Admin panel disabled: configure PERSONA_ADMIN_SECRET as a secure Replit Secret" });
     return;
   }
   if (!key || key !== PERSONA_ADMIN_SECRET) {
