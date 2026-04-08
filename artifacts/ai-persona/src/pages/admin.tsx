@@ -4,8 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { listMaterials, createMaterial, deleteMaterial, importBlog, listScobyConds, createScobyCondition, deleteScobyCondition, type Material, type ScobyCondition } from "@/lib/api";
-import { Loader2, Trash2, Plus, ArrowLeft, Lock, FileText, AlertCircle, Rss, ExternalLink, ChevronDown, ChevronUp, Globe, FlaskConical, CheckCircle2, XCircle, ImageIcon } from "lucide-react";
+import { listMaterials, createMaterial, deleteMaterial, importBlog, listScobyConds, createScobyCondition, deleteScobyCondition, uploadMaterialFile, type Material, type ScobyCondition } from "@/lib/api";
+import { Loader2, Trash2, Plus, ArrowLeft, Lock, FileText, AlertCircle, Rss, ExternalLink, ChevronDown, ChevronUp, Globe, FlaskConical, CheckCircle2, XCircle, ImageIcon, Upload } from "lucide-react";
 import { Link } from "wouter";
 
 function AdminLogin({ onLogin }: { onLogin: (key: string) => void }) {
@@ -520,6 +520,12 @@ export default function AdminPage() {
   const [importResult, setImportResult] = useState<{ imported: number } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+
   useEffect(() => {
     if (adminKey) {
       loadMaterials();
@@ -566,6 +572,37 @@ export default function AdminPage() {
       setError("Failed to delete material.");
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setUploadFile(file);
+    setUploadError(null);
+    setUploadSuccess(false);
+    if (file) {
+      setUploadTitle(file.name.replace(/\.[^.]+$/, ""));
+    }
+  }
+
+  async function handleUpload(e: React.FormEvent) {
+    e.preventDefault();
+    if (!uploadFile || !uploadTitle.trim()) return;
+    setUploading(true);
+    setUploadError(null);
+    setUploadSuccess(false);
+    try {
+      await uploadMaterialFile(adminKey!, uploadFile, uploadTitle.trim());
+      setUploadFile(null);
+      setUploadTitle("");
+      setUploadSuccess(true);
+      const fileInput = document.getElementById("uploadFile") as HTMLInputElement | null;
+      if (fileInput) fileInput.value = "";
+      await loadMaterials();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Failed to upload file.");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -730,6 +767,61 @@ export default function AdminPage() {
                     <Button type="submit" disabled={!title.trim() || !content.trim() || submitting}>
                       {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                       Add Material
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </section>
+
+            {/* Upload File Section */}
+            <section>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Upload className="w-4 h-4" />
+                    Upload File
+                  </CardTitle>
+                  <CardDescription>
+                    Upload a document or image to extract its content as persona material. Supported: .md, .pdf, .doc, .docx, .jpg, .jpeg, .png
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleUpload} className="flex flex-col gap-3">
+                    <div>
+                      <Label htmlFor="uploadFile">File</Label>
+                      <Input
+                        id="uploadFile"
+                        type="file"
+                        accept=".md,.pdf,.doc,.docx,.jpg,.jpeg,.png"
+                        onChange={handleFileChange}
+                        className="mt-1 cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="uploadTitle">Title</Label>
+                      <Input
+                        id="uploadTitle"
+                        value={uploadTitle}
+                        onChange={(e) => setUploadTitle(e.target.value)}
+                        placeholder="Title for this material"
+                        className="mt-1"
+                      />
+                    </div>
+                    {uploadSuccess && (
+                      <div className="flex gap-2 items-center text-sm text-green-600">
+                        <FileText className="w-4 h-4 flex-shrink-0" />
+                        File uploaded and saved successfully.
+                      </div>
+                    )}
+                    {uploadError && (
+                      <div className="flex gap-2 items-center text-sm text-destructive">
+                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                        {uploadError}
+                      </div>
+                    )}
+                    <Button type="submit" disabled={!uploadFile || !uploadTitle.trim() || uploading}>
+                      {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+                      Upload
                     </Button>
                   </form>
                 </CardContent>

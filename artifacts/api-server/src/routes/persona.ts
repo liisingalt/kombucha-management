@@ -4,6 +4,9 @@ import { personaMaterialsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import type { Request, Response, NextFunction } from "express";
+import multer from "multer";
+import mammoth from "mammoth";
+import WordExtractor from "word-extractor";
 import {
   PersonaChatBody,
   CreatePersonaMaterialBody,
@@ -86,6 +89,95 @@ router.delete("/persona/materials/:id", requireAdminKey, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to delete persona material");
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── File upload endpoint ─────────────────────────────────────────────────────
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+});
+
+const ALLOWED_EXTENSIONS = new Set([".md", ".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"]);
+
+function getExtension(filename: string): string {
+  const dot = filename.lastIndexOf(".");
+  return dot >= 0 ? filename.slice(dot).toLowerCase() : "";
+}
+
+router.post("/persona/materials/upload", requireAdminKey, upload.single("file"), async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: "No file uploaded." });
+    return;
+  }
+
+  const ext = getExtension(req.file.originalname);
+
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    res.status(400).json({ error: `Unsupported file type: "${ext || "(none)"}". Supported formats: .md, .pdf, .doc, .docx, .jpg, .jpeg, .png` });
+    return;
+  }
+
+  const title = (typeof req.body.title === "string" && req.body.title.trim())
+    ? req.body.title.trim()
+    : req.file.originalname.replace(/\.[^.]+$/, "");
+
+  let content = "";
+
+  try {
+    if (ext === ".md") {
+      content = req.file.buffer.toString("utf-8");
+    } else if (ext === ".pdf") {
+      const { default: pdfParse } = await import("pdf-parse/lib/pdf-parse.js");
+      const result = await pdfParse(req.file.buffer);
+      content = result.text;
+    } else if (ext === ".docx") {
+      const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+      content = result.value;
+    } else if (ext === ".doc") {
+      const extractor = new WordExtractor();
+      const doc = await extractor.extract(req.file.buffer);
+      content = doc.getBody();
+    } else if (ext === ".jpg" || ext === ".jpeg" || ext === ".png") {
+      const base64Image = req.file.buffer.toString("base64");
+      const imageMediaType = ext === ".png" ? "image/png" : "image/jpeg";
+      const visionResponse = await openai.chat.completions.create({
+        model: "gpt-4o",
+        max_completion_tokens: 1000,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: { url: `data:${imageMediaType};base64,${base64Image}` },
+              },
+              {
+                type: "text",
+                text: "Please describe the content of this image in detail and extract all visible text. Include a description of any visual elements, diagrams, or important context that would be useful for understanding the content.",
+              },
+            ],
+          },
+        ],
+      });
+      content = visionResponse.choices[0]?.message?.content ?? "";
+    }
+
+    if (!content.trim()) {
+      res.status(422).json({ error: "Could not extract any text from the uploaded file." });
+      return;
+    }
+
+    const [material] = await db
+      .insert(personaMaterialsTable)
+      .values({ title, content: content.trim(), type: "manual" })
+      .returning();
+
+    res.status(201).json(material);
+  } catch (err) {
+    req.log.error({ err }, "Failed to process uploaded file");
+    res.status(500).json({ error: "Failed to extract content from the file." });
   }
 });
 

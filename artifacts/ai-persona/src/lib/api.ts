@@ -48,6 +48,22 @@ export async function deleteMaterial(adminKey: string, id: number) {
   if (!res.ok) throw new Error("Failed to delete material");
 }
 
+export async function uploadMaterialFile(adminKey: string, file: File, title: string) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("title", title);
+  const res = await fetch(`${API_BASE}/persona/materials/upload`, {
+    method: "POST",
+    headers: { "x-admin-key": adminKey },
+    body: formData,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || "Failed to upload file");
+  }
+  return res.json();
+}
+
 export async function importBlog(adminKey: string, url: string): Promise<{ imported: number; articles: { id: number; title: string; sourceUrl?: string | null; type: string; createdAt: string }[] }> {
   const res = await fetch(`${API_BASE}/persona/import-blog`, {
     method: "POST",
