@@ -780,6 +780,27 @@ components:
         aiTip:
           type: string
           nullable: true
+        taste:
+          type: array
+          items:
+            type: string
+          nullable: true
+        carbonation:
+          type: string
+          nullable: true
+        ph:
+          type: number
+          nullable: true
+        activities:
+          type: array
+          items:
+            type: string
+          nullable: true
+        flavourAdditions:
+          type: array
+          items:
+            type: string
+          nullable: true
         loggedAt:
           type: string
           format: date-time
@@ -804,7 +825,6 @@ components:
           type: string
         smell:
           type: string
-          enum: [good, sour, vinegary, strange]
         color:
           type: string
         notes:
@@ -812,6 +832,22 @@ components:
         loggedAt:
           type: string
           format: date-time
+        taste:
+          type: array
+          items:
+            type: string
+        carbonation:
+          type: string
+        ph:
+          type: number
+        activities:
+          type: array
+          items:
+            type: string
+        flavourAdditions:
+          type: array
+          items:
+            type: string
       required:
         - dayNumber
 
@@ -826,7 +862,6 @@ components:
           type: string
         smell:
           type: string
-          enum: [good, sour, vinegary, strange]
         color:
           type: string
         notes:
@@ -834,6 +869,22 @@ components:
         loggedAt:
           type: string
           format: date-time
+        taste:
+          type: array
+          items:
+            type: string
+        carbonation:
+          type: string
+        ph:
+          type: number
+        activities:
+          type: array
+          items:
+            type: string
+        flavourAdditions:
+          type: array
+          items:
+            type: string
 
     Photo:
       type: object

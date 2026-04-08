@@ -13,6 +13,11 @@ export const logsTable = pgTable("logs", {
   color: text("color"),
   notes: text("notes"),
   aiTip: text("ai_tip"),
+  taste: text("taste").array(),
+  carbonation: text("carbonation"),
+  ph: real("ph"),
+  activities: text("activities").array(),
+  flavourAdditions: text("flavour_additions").array(),
   loggedAt: timestamp("logged_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

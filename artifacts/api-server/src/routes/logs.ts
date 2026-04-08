@@ -21,12 +21,18 @@ async function generateLogTip(log: {
   smell?: string | null;
   scobylook?: string | null;
   dayNumber: number;
+  taste?: string[] | null;
+  carbonation?: string | null;
+  activities?: string[] | null;
 }): Promise<string> {
   try {
     const parts: string[] = [`Day ${log.dayNumber} of fermentation.`];
     if (log.temperature != null) parts.push(`Temperature: ${log.temperature}°C.`);
     if (log.smell) parts.push(`Smell: ${log.smell}.`);
     if (log.scobylook) parts.push(`SCOBY appearance: ${log.scobylook}.`);
+    if (log.taste && log.taste.length > 0) parts.push(`Taste: ${log.taste.join(", ")}.`);
+    if (log.carbonation) parts.push(`Carbonation: ${log.carbonation}.`);
+    if (log.activities && log.activities.length > 0) parts.push(`Activities performed: ${log.activities.join(", ")}.`);
 
     const response = await openai.chat.completions.create({
       model: "gpt-5.2",
@@ -92,7 +98,7 @@ router.post("/batches/:batchId/logs", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Invalid request body", details: bodyParsed.error.flatten() });
     return;
   }
-  const { dayNumber, temperature, scobylook, smell, color, notes, loggedAt } = bodyParsed.data;
+  const { dayNumber, temperature, scobylook, smell, color, notes, loggedAt, taste, carbonation, ph, activities, flavourAdditions } = bodyParsed.data;
 
   try {
     const batch = await db.query.batchesTable.findFirst({
@@ -104,7 +110,7 @@ router.post("/batches/:batchId/logs", requireAuth, async (req, res) => {
       return;
     }
 
-    const aiTip = await generateLogTip({ temperature, smell, scobylook, dayNumber });
+    const aiTip = await generateLogTip({ temperature, smell, scobylook, dayNumber, taste, carbonation, activities });
 
     const [log] = await db.insert(logsTable).values({
       batchId,
@@ -115,6 +121,11 @@ router.post("/batches/:batchId/logs", requireAuth, async (req, res) => {
       color: color ?? null,
       notes: notes ?? null,
       aiTip: aiTip || null,
+      taste: taste ?? null,
+      carbonation: carbonation ?? null,
+      ph: ph ?? null,
+      activities: activities ?? null,
+      flavourAdditions: flavourAdditions ?? null,
       loggedAt: loggedAt ? new Date(loggedAt) : new Date(),
     }).returning();
 
@@ -179,7 +190,7 @@ router.put("/batches/:batchId/logs/:logId", requireAuth, async (req, res) => {
     return;
   }
   const { batchId, logId } = paramsParsed.data;
-  const { dayNumber, temperature, scobylook, smell, color, notes, loggedAt } = bodyParsed.data;
+  const { dayNumber, temperature, scobylook, smell, color, notes, loggedAt, taste, carbonation, ph, activities, flavourAdditions } = bodyParsed.data;
 
   try {
     const batch = await db.query.batchesTable.findFirst({
@@ -208,6 +219,11 @@ router.put("/batches/:batchId/logs/:logId", requireAuth, async (req, res) => {
     if (color !== undefined) updateValues.color = color;
     if (notes !== undefined) updateValues.notes = notes;
     if (loggedAt !== undefined) updateValues.loggedAt = new Date(loggedAt);
+    if (taste !== undefined) updateValues.taste = taste;
+    if (carbonation !== undefined) updateValues.carbonation = carbonation;
+    if (ph !== undefined) updateValues.ph = ph;
+    if (activities !== undefined) updateValues.activities = activities;
+    if (flavourAdditions !== undefined) updateValues.flavourAdditions = flavourAdditions;
 
     const [updated] = await db
       .update(logsTable)

@@ -5,14 +5,18 @@
  * Kombucha Tracker API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { UpdateLogBodySmell } from "./updateLogBodySmell";
 
 export interface UpdateLogBody {
   dayNumber?: number;
   temperature?: number;
   scobylook?: string;
-  smell?: UpdateLogBodySmell;
+  smell?: string;
   color?: string;
   notes?: string;
   loggedAt?: Date;
+  taste?: string[];
+  carbonation?: string;
+  ph?: number;
+  activities?: string[];
+  flavourAdditions?: string[];
 }

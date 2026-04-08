@@ -165,6 +165,11 @@ export const ListLogsResponseItem = zod.object({
   color: zod.string().nullish(),
   notes: zod.string().nullish(),
   aiTip: zod.string().nullish(),
+  taste: zod.array(zod.string()).nullish(),
+  carbonation: zod.string().nullish(),
+  ph: zod.number().nullish(),
+  activities: zod.array(zod.string()).nullish(),
+  flavourAdditions: zod.array(zod.string()).nullish(),
   loggedAt: zod.coerce.date(),
   createdAt: zod.coerce.date(),
 });
@@ -181,10 +186,15 @@ export const CreateLogBody = zod.object({
   dayNumber: zod.number(),
   temperature: zod.number().optional(),
   scobylook: zod.string().optional(),
-  smell: zod.enum(["good", "sour", "vinegary", "strange"]).optional(),
+  smell: zod.string().optional(),
   color: zod.string().optional(),
   notes: zod.string().optional(),
   loggedAt: zod.coerce.date().optional(),
+  taste: zod.array(zod.string()).optional(),
+  carbonation: zod.string().optional(),
+  ph: zod.number().optional(),
+  activities: zod.array(zod.string()).optional(),
+  flavourAdditions: zod.array(zod.string()).optional(),
 });
 
 /**
@@ -205,6 +215,11 @@ export const GetLogResponse = zod.object({
   color: zod.string().nullish(),
   notes: zod.string().nullish(),
   aiTip: zod.string().nullish(),
+  taste: zod.array(zod.string()).nullish(),
+  carbonation: zod.string().nullish(),
+  ph: zod.number().nullish(),
+  activities: zod.array(zod.string()).nullish(),
+  flavourAdditions: zod.array(zod.string()).nullish(),
   loggedAt: zod.coerce.date(),
   createdAt: zod.coerce.date(),
 });
@@ -221,10 +236,15 @@ export const UpdateLogBody = zod.object({
   dayNumber: zod.number().optional(),
   temperature: zod.number().optional(),
   scobylook: zod.string().optional(),
-  smell: zod.enum(["good", "sour", "vinegary", "strange"]).optional(),
+  smell: zod.string().optional(),
   color: zod.string().optional(),
   notes: zod.string().optional(),
   loggedAt: zod.coerce.date().optional(),
+  taste: zod.array(zod.string()).optional(),
+  carbonation: zod.string().optional(),
+  ph: zod.number().optional(),
+  activities: zod.array(zod.string()).optional(),
+  flavourAdditions: zod.array(zod.string()).optional(),
 });
 
 export const UpdateLogResponse = zod.object({
@@ -237,6 +257,11 @@ export const UpdateLogResponse = zod.object({
   color: zod.string().nullish(),
   notes: zod.string().nullish(),
   aiTip: zod.string().nullish(),
+  taste: zod.array(zod.string()).nullish(),
+  carbonation: zod.string().nullish(),
+  ph: zod.number().nullish(),
+  activities: zod.array(zod.string()).nullish(),
+  flavourAdditions: zod.array(zod.string()).nullish(),
   loggedAt: zod.coerce.date(),
   createdAt: zod.coerce.date(),
 });

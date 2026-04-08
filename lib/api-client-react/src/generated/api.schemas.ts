@@ -92,6 +92,11 @@ export interface Log {
   color?: string | null;
   notes?: string | null;
   aiTip?: string | null;
+  taste?: string[] | null;
+  carbonation?: string | null;
+  ph?: number | null;
+  activities?: string[] | null;
+  flavourAdditions?: string[] | null;
   loggedAt: string;
   createdAt: string;
 }
@@ -110,10 +115,15 @@ export interface CreateLogBody {
   dayNumber: number;
   temperature?: number;
   scobylook?: string;
-  smell?: CreateLogBodySmell;
+  smell?: string;
   color?: string;
   notes?: string;
   loggedAt?: string;
+  taste?: string[];
+  carbonation?: string;
+  ph?: number;
+  activities?: string[];
+  flavourAdditions?: string[];
 }
 
 export type UpdateLogBodySmell =
@@ -130,10 +140,15 @@ export interface UpdateLogBody {
   dayNumber?: number;
   temperature?: number;
   scobylook?: string;
-  smell?: UpdateLogBodySmell;
+  smell?: string;
   color?: string;
   notes?: string;
   loggedAt?: string;
+  taste?: string[];
+  carbonation?: string;
+  ph?: number;
+  activities?: string[];
+  flavourAdditions?: string[];
 }
 
 export interface Photo {

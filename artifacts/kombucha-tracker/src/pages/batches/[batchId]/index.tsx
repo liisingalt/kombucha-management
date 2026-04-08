@@ -299,9 +299,38 @@ export default function BatchDetailPage() {
                   </div>
                   <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mb-2">
                     {log.temperature != null && <span>Temp: {log.temperature}°C</span>}
+                    {log.ph != null && <span>pH: {log.ph}</span>}
                     {log.smell && <span>Smell: {log.smell}</span>}
-                    {log.color && <span>Color: {log.color}</span>}
+                    {log.carbonation && <span>Carbonation: {log.carbonation}</span>}
+                    {log.color && <span>Colour: {log.color}</span>}
                   </div>
+                  {log.taste && log.taste.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {log.taste.map((t) => (
+                        <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {log.activities && log.activities.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {log.activities.map((a) => (
+                        <span key={a} className="text-xs px-2 py-0.5 rounded-full bg-secondary/10 text-secondary font-medium">
+                          {a.replace(/_/g, " ")}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {log.flavourAdditions && log.flavourAdditions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {log.flavourAdditions.map((f) => (
+                        <span key={f} className="text-xs px-2 py-0.5 rounded-full bg-accent text-foreground font-medium">
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {log.scobylook && (
                     <p className="text-xs text-foreground/70 mb-2">{log.scobylook}</p>
                   )}

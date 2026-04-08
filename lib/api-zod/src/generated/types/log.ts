@@ -16,6 +16,11 @@ export interface Log {
   color?: string | null;
   notes?: string | null;
   aiTip?: string | null;
+  taste?: string[] | null;
+  carbonation?: string | null;
+  ph?: number | null;
+  activities?: string[] | null;
+  flavourAdditions?: string[] | null;
   loggedAt: Date;
   createdAt: Date;
 }
