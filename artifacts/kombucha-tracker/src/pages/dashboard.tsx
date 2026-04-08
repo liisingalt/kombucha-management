@@ -8,7 +8,7 @@ import {
   useGetProfile,
   getGetProfileQueryKey,
 } from "@workspace/api-client-react";
-import { Plus, ArrowRight, CalendarDays, Beaker, Clock, ChevronRight, X } from "lucide-react";
+import { Plus, ArrowRight, CalendarDays, Beaker, Clock, ChevronRight, X, Image, Sparkles } from "lucide-react";
 import {
   format, startOfWeek, addDays, isToday,
   startOfMonth, endOfMonth, getDay, getDaysInMonth, addMonths, subMonths,
@@ -347,16 +347,16 @@ export default function DashboardPage() {
 
       <div className="max-w-lg mx-auto">
 
-        {/* Sticky top: date + week strip */}
+        {/* Sticky top: brand + date + week strip */}
         <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border/40 px-5 pb-1">
           <div className="flex items-center justify-between pt-4 pb-2">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">
-                {format(today, "EEEE")}
+              <Link href="/dashboard" className="font-serif text-base font-bold text-primary tracking-tight">
+                Kombucha
+              </Link>
+              <p className="text-xs text-muted-foreground font-medium leading-tight">
+                {format(today, "EEEE, MMMM d")}
               </p>
-              <h1 className="font-serif font-bold text-xl text-foreground">
-                {format(today, "MMMM d")}
-              </h1>
             </div>
             <button
               data-testid="button-open-month-view"
@@ -454,6 +454,29 @@ export default function DashboardPage() {
             </h2>
           </div>
           <InsightCards activeBatch={primaryBatch} recentLog={recentLog} />
+        </div>
+
+        {/* Quick navigation links — Batches, Photos, Flavoring (always visible on mobile) */}
+        <div className="px-5 mt-3 mb-1 lg:hidden">
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { href: "/batches", label: "Batches", icon: Beaker, color: "bg-primary/10 text-primary" },
+              { href: "/photos", label: "Photos", icon: Image, color: "bg-amber-100 text-amber-700" },
+              { href: "/flavoring", label: "Flavoring", icon: Sparkles, color: "bg-green-100 text-green-700" },
+            ].map(({ href, label, icon: Icon, color }) => (
+              <Link
+                key={href}
+                href={href}
+                data-testid={`quick-link-${label.toLowerCase()}`}
+                className="flex flex-col items-center gap-1.5 p-3 rounded-2xl border border-border bg-card hover:border-primary/20 transition-all"
+              >
+                <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center", color)}>
+                  <Icon size={18} />
+                </div>
+                <span className="text-[11px] font-medium text-foreground">{label}</span>
+              </Link>
+            ))}
+          </div>
         </div>
 
         {/* All batches section */}
