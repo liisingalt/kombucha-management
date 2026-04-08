@@ -453,3 +453,63 @@ export const GetDashboardSummaryResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * @summary Send a message to the AI persona (public)
+ */
+
+export const PersonaChatBody = zod.object({
+  message: zod.string().min(1),
+  history: zod
+    .array(
+      zod.object({
+        role: zod.enum(["user", "assistant"]),
+        content: zod.string(),
+      }),
+    )
+    .optional(),
+});
+
+export const PersonaChatResponse = zod.object({
+  reply: zod.string(),
+});
+
+/**
+ * @summary List all persona materials (admin only)
+ */
+export const ListPersonaMaterialsHeader = zod.object({
+  "x-admin-key": zod.string(),
+});
+
+export const ListPersonaMaterialsResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  content: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListPersonaMaterialsResponse = zod.array(
+  ListPersonaMaterialsResponseItem,
+);
+
+/**
+ * @summary Create a persona material (admin only)
+ */
+export const CreatePersonaMaterialHeader = zod.object({
+  "x-admin-key": zod.string(),
+});
+
+export const CreatePersonaMaterialBody = zod.object({
+  title: zod.string().min(1),
+  content: zod.string().min(1),
+});
+
+/**
+ * @summary Delete a persona material (admin only)
+ */
+export const DeletePersonaMaterialParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeletePersonaMaterialHeader = zod.object({
+  "x-admin-key": zod.string(),
+});

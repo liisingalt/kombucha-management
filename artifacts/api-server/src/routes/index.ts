@@ -7,6 +7,7 @@ import photosRouter from "./photos";
 import aiRouter from "./ai";
 import storageRouter from "./storage";
 import dashboardRouter from "./dashboard";
+import personaRouter from "./persona";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(photosRouter);
 router.use(aiRouter);
 router.use(storageRouter);
 router.use(dashboardRouter);
+router.use(personaRouter);
 
 export default router;

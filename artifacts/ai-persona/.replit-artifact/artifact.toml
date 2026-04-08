@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/ai-persona/"
+title = "AI Persona"
+version = "1.0.0"
+id = "artifacts/ai-persona"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/ai-persona/" ]
+localPort = 23552
+
+[services.development]
+run = "pnpm --filter @workspace/ai-persona run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ai-persona", "run", "build" ]
+publicDir = "artifacts/ai-persona/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23552"
+BASE_PATH = "/ai-persona/"

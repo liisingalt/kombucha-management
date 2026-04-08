@@ -606,6 +606,107 @@ paths:
         "401":
           description: Unauthorized
 
+  /persona/chat:
+    post:
+      operationId: personaChat
+      tags: [persona]
+      summary: Send a message to the AI persona (public)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersonaChatBody"
+      responses:
+        "200":
+          description: AI persona reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonaChatResponse"
+        "400":
+          description: Bad request
+
+  /persona/materials:
+    get:
+      operationId: listPersonaMaterials
+      tags: [persona]
+      summary: List all persona materials (admin only)
+      parameters:
+        - name: x-admin-key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of persona materials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PersonaMaterial"
+        "401":
+          description: Unauthorized
+        "503":
+          description: Admin not configured
+    post:
+      operationId: createPersonaMaterial
+      tags: [persona]
+      summary: Create a persona material (admin only)
+      parameters:
+        - name: x-admin-key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePersonaMaterialBody"
+      responses:
+        "201":
+          description: Created material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonaMaterial"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+        "503":
+          description: Admin not configured
+
+  /persona/materials/{id}:
+    delete:
+      operationId: deletePersonaMaterial
+      tags: [persona]
+      summary: Delete a persona material (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: x-admin-key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not found
+        "503":
+          description: Admin not configured
+
 components:
   securitySchemes:
     clerkAuth:
@@ -1100,3 +1201,64 @@ components:
         - totalPhotoCount
         - recentLogs
         - activeBatches
+
+    PersonaMaterial:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - content
+        - createdAt
+
+    CreatePersonaMaterialBody:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        content:
+          type: string
+          minLength: 1
+      required:
+        - title
+        - content
+
+    PersonaChatBody:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 1
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [user, assistant]
+              content:
+                type: string
+            required:
+              - role
+              - content
+      required:
+        - message
+
+    PersonaChatResponse:
+      type: object
+      properties:
+        reply:
+          type: string
+      required:
+        - reply

@@ -252,6 +252,43 @@ export interface DashboardSummary {
   activeBatches: Batch[];
 }
 
+export interface PersonaMaterial {
+  id: number;
+  title: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface CreatePersonaMaterialBody {
+  /** @minLength 1 */
+  title: string;
+  /** @minLength 1 */
+  content: string;
+}
+
+export type PersonaChatBodyHistoryItemRole =
+  (typeof PersonaChatBodyHistoryItemRole)[keyof typeof PersonaChatBodyHistoryItemRole];
+
+export const PersonaChatBodyHistoryItemRole = {
+  user: "user",
+  assistant: "assistant",
+} as const;
+
+export type PersonaChatBodyHistoryItem = {
+  role: PersonaChatBodyHistoryItemRole;
+  content: string;
+};
+
+export interface PersonaChatBody {
+  /** @minLength 1 */
+  message: string;
+  history?: PersonaChatBodyHistoryItem[];
+}
+
+export interface PersonaChatResponse {
+  reply: string;
+}
+
 export type GetFlavoringGuideParams = {
   preference?: GetFlavoringGuidePreference;
 };

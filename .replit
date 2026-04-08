@@ -38,3 +38,12 @@ externalPort = 3000
 [[ports]]
 localPort = 19318
 externalPort = 4200
+
+[[ports]]
+localPort = 23552
+externalPort = 3001
+
+[userenv]
+
+[userenv.shared]
+PERSONA_ADMIN_SECRET = "change-me-in-production"

@@ -25,6 +25,7 @@ import type {
   ChatMessageResponse,
   CreateBatchBody,
   CreateLogBody,
+  CreatePersonaMaterialBody,
   CreatePhotoBody,
   DashboardSummary,
   FlavoringGuideResponse,
@@ -33,6 +34,9 @@ import type {
   Log,
   OnboardingAdviceBody,
   OnboardingAdviceResponse,
+  PersonaChatBody,
+  PersonaChatResponse,
+  PersonaMaterial,
   Photo,
   Profile,
   RequestUploadUrlBody,
@@ -2145,3 +2149,335 @@ export function useGetDashboardSummary<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Send a message to the AI persona (public)
+ */
+export const getPersonaChatUrl = () => {
+  return `/api/persona/chat`;
+};
+
+export const personaChat = async (
+  personaChatBody: PersonaChatBody,
+  options?: RequestInit,
+): Promise<PersonaChatResponse> => {
+  return customFetch<PersonaChatResponse>(getPersonaChatUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(personaChatBody),
+  });
+};
+
+export const getPersonaChatMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof personaChat>>,
+    TError,
+    { data: BodyType<PersonaChatBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof personaChat>>,
+  TError,
+  { data: BodyType<PersonaChatBody> },
+  TContext
+> => {
+  const mutationKey = ["personaChat"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof personaChat>>,
+    { data: BodyType<PersonaChatBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return personaChat(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PersonaChatMutationResult = NonNullable<
+  Awaited<ReturnType<typeof personaChat>>
+>;
+export type PersonaChatMutationBody = BodyType<PersonaChatBody>;
+export type PersonaChatMutationError = ErrorType<void>;
+
+/**
+ * @summary Send a message to the AI persona (public)
+ */
+export const usePersonaChat = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof personaChat>>,
+    TError,
+    { data: BodyType<PersonaChatBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof personaChat>>,
+  TError,
+  { data: BodyType<PersonaChatBody> },
+  TContext
+> => {
+  return useMutation(getPersonaChatMutationOptions(options));
+};
+
+/**
+ * @summary List all persona materials (admin only)
+ */
+export const getListPersonaMaterialsUrl = () => {
+  return `/api/persona/materials`;
+};
+
+export const listPersonaMaterials = async (
+  options?: RequestInit,
+): Promise<PersonaMaterial[]> => {
+  return customFetch<PersonaMaterial[]>(getListPersonaMaterialsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPersonaMaterialsQueryKey = () => {
+  return [`/api/persona/materials`] as const;
+};
+
+export const getListPersonaMaterialsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPersonaMaterials>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPersonaMaterials>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListPersonaMaterialsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPersonaMaterials>>
+  > = ({ signal }) => listPersonaMaterials({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPersonaMaterials>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPersonaMaterialsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPersonaMaterials>>
+>;
+export type ListPersonaMaterialsQueryError = ErrorType<void>;
+
+/**
+ * @summary List all persona materials (admin only)
+ */
+
+export function useListPersonaMaterials<
+  TData = Awaited<ReturnType<typeof listPersonaMaterials>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listPersonaMaterials>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPersonaMaterialsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a persona material (admin only)
+ */
+export const getCreatePersonaMaterialUrl = () => {
+  return `/api/persona/materials`;
+};
+
+export const createPersonaMaterial = async (
+  createPersonaMaterialBody: CreatePersonaMaterialBody,
+  options?: RequestInit,
+): Promise<PersonaMaterial> => {
+  return customFetch<PersonaMaterial>(getCreatePersonaMaterialUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createPersonaMaterialBody),
+  });
+};
+
+export const getCreatePersonaMaterialMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPersonaMaterial>>,
+    TError,
+    { data: BodyType<CreatePersonaMaterialBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPersonaMaterial>>,
+  TError,
+  { data: BodyType<CreatePersonaMaterialBody> },
+  TContext
+> => {
+  const mutationKey = ["createPersonaMaterial"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPersonaMaterial>>,
+    { data: BodyType<CreatePersonaMaterialBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createPersonaMaterial(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePersonaMaterialMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPersonaMaterial>>
+>;
+export type CreatePersonaMaterialMutationBody =
+  BodyType<CreatePersonaMaterialBody>;
+export type CreatePersonaMaterialMutationError = ErrorType<void>;
+
+/**
+ * @summary Create a persona material (admin only)
+ */
+export const useCreatePersonaMaterial = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPersonaMaterial>>,
+    TError,
+    { data: BodyType<CreatePersonaMaterialBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPersonaMaterial>>,
+  TError,
+  { data: BodyType<CreatePersonaMaterialBody> },
+  TContext
+> => {
+  return useMutation(getCreatePersonaMaterialMutationOptions(options));
+};
+
+/**
+ * @summary Delete a persona material (admin only)
+ */
+export const getDeletePersonaMaterialUrl = (id: number) => {
+  return `/api/persona/materials/${id}`;
+};
+
+export const deletePersonaMaterial = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeletePersonaMaterialUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeletePersonaMaterialMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePersonaMaterial>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deletePersonaMaterial>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deletePersonaMaterial"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deletePersonaMaterial>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deletePersonaMaterial(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeletePersonaMaterialMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deletePersonaMaterial>>
+>;
+
+export type DeletePersonaMaterialMutationError = ErrorType<void>;
+
+/**
+ * @summary Delete a persona material (admin only)
+ */
+export const useDeletePersonaMaterial = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePersonaMaterial>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deletePersonaMaterial>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeletePersonaMaterialMutationOptions(options));
+};
