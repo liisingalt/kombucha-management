@@ -4,16 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { listMaterials, createMaterial, deleteMaterial } from "@/lib/api";
-import { Loader2, Trash2, Plus, ArrowLeft, Lock, FileText, AlertCircle } from "lucide-react";
+import { listMaterials, createMaterial, deleteMaterial, importBlog, type Material } from "@/lib/api";
+import { Loader2, Trash2, Plus, ArrowLeft, Lock, FileText, AlertCircle, Rss, ExternalLink, ChevronDown, ChevronUp, Globe } from "lucide-react";
 import { Link } from "wouter";
-
-interface Material {
-  id: number;
-  title: string;
-  content: string;
-  createdAt: string;
-}
 
 function AdminLogin({ onLogin }: { onLogin: (key: string) => void }) {
   const [password, setPassword] = useState("");
@@ -74,6 +67,86 @@ function AdminLogin({ onLogin }: { onLogin: (key: string) => void }) {
   );
 }
 
+function ArticleCard({
+  mat,
+  onDelete,
+  deletingId,
+}: {
+  mat: Material;
+  onDelete: (id: number) => void;
+  deletingId: number | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Card className="group">
+      <CardContent className="pt-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-medium text-sm truncate">{mat.title}</h3>
+              {mat.sourceUrl && (
+                <a
+                  href={mat.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs text-primary hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Source
+                </a>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {new Date(mat.createdAt).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+              {" · "}
+              {mat.content.length.toLocaleString()} characters
+            </p>
+            {expanded ? (
+              <p className="text-sm text-muted-foreground mt-2 leading-relaxed whitespace-pre-wrap">
+                {mat.content}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground mt-2 line-clamp-3 leading-relaxed">
+                {mat.content}
+              </p>
+            )}
+            <button
+              className="text-xs text-primary mt-1 flex items-center gap-0.5 hover:underline"
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded ? (
+                <><ChevronUp className="w-3 h-3" /> Show less</>
+              ) : (
+                <><ChevronDown className="w-3 h-3" /> Read full</>
+              )}
+            </button>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="flex-shrink-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={() => onDelete(mat.id)}
+            disabled={deletingId === mat.id}
+            title="Delete material"
+          >
+            {deletingId === mat.id ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminPage() {
   const [adminKey, setAdminKey] = useState<string | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -84,6 +157,11 @@ export default function AdminPage() {
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+
+  const [blogUrl, setBlogUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (adminKey) {
@@ -134,9 +212,30 @@ export default function AdminPage() {
     }
   }
 
+  async function handleImportBlog(e: React.FormEvent) {
+    e.preventDefault();
+    if (!blogUrl.trim()) return;
+    setImporting(true);
+    setImportError(null);
+    setImportResult(null);
+    try {
+      const result = await importBlog(adminKey!, blogUrl.trim());
+      setImportResult({ imported: result.imported });
+      setBlogUrl("");
+      await loadMaterials();
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Failed to import blog.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   if (!adminKey) {
     return <AdminLogin onLogin={setAdminKey} />;
   }
+
+  const articles = materials.filter((m) => m.type === "article");
+  const manualMaterials = materials.filter((m) => m.type !== "article");
 
   return (
     <div className="min-h-screen bg-background">
@@ -156,6 +255,56 @@ export default function AdminPage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-8 flex flex-col gap-8">
+
+        {/* Blog Import Section */}
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Rss className="w-4 h-4" />
+                Import from Blog
+              </CardTitle>
+              <CardDescription>
+                Paste a blog URL or RSS/Atom feed URL to automatically import articles as persona knowledge material.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleImportBlog} className="flex flex-col gap-3">
+                <div>
+                  <Label htmlFor="blogUrl">Blog or RSS URL</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      id="blogUrl"
+                      type="url"
+                      value={blogUrl}
+                      onChange={(e) => setBlogUrl(e.target.value)}
+                      placeholder="https://yourblog.com/feed or https://yourblog.com"
+                      className="flex-1"
+                    />
+                    <Button type="submit" disabled={!blogUrl.trim() || importing}>
+                      {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Globe className="w-4 h-4 mr-2" />}
+                      Import
+                    </Button>
+                  </div>
+                </div>
+                {importResult && (
+                  <div className="flex gap-2 items-center text-sm text-green-600">
+                    <FileText className="w-4 h-4 flex-shrink-0" />
+                    Successfully imported {importResult.imported} article{importResult.imported !== 1 ? "s" : ""}.
+                  </div>
+                )}
+                {importError && (
+                  <div className="flex gap-2 items-center text-sm text-destructive">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    {importError}
+                  </div>
+                )}
+              </form>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Manual Add Section */}
         <section>
           <Card>
             <CardHeader>
@@ -205,13 +354,14 @@ export default function AdminPage() {
           </Card>
         </section>
 
+        {/* Imported Articles Section */}
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold flex items-center gap-2">
-              <FileText className="w-4 h-4 text-muted-foreground" />
-              Uploaded Materials
-              {materials.length > 0 && (
-                <span className="ml-1 text-xs text-muted-foreground font-normal">({materials.length})</span>
+              <Rss className="w-4 h-4 text-muted-foreground" />
+              Imported Articles
+              {articles.length > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground font-normal">({articles.length})</span>
               )}
             </h2>
             <Button variant="ghost" size="sm" onClick={loadMaterials} disabled={loading}>
@@ -219,54 +369,51 @@ export default function AdminPage() {
             </Button>
           </div>
 
-          {loading && materials.length === 0 ? (
-            <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+          {loading && articles.length === 0 ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading...
+            </div>
+          ) : articles.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+              <Rss className="w-8 h-8 mb-2 opacity-40" />
+              <p className="text-sm">No imported articles yet. Use the import tool above.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {articles.map((mat) => (
+                <ArticleCard key={mat.id} mat={mat} onDelete={handleDelete} deletingId={deletingId} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Manual Materials Section */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              Uploaded Materials
+              {manualMaterials.length > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground font-normal">({manualMaterials.length})</span>
+              )}
+            </h2>
+          </div>
+
+          {loading && manualMaterials.length === 0 ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
               Loading materials...
             </div>
-          ) : materials.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+          ) : manualMaterials.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
               <FileText className="w-8 h-8 mb-2 opacity-40" />
               <p className="text-sm">No materials yet. Add your first one above.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {materials.map((mat) => (
-                <Card key={mat.id} className="group">
-                  <CardContent className="pt-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-sm truncate">{mat.title}</h3>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {new Date(mat.createdAt).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                          {" · "}
-                          {mat.content.length.toLocaleString()} characters
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-2 line-clamp-3 leading-relaxed">
-                          {mat.content}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="flex-shrink-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleDelete(mat.id)}
-                        disabled={deletingId === mat.id}
-                        title="Delete material"
-                      >
-                        {deletingId === mat.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+              {manualMaterials.map((mat) => (
+                <ArticleCard key={mat.id} mat={mat} onDelete={handleDelete} deletingId={deletingId} />
               ))}
             </div>
           )}

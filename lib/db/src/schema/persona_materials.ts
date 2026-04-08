@@ -6,6 +6,8 @@ export const personaMaterialsTable = pgTable("persona_materials", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   content: text("content").notNull(),
+  sourceUrl: text("source_url"),
+  type: text("type").notNull().default("manual"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

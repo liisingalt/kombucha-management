@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { personaChat } from "@/lib/api";
-import { Send, Bot, User, Loader2, Settings } from "lucide-react";
+import { Send, Bot, User, Loader2, Settings, BookOpen } from "lucide-react";
 import { Link } from "wouter";
 
 interface Message {
@@ -62,11 +62,18 @@ export default function ChatPage() {
               <p className="text-xs text-muted-foreground">AI Persona</p>
             </div>
           </div>
-          <Link href="/admin">
-            <Button variant="ghost" size="icon" className="text-muted-foreground" title="Admin Panel">
-              <Settings className="w-4 h-4" />
-            </Button>
-          </Link>
+          <div className="flex items-center gap-1">
+            <Link href="/blog">
+              <Button variant="ghost" size="icon" className="text-muted-foreground" title="Blog">
+                <BookOpen className="w-4 h-4" />
+              </Button>
+            </Link>
+            <Link href="/admin">
+              <Button variant="ghost" size="icon" className="text-muted-foreground" title="Admin Panel">
+                <Settings className="w-4 h-4" />
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 

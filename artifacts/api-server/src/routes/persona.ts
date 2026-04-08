@@ -8,6 +8,8 @@ import {
   PersonaChatBody,
   CreatePersonaMaterialBody,
   DeletePersonaMaterialParams,
+  ImportBlogBody,
+  GetBlogArticleParams,
 } from "@workspace/api-zod";
 
 const router = Router();
@@ -52,7 +54,7 @@ router.post("/persona/materials", requireAdminKey, async (req, res) => {
   try {
     const [material] = await db
       .insert(personaMaterialsTable)
-      .values({ title, content })
+      .values({ title, content, type: "manual" })
       .returning();
     res.status(201).json(material);
   } catch (err) {
@@ -86,6 +88,260 @@ router.delete("/persona/materials/:id", requireAdminKey, async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// ── Blog import ──────────────────────────────────────────────────────────────
+
+function isSsrfUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return true;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return true;
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") return true;
+  if (/^10\./.test(hostname)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true;
+  if (/^192\.168\./.test(hostname)) return true;
+  if (/^169\.254\./.test(hostname)) return true;
+  if (/^fc00:/i.test(hostname) || /^fd[0-9a-f]{2}:/i.test(hostname)) return true;
+  return false;
+}
+
+interface ParsedArticle {
+  title: string;
+  content: string;
+  sourceUrl: string;
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function parseRssFeed(xml: string, feedUrl: string): ParsedArticle[] {
+  const items: ParsedArticle[] = [];
+
+  const itemMatches = xml.match(/<item[\s>][\s\S]*?<\/item>/gi) ||
+    xml.match(/<entry[\s>][\s\S]*?<\/entry>/gi) || [];
+
+  for (const item of itemMatches) {
+    const titleMatch = item.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
+    const linkMatch = item.match(/<link[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i) ||
+      item.match(/<link[^>]+href=["']([^"']+)["']/i);
+    const contentMatch = item.match(/<content:encoded[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/content:encoded>/i) ||
+      item.match(/<description[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/description>/i) ||
+      item.match(/<summary[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/summary>/i);
+
+    const title = titleMatch ? stripHtml(titleMatch[1].trim()) : "";
+    const link = linkMatch ? linkMatch[1].trim() : feedUrl;
+    const rawContent = contentMatch ? contentMatch[1].trim() : "";
+    const content = rawContent.startsWith("<") ? stripHtml(rawContent) : rawContent;
+
+    if (title && content && content.length > 50) {
+      items.push({ title, content: content.slice(0, 10000), sourceUrl: link });
+    }
+  }
+
+  return items.slice(0, 20);
+}
+
+function parseHtmlBlogPosts(html: string, baseUrl: string): ParsedArticle[] {
+  const articles: ParsedArticle[] = [];
+
+  const articleMatches = html.match(/<article[^>]*>[\s\S]*?<\/article>/gi) || [];
+
+  for (const articleHtml of articleMatches.slice(0, 15)) {
+    const titleMatch = articleHtml.match(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/i);
+    const title = titleMatch ? stripHtml(titleMatch[1]) : "";
+
+    const bodyMatch = articleHtml.match(/<(?:p|div)[^>]*>([\s\S]*?)<\/(?:p|div)>/gi);
+    const bodyText = bodyMatch
+      ? bodyMatch.map(p => stripHtml(p)).filter(t => t.length > 20).join(" ")
+      : "";
+
+    if (title && bodyText.length > 50) {
+      articles.push({ title, content: bodyText.slice(0, 10000), sourceUrl: baseUrl });
+    }
+  }
+
+  return articles;
+}
+
+router.post("/persona/import-blog", requireAdminKey, async (req, res) => {
+  const parsed = ImportBlogBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "A valid URL is required", details: parsed.error.flatten() });
+    return;
+  }
+
+  const { url } = parsed.data;
+
+  if (isSsrfUrl(url)) {
+    res.status(400).json({ error: "The provided URL is not allowed." });
+    return;
+  }
+
+  try {
+    const response = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; BlogImporter/1.0)", "Accept": "application/rss+xml, application/atom+xml, text/html, */*" },
+    });
+
+    if (!response.ok) {
+      res.status(400).json({ error: `Failed to fetch URL: ${response.status} ${response.statusText}` });
+      return;
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    const body = await response.text();
+
+    let articles: ParsedArticle[] = [];
+
+    const isXml = contentType.includes("xml") || contentType.includes("rss") || contentType.includes("atom") ||
+      body.trimStart().startsWith("<?xml") || body.includes("<rss") || body.includes("<feed");
+
+    if (isXml) {
+      articles = parseRssFeed(body, url);
+    } else {
+      const rssLinkMatch = body.match(/<link[^>]+type=["']application\/(?:rss|atom)\+xml["'][^>]+href=["']([^"']+)["']/i) ||
+        body.match(/<link[^>]+href=["']([^"']+)["'][^>]+type=["']application\/(?:rss|atom)\+xml["']/i);
+
+      if (rssLinkMatch) {
+        const rssUrl = rssLinkMatch[1].startsWith("http") ? rssLinkMatch[1] : new URL(rssLinkMatch[1], url).href;
+        if (isSsrfUrl(rssUrl)) {
+          articles = [];
+        } else
+        try {
+          const rssResponse = await fetch(rssUrl, {
+            headers: { "User-Agent": "Mozilla/5.0 (compatible; BlogImporter/1.0)" },
+          });
+          if (rssResponse.ok) {
+            const rssBody = await rssResponse.text();
+            articles = parseRssFeed(rssBody, rssUrl);
+          }
+        } catch {
+          // fall through to HTML parsing
+        }
+      }
+
+      if (articles.length === 0) {
+        articles = parseHtmlBlogPosts(body, url);
+      }
+    }
+
+    if (articles.length === 0) {
+      res.status(422).json({ error: "No articles found at the provided URL. Try providing a direct RSS/Atom feed URL." });
+      return;
+    }
+
+    // De-duplicate: skip articles whose sourceUrl already exists in the DB
+    const existingUrls = new Set(
+      (await db.query.personaMaterialsTable.findMany({
+        where: eq(personaMaterialsTable.type, "article"),
+        columns: { sourceUrl: true },
+      }))
+        .map(a => a.sourceUrl)
+        .filter(Boolean)
+    );
+
+    const newArticles = articles.filter(
+      a => !a.sourceUrl || !existingUrls.has(a.sourceUrl)
+    );
+
+    if (newArticles.length === 0) {
+      res.status(200).json({ imported: 0, articles: [], message: "All articles already imported." });
+      return;
+    }
+
+    const inserted = await db
+      .insert(personaMaterialsTable)
+      .values(newArticles.map(a => ({
+        title: a.title,
+        content: a.content,
+        sourceUrl: a.sourceUrl,
+        type: "article",
+      })))
+      .returning();
+
+    res.status(201).json({
+      imported: inserted.length,
+      articles: inserted.map(a => ({
+        id: a.id,
+        title: a.title,
+        sourceUrl: a.sourceUrl,
+        type: a.type,
+        createdAt: a.createdAt,
+      })),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to import blog");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Public blog endpoints ────────────────────────────────────────────────────
+
+router.get("/persona/blog", async (req, res) => {
+  try {
+    const articles = await db.query.personaMaterialsTable.findMany({
+      where: eq(personaMaterialsTable.type, "article"),
+      orderBy: [desc(personaMaterialsTable.createdAt)],
+    });
+    res.json(articles.map(a => ({
+      id: a.id,
+      title: a.title,
+      content: a.content,
+      sourceUrl: a.sourceUrl,
+      createdAt: a.createdAt,
+    })));
+  } catch (err) {
+    req.log.error({ err }, "Failed to list blog articles");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/persona/blog/:id", async (req, res) => {
+  const parsed = GetBlogArticleParams.safeParse(req.params);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  try {
+    const article = await db.query.personaMaterialsTable.findFirst({
+      where: eq(personaMaterialsTable.id, parsed.data.id),
+    });
+
+    if (!article || article.type !== "article") {
+      res.status(404).json({ error: "Article not found" });
+      return;
+    }
+
+    res.json({
+      id: article.id,
+      title: article.title,
+      content: article.content,
+      sourceUrl: article.sourceUrl,
+      createdAt: article.createdAt,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get blog article");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Persona chat ─────────────────────────────────────────────────────────────
 
 router.post("/persona/chat", async (req, res) => {
   const parsed = PersonaChatBody.safeParse(req.body);

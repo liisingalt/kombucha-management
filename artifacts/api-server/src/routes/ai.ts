@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { batchesTable, logsTable, chatMessagesTable, photosTable } from "@workspace/db";
+import { batchesTable, logsTable, chatMessagesTable, photosTable, personaMaterialsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { openai } from "@workspace/integrations-openai-ai-server";
@@ -185,7 +185,49 @@ router.post("/ai/chat", requireAuth, async (req, res) => {
       contextParts.push(`Recent logs: ${logSummary}.`);
     }
 
-    const systemContent = `You are a knowledgeable, friendly kombucha expert and brewing mentor. Help the user with their kombucha questions. Be practical, specific, and encouraging.${contextParts.length > 0 ? `\n\nUser's brewing context: ${contextParts.join(" ")}` : ""}`;
+    // Find relevant blog articles based on kombucha keywords in the user message
+    const kombuchaKeywords = [
+      "flavor", "flavoring", "fruit", "ginger", "berry", "second ferment", "f2",
+      "sugar", "sweet", "honey", "sweetness",
+      "scoby", "pellicle", "culture", "hotel", "health",
+      "ferment", "fermentation", "brew", "brewing", "time", "days",
+      "mold", "yeast", "kahm", "contamination",
+      "temperature", "temp", "ph", "acidity", "acid", "vinegar",
+      "tea", "black tea", "green tea", "oolong",
+      "bottle", "carbonation", "fizz", "burp",
+    ];
+    const lowerMessage = message.toLowerCase();
+    const messageMatches = kombuchaKeywords.some(kw => lowerMessage.includes(kw));
+
+    let articleContext = "";
+    if (messageMatches) {
+      const allArticles = await db.query.personaMaterialsTable.findMany({
+        where: eq(personaMaterialsTable.type, "article"),
+        orderBy: [desc(personaMaterialsTable.createdAt)],
+        limit: 20,
+      });
+
+      // Score articles by keyword overlap with the user message
+      const scored = allArticles
+        .map(a => {
+          const combined = (a.title + " " + a.content).toLowerCase();
+          const score = kombuchaKeywords.filter(kw => lowerMessage.includes(kw) && combined.includes(kw)).length;
+          return { article: a, score };
+        })
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+
+      if (scored.length > 0) {
+        const snippets = scored.map(({ article }) => {
+          const excerpt = article.content.slice(0, 300).replace(/\s+/g, " ").trim();
+          return `- "${article.title}" (id:${article.id}): ${excerpt}...`;
+        });
+        articleContext = `\n\nRelevant blog articles you can reference (include a "Read more:" link using path /blog/<id> relative to the persona site when helpful):\n${snippets.join("\n")}`;
+      }
+    }
+
+    const systemContent = `You are a knowledgeable, friendly kombucha expert and brewing mentor. Help the user with their kombucha questions. Be practical, specific, and encouraging.${contextParts.length > 0 ? `\n\nUser's brewing context: ${contextParts.join(" ")}` : ""}${articleContext}`;
 
     const conversationMessages = previousMessages
       .reverse()

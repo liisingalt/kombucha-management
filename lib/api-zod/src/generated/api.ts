@@ -485,6 +485,8 @@ export const ListPersonaMaterialsResponseItem = zod.object({
   id: zod.number(),
   title: zod.string(),
   content: zod.string(),
+  sourceUrl: zod.string().nullish(),
+  type: zod.string(),
   createdAt: zod.coerce.date(),
 });
 export const ListPersonaMaterialsResponse = zod.array(
@@ -513,3 +515,40 @@ export const DeletePersonaMaterialParams = zod.object({
 export const DeletePersonaMaterialHeader = zod.object({
   "x-admin-key": zod.string(),
 });
+
+/**
+ * @summary Import articles from a blog or RSS URL (admin only)
+ */
+export const ImportBlogBody = zod.object({
+  url: zod.string().url(),
+});
+
+export const ImportBlogResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  sourceUrl: zod.string().nullish(),
+  type: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+
+export const ImportBlogResponse = zod.object({
+  imported: zod.number(),
+  articles: zod.array(ImportBlogResponseItem),
+});
+
+/**
+ * @summary Get a single blog article by id (public)
+ */
+export const GetBlogArticleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const BlogArticleResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  content: zod.string(),
+  sourceUrl: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+export const ListBlogArticlesResponse = zod.array(BlogArticleResponseItem);
