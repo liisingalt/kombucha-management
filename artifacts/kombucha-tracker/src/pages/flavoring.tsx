@@ -3,6 +3,7 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useGetFlavoringGuide, getGetFlavoringGuideQueryKey } from "@workspace/api-client-react";
+import type { GetFlavoringGuidePreference } from "@workspace/api-zod";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,11 +17,13 @@ const preferences = [
 export default function FlavoringPage() {
   const [preference, setPreference] = useState("");
 
+  const typedPreference = (preference || undefined) as GetFlavoringGuidePreference | undefined;
+
   const guide = useGetFlavoringGuide(
-    { preference: (preference || undefined) as never },
+    { preference: typedPreference },
     {
       query: {
-        queryKey: getGetFlavoringGuideQueryKey({ preference: (preference || undefined) as never }),
+        queryKey: getGetFlavoringGuideQueryKey({ preference: typedPreference }),
         enabled: true,
       }
     }

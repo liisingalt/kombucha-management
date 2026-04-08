@@ -12,6 +12,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
+import type { CreateLogBodySmell } from "@workspace/api-zod";
 import { Loader2, ArrowLeft } from "lucide-react";
 
 const schema = z.object({
@@ -53,7 +54,7 @@ export default function CreateLogPage() {
           dayNumber: values.dayNumber,
           temperature: values.temperature ? parseFloat(values.temperature) : undefined,
           scobylook: values.scobylook || undefined,
-          smell: (values.smell || undefined) as never,
+          smell: (values.smell || undefined) as CreateLogBodySmell | undefined,
           color: values.color || undefined,
           notes: values.notes || undefined,
         }

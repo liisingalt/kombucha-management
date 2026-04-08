@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk, useAuth } from "@clerk/react";
+import { ClerkProvider, SignIn, SignUp, Show, useClerk, useAuth, useUser } from "@clerk/react";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -58,11 +58,33 @@ function HomeRoute() {
   );
 }
 
+function EmailVerificationBanner() {
+  const { user } = useUser();
+  const primaryEmail = user?.primaryEmailAddress;
+  if (!primaryEmail || primaryEmail.verification.status === "verified") return null;
+  return (
+    <div className="bg-amber-100 border-b border-amber-300 text-amber-900 text-sm px-4 py-2 text-center">
+      Please verify your email address to access all features.
+      Check your inbox for a verification link.
+    </div>
+  );
+}
+
 function ProtectedRoute({ component: Component }: { component: () => React.ReactElement }) {
+  const { user, isLoaded } = useUser();
+
+  if (!isLoaded) return null;
+
+  const primaryEmail = user?.primaryEmailAddress;
+  const isEmailVerified = !primaryEmail || primaryEmail.verification.status === "verified";
+
   return (
     <>
       <Show when="signed-in">
-        <Component />
+        <>
+          {!isEmailVerified && <EmailVerificationBanner />}
+          <Component />
+        </>
       </Show>
       <Show when="signed-out">
         <Redirect to="/" />
