@@ -46,4 +46,3 @@ externalPort = 3001
 [userenv]
 
 [userenv.shared]
-PERSONA_ADMIN_SECRET = "change-me-in-production"
