@@ -1,0 +1,148 @@
+# Kombucha jälgimisrakenduse spetsifikatsioon
+
+## Ülevaade
+
+Mobiilisõbralik veebirakendus, kus kombucha huvilised saavad jälgida oma SCOBY ja joogi arengut, logida andmeid ning saada personaliseeritud nõuandeid AI assistendi kaudu. Iga kasutajal on oma privaatne konto.
+
+---
+
+## Kasutaja teekond
+
+### 1. Registreerimine ja sisselogimine
+- Kasutaja loob konto e-posti ja parooliga
+- E-posti kinnitusmeil saadetakse automaatselt
+- Sisselogimine ainult pärast e-posti kinnitust
+- Parool minimaalselt 8 tähemärki
+
+### 2. Sissejuhatav küsimustik (onboarding)
+Uus kasutaja vastab küsimustikule, mis määrab tema teadmiste taseme:
+- Kas oled varem kombucha't teinud? (jah / ei)
+- Kas Sul on juba SCOBY olemas?
+- Mis etapis Sa praegu oled? (algus / esimene käärimine / teine käärimine / maitsestamine)
+- Valikvastustega teadmiste test (3–5 küsimust), mis hindab, kas kasutaja mõistab põhimõisteid
+
+Küsimustiku vastuste põhjal koostab AI personaliseeritud algnõuande ja juhise.
+
+### 3. Esimene pilt ja AI analüüs
+- Kasutaja laeb üles pildi oma SCOBY-st või käärima pandud joogi anumast
+- AI analüüsib pilti ja annab tagasiside: kas kõik näeb välja korras, mida tähele panna
+- Analüüs kuvatakse tekstina ja esitatakse hääle klooni kaudu
+
+---
+
+## Põhifunktsioonid (MVP)
+
+### Päevalik logimine
+Kasutaja saab logida:
+- Temperatuur (°C)
+- SCOBY välimus (värvus, paksus, tekstuur — valikust või vabatekst)
+- Joogi lõhn (valikust: hea, hapukas, äädikane, kummaline)
+- Joogi värvus
+- Päev käärimimisest
+
+Iga logikande põhjal annab rakendus automaatse nõuande. Näited:
+- Temperatuur alla 20°C → "Jahedas käärib aeglasemalt, oota mõni päev kauem."
+- Äädikane lõhn → "Jook on üle käärinud, pane uus partii."
+
+### Pildid ja visuaalne jälgimine
+- Kasutaja saab teha pilti otse rakenduses (kaamera) või laadida üles seadmest
+- Pildid salvestuvad kasutaja privaatsele kontole
+- Pildid on organiseeritud partii kaupa (käärimimise tsükkel)
+- Kahe pildi kõrvutamisvaade: "Algus vs. praegu"
+- Piltide alla saab lisada märkmeid (kuupäev, päev tsüklist)
+
+### Meeldetuletused
+- Kasutaja saab seada igapäevase meeldetuletuse logida
+- Meeldetuletus, kui käärimimise aeg on lähedal (vastavalt alustamise kuupäevale)
+- Maitsestamise meeldetuletus, kui esimene käärimine on lõpus
+
+### AI nõustaja (vestlusaken)
+- Eraldi sektsioon, kus kasutaja saab küsimusi esitada
+- Vastused põhinevad OpenAI API-l, eel-juhendatud kombucha teadmistebaasiga
+- Hääle kloon loeb vastuse ette (valikuline, kasutaja saab välja lülitada)
+- AI teab kasutaja logitud andmeid ja saab neile viidata
+
+### Maitsestamise juhend
+- Kui kasutaja märgib, et esimene käärimine on läbi, pakub rakendus maitsestamissoovitusi
+- Soovitused põhinevad hooajal ja kasutaja eelistustel (magus, hapukas, puuviljane)
+
+---
+
+## Hilisemad funktsioonid (mitte MVP)
+
+- Partiiarhiiv (kõik eelmised tsüklid koos piltide ja andmetega)
+- Koostisosade kalkulaator (tee kogus, suhkur, SCOBY suurus)
+- Kogukonna sektsioon (valikuline — oma piltide jagamine)
+- Teavitused meilile
+
+---
+
+## Turvalisus
+
+### Autentimine
+- Kasuta valmis autentimislahendust (Supabase Auth, Firebase Auth vms)
+- E-posti kinnitus kohustuslik enne sisselogimist
+- Sisselogimiskatsetel brute force kaitse (automaatne ooteaeg pärast liiga palju katseid)
+- Paroolide hashing toimub serveris, mitte frontendis
+
+### Andmete eraldatus
+- Iga kasutaja näeb ainult oma andmeid
+- Kasuta Row Level Security (RLS) andmebaasis
+- API päringud peavad alati kontrollima, et päring tuleb konto omanikult
+
+### API võtmed
+- Kõik võtmed (OpenAI, hääle kloon, andmebaas) peavad olema keskkonna muutujates (Replit Secrets)
+- Ükski võti ei tohi olla frontendi koodis
+- OpenAI päringud toimuvad ainult serveripoolsel koodil
+
+### Piltide üleslaadimine
+- Aktsepteeri ainult pildifaile (.jpg, .png, .webp, .heic)
+- Faili maksimaalne suurus: 10 MB
+- Pildid salvestatakse turvalisse pilvehoidlasse (nt Supabase Storage)
+- Piltidele on juurdepääs ainult konto omanikul
+
+### Üldine
+- Kogu liiklus peab olema HTTPS kaudu
+- Kasutajasisend puhastatakse enne andmebaasi salvestamist (SQL injection kaitse)
+- CORS konfiguratsioon lubab päringuid ainult rakenduse enda domeenilt
+
+---
+
+## AI integratsioon
+
+### Pildi analüüs
+- Mudel: GPT-4o (toetab pildi analüüsi)
+- Prompt sisaldab kombucha-spetsiifilisi juhiseid, et AI hindaks SCOBY ja joogi välimust
+
+### Vestlusaken
+- Mudel: GPT-4o
+- Süsteemiprompt eeljuhendab AI-d kombucha eksperdina
+- Kontekstina lisatakse kasutaja viimased logiandmed, et vastused oleksid personaalsed
+
+### Hääle kloon
+- Eraldi API (nt ElevenLabs) loeb AI vastused ette
+- Hääle klooni ID salvestatakse keskkonna muutujana
+- Kasutajal on nupp, millega hääle välja lülitada
+
+---
+
+## Disain ja kasutajakogemus
+
+- Mobiilisõbralik, kogu disain optimeeritud telefoni jaoks
+- Visuaalselt sooe ja orgaaniline välimus (kombucha esteetika)
+- Pildid on esile tõstetud, mitte peidetud menüüde taha
+- Navigatsioon: Kodu / Logi / Pildid / Nõustaja / Seaded
+- Laadimisindikaatorid AI vastuste ajal
+- Veateateid esitatakse lihtsas keeles, mitte tehniline veakood
+
+---
+
+## Tehnilised märkused Replit jaoks
+
+Replit valib ise sobiva tehnoloogia. Spetsifikatsiooni täitmiseks on vajalik:
+- Kasutajakontode autentimine koos e-posti kinnitusega
+- Andmebaas kasutajaandmete ja logide hoidmiseks
+- Pilvehoidla piltide jaoks (igal kasutajal eraldi kaust)
+- Serveripoolne API integratsioon (OpenAI, hääle kloon)
+- Reaalajas meeldetuletuste süsteem
+- Kaamera juurdepääs mobiilibrauseris
