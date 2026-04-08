@@ -3,7 +3,48 @@ import { db } from "@workspace/db";
 import { batchesTable, photosTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { ObjectStorageService } from "../lib/objectStorage";
+import { setObjectAclPolicy } from "../lib/objectAcl";
+import { openai } from "@workspace/integrations-openai-ai-server";
+
 const router = Router({ mergeParams: true });
+const storageService = new ObjectStorageService();
+
+async function analyzePhoto(objectPath: string): Promise<string | null> {
+  try {
+    const file = await storageService.getObjectEntityFile(objectPath);
+    const downloadResponse = await storageService.downloadObject(file);
+    const buffer = Buffer.from(await downloadResponse.arrayBuffer());
+    const base64 = buffer.toString("base64");
+    const mimeType = downloadResponse.headers.get("content-type") || "image/jpeg";
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      max_completion_tokens: 300,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a kombucha expert analyzing a photo of a SCOBY or fermentation vessel. Provide specific, helpful feedback about what you observe — the SCOBY's health, color, texture, any signs of concern, and what the brewer should do next. Be direct and practical. 2-3 sentences max.",
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: { url: `data:${mimeType};base64,${base64}` },
+            },
+            { type: "text", text: "Please analyze this kombucha SCOBY or fermentation vessel photo." },
+          ],
+        },
+      ],
+    });
+
+    return response.choices[0]?.message?.content ?? null;
+  } catch {
+    return null;
+  }
+}
 
 router.get("/batches/:batchId/photos", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
@@ -51,12 +92,29 @@ router.post("/batches/:batchId/photos", requireAuth, async (req, res) => {
       return;
     }
 
+    // Set ACL ownership on the object so only this user can access it
+    try {
+      const objectFile = await storageService.getObjectEntityFile(objectPath);
+      await setObjectAclPolicy(objectFile, {
+        owner: userId,
+        visibility: "private",
+      });
+    } catch (aclErr) {
+      req.log.warn({ err: aclErr }, "Failed to set ACL on uploaded photo object");
+    }
+
+    // Optionally analyze with AI
+    let aiAnalysis: string | null = null;
+    if (analyzeWithAi) {
+      aiAnalysis = await analyzePhoto(objectPath);
+    }
+
     const [photo] = await db.insert(photosTable).values({
       batchId,
       objectPath,
       caption: caption ?? null,
       dayNumber: dayNumber ?? null,
-      aiAnalysis: null,
+      aiAnalysis,
       takenAt: takenAt ? new Date(takenAt) : new Date(),
     }).returning();
 

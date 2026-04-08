@@ -68,7 +68,7 @@ export default function BatchDetailPage() {
 
       await createPhoto.mutateAsync({
         batchId: batchIdNum,
-        data: { objectPath, caption: "", dayNumber: batch.data?.daysSinceStart ?? 0 }
+        data: { objectPath, caption: "", dayNumber: batch.data?.daysSinceStart ?? 0, analyzeWithAi: true }
       });
 
       queryClient.invalidateQueries({ queryKey: getListPhotosQueryKey(batchIdNum) });
