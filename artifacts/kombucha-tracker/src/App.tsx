@@ -17,6 +17,7 @@ import PhotosPage from "@/pages/photos";
 import AdvisorPage from "@/pages/advisor";
 import InsightsPage from "@/pages/insights";
 import FlavoringPage from "@/pages/flavoring";
+import MaarajaPage from "@/pages/maaraja";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
@@ -169,6 +170,9 @@ function ClerkProviderWithRoutes() {
             </Route>
             <Route path="/flavoring">
               {() => <ProtectedRoute component={FlavoringPage} />}
+            </Route>
+            <Route path="/maaraja">
+              {() => <ProtectedRoute component={MaarajaPage} />}
             </Route>
             <Route path="/settings">
               {() => <ProtectedRoute component={SettingsPage} />}
