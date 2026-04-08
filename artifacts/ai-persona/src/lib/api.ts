@@ -69,6 +69,48 @@ export interface BlogArticle {
   createdAt: string;
 }
 
+export interface ScobyCondition {
+  id: number;
+  imageUrl: string;
+  isOk: boolean;
+  okReason?: string | null;
+  notOkReason?: string | null;
+  whatToDo: string;
+  createdAt: string;
+}
+
+export async function listScobyConds(adminKey: string): Promise<ScobyCondition[]> {
+  const res = await fetch(`${API_BASE}/scoby/conditions`, {
+    headers: { "x-admin-key": adminKey },
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error("Unauthorized");
+    throw new Error("Failed to list SCOBY conditions");
+  }
+  return res.json();
+}
+
+export async function createScobyCondition(adminKey: string, formData: FormData): Promise<ScobyCondition> {
+  const res = await fetch(`${API_BASE}/scoby/conditions`, {
+    method: "POST",
+    headers: { "x-admin-key": adminKey },
+    body: formData,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || "Failed to create SCOBY condition");
+  }
+  return res.json();
+}
+
+export async function deleteScobyCondition(adminKey: string, id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/scoby/conditions/${id}`, {
+    method: "DELETE",
+    headers: { "x-admin-key": adminKey },
+  });
+  if (!res.ok) throw new Error("Failed to delete SCOBY condition");
+}
+
 export async function listBlogArticles(): Promise<BlogArticle[]> {
   const res = await fetch(`${API_BASE}/persona/blog`);
   if (!res.ok) throw new Error("Failed to load articles");

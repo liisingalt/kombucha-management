@@ -8,6 +8,7 @@ import aiRouter from "./ai";
 import storageRouter from "./storage";
 import dashboardRouter from "./dashboard";
 import personaRouter from "./persona";
+import scobyRouter from "./scoby";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(aiRouter);
 router.use(storageRouter);
 router.use(dashboardRouter);
 router.use(personaRouter);
+router.use(scobyRouter);
 
 export default router;
