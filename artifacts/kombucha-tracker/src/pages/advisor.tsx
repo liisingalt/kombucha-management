@@ -99,7 +99,7 @@ export default function AdvisorPage() {
 
   return (
     <Layout>
-      <div className="flex flex-col h-[calc(100vh-60px)] lg:h-screen max-w-2xl mx-auto">
+      <div className="flex flex-col h-[calc(100vh-80px)] lg:h-screen max-w-2xl mx-auto">
         <div className="p-6 pb-3 border-b border-border">
           <h1 className="text-2xl font-serif font-semibold">Brewing Advisor</h1>
           <p className="text-muted-foreground text-sm mt-1">Your personal kombucha mentor</p>

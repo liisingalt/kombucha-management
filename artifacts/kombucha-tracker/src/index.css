@@ -163,3 +163,15 @@
     @apply font-serif tracking-tight text-foreground;
   }
 }
+
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility safe-area-pb {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
