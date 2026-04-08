@@ -153,7 +153,7 @@ export default function BatchDetailPage() {
               </span>
             </div>
             <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1"><Clock size={13} /> Day {b.daysSinceStart}</span>
+              <span className="flex items-center gap-1"><Clock size={13} /> Päev {b.daysSinceStart}</span>
               {b.teaType && <span>{b.teaType}</span>}
             </div>
           </div>

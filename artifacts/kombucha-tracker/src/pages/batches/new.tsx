@@ -1,9 +1,8 @@
 import { useLocation } from "wouter";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreateBatch, getListBatchesQueryKey } from "@workspace/api-client-react";
@@ -16,8 +15,17 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
 
+function todayDateString() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 const schema = z.object({
   name: z.string().min(1, "Batch name is required"),
+  startedAt: z.string().min(1, "Start date is required"),
   teaType: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -34,7 +42,7 @@ export default function NewBatchPage() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", teaType: "", notes: "" },
+    defaultValues: { name: "", startedAt: todayDateString(), teaType: "", notes: "" },
   });
 
   const onSubmit = async (values: FormValues) => {
@@ -42,6 +50,7 @@ export default function NewBatchPage() {
       const batch = await createBatch.mutateAsync({
         data: {
           name: values.name,
+          startedAt: new Date(values.startedAt),
           teaType: values.teaType || undefined,
           notes: values.notes || undefined,
         }
@@ -83,6 +92,25 @@ export default function NewBatchPage() {
                         <Input
                           data-testid="input-batch-name"
                           placeholder="e.g. Summer Ginger Brew"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="startedAt"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tee peale läks (Päev 0)</FormLabel>
+                      <FormControl>
+                        <Input
+                          data-testid="input-started-at"
+                          type="date"
+                          max={todayDateString()}
                           {...field}
                         />
                       </FormControl>

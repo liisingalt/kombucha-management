@@ -64,7 +64,7 @@ export default function BatchesPage() {
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       {batch.teaType && <span>{batch.teaType}</span>}
-                      <span className="flex items-center gap-1"><Clock size={11} /> Day {batch.daysSinceStart}</span>
+                      <span className="flex items-center gap-1"><Clock size={11} /> Päev {batch.daysSinceStart}</span>
                       <span>{batch.logCount} log{batch.logCount !== 1 ? "s" : ""}</span>
                       <span>{batch.photoCount} photo{batch.photoCount !== 1 ? "s" : ""}</span>
                     </div>
