@@ -5,17 +5,38 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChipSelector } from "@/components/ChipSelector";
-import { useCreateLog, getListLogsQueryKey, getGetBatchQueryKey } from "@workspace/api-client-react";
+import { useCreateLog, getListLogsQueryKey, getGetBatchQueryKey, useListBatches } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft } from "lucide-react";
+import { useMemo, useEffect } from "react";
+
+function todayDateString() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function computeDayNumber(startedAt: string, logDate: string): number {
+  const start = new Date(startedAt);
+  start.setHours(0, 0, 0, 0);
+  const log = new Date(logDate + "T00:00:00");
+  const diffMs = log.getTime() - start.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  return Math.max(1, diffDays + 1);
+}
 
 const schema = z.object({
-  dayNumber: z.coerce.number().min(1, "Day number required"),
+  logDate: z.string().min(1, "Date required"),
+  selectedBatchId: z.string().min(1, "Batch required"),
   temperature: z.string().optional(),
   ph: z.string().optional(),
   taste: z.array(z.string()).optional(),
@@ -97,10 +118,13 @@ export default function CreateLogPage() {
   const queryClient = useQueryClient();
   const createLog = useCreateLog();
 
+  const { data: batches = [] } = useListBatches();
+
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      dayNumber: 1,
+      logDate: todayDateString(),
+      selectedBatchId: isNaN(batchIdNum) ? "" : String(batchIdNum),
       temperature: "",
       ph: "",
       taste: [],
@@ -114,12 +138,46 @@ export default function CreateLogPage() {
     },
   });
 
+  useEffect(() => {
+    if (batches.length === 0) return;
+    const currentValue = form.getValues("selectedBatchId");
+    if (currentValue && batches.some((b) => String(b.id) === currentValue)) return;
+    const activeBatches = batches.filter((b) => b.status === "active");
+    const fallback = activeBatches.length > 0 ? activeBatches[0] : batches[0];
+    if (fallback) {
+      form.setValue("selectedBatchId", String(fallback.id));
+    }
+  }, [batches, form]);
+
+  const watchedBatchId = form.watch("selectedBatchId");
+  const watchedLogDate = form.watch("logDate");
+
+  const selectedBatch = useMemo(
+    () => batches.find((b) => String(b.id) === watchedBatchId),
+    [batches, watchedBatchId]
+  );
+
+  const derivedDayNumber = useMemo(() => {
+    if (!selectedBatch || !watchedLogDate) return null;
+    return computeDayNumber(selectedBatch.startedAt, watchedLogDate);
+  }, [selectedBatch, watchedLogDate]);
+
   const onSubmit = async (values: FormValues) => {
+    const targetBatchId = parseInt(values.selectedBatchId);
+    if (isNaN(targetBatchId)) {
+      toast({ title: "Please select a batch", variant: "destructive" });
+      return;
+    }
+
+    const dayNumber = derivedDayNumber ?? 1;
+    const loggedAt = new Date(values.logDate + "T12:00:00");
+
     try {
       await createLog.mutateAsync({
-        batchId: batchIdNum,
+        batchId: targetBatchId,
         data: {
-          dayNumber: values.dayNumber,
+          dayNumber,
+          loggedAt,
           temperature: values.temperature ? parseFloat(values.temperature) : undefined,
           ph: values.ph ? parseFloat(values.ph) : undefined,
           taste: values.taste && values.taste.length > 0 ? values.taste : undefined,
@@ -132,10 +190,10 @@ export default function CreateLogPage() {
           notes: values.notes || undefined,
         }
       });
-      queryClient.invalidateQueries({ queryKey: getListLogsQueryKey(batchIdNum) });
-      queryClient.invalidateQueries({ queryKey: getGetBatchQueryKey(batchIdNum) });
+      queryClient.invalidateQueries({ queryKey: getListLogsQueryKey(targetBatchId) });
+      queryClient.invalidateQueries({ queryKey: getGetBatchQueryKey(targetBatchId) });
       toast({ title: "Log saved" });
-      setLocation(`/batches/${batchIdNum}`);
+      setLocation(`/batches/${targetBatchId}`);
     } catch {
       toast({ title: "Could not save log", variant: "destructive" });
     }
@@ -162,28 +220,72 @@ export default function CreateLogPage() {
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
-                {/* Temperature & pH */}
+                {/* Batch & Date */}
                 <div>
-                  <SectionHeading>Temperature &amp; pH</SectionHeading>
-                  <div className="grid grid-cols-2 gap-4">
+                  <SectionHeading>Batch &amp; Date</SectionHeading>
+                  <div className="space-y-4">
                     <FormField
                       control={form.control}
-                      name="dayNumber"
+                      name="selectedBatchId"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Day number</FormLabel>
-                          <FormControl>
-                            <Input
-                              data-testid="input-day-number"
-                              type="number"
-                              min={1}
-                              {...field}
-                            />
-                          </FormControl>
+                          <FormLabel>Batch</FormLabel>
+                          <Select
+                            value={field.value}
+                            onValueChange={field.onChange}
+                          >
+                            <FormControl>
+                              <SelectTrigger data-testid="select-batch">
+                                <SelectValue placeholder="Select a batch…" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {batches.map((batch) => (
+                                <SelectItem key={batch.id} value={String(batch.id)}>
+                                  {batch.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="logDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Date</FormLabel>
+                            <FormControl>
+                              <Input
+                                data-testid="input-log-date"
+                                type="date"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <div>
+                        <Label className="text-sm font-medium">Day number</Label>
+                        <div
+                          data-testid="display-day-number"
+                          className="mt-2 flex h-9 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground"
+                        >
+                          {derivedDayNumber !== null ? `Day ${derivedDayNumber}` : "—"}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Temperature & pH */}
+                <div>
+                  <SectionHeading>Temperature &amp; pH</SectionHeading>
+                  <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
                       name="temperature"
@@ -203,8 +305,6 @@ export default function CreateLogPage() {
                         </FormItem>
                       )}
                     />
-                  </div>
-                  <div className="mt-4">
                     <FormField
                       control={form.control}
                       name="ph"
