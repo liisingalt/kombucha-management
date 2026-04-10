@@ -101,8 +101,8 @@ export default function AdvisorPage() {
     <Layout>
       <div className="flex flex-col h-[calc(100vh-80px)] lg:h-screen max-w-2xl mx-auto">
         <div className="p-6 pb-3 border-b border-border">
-          <h1 className="text-2xl font-serif font-semibold">Brewing Advisor</h1>
-          <p className="text-muted-foreground text-sm mt-1">Your personal kombucha mentor</p>
+          <h1 className="text-2xl font-serif font-semibold">Kombucha Abiline</h1>
+          <p className="text-muted-foreground text-sm mt-1">Sinu isiklik kombucha nõustaja</p>
         </div>
 
         {/* Messages */}
@@ -120,9 +120,9 @@ export default function AdvisorPage() {
               <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl">?</span>
               </div>
-              <p className="font-serif font-semibold text-lg mb-2">Ask me anything</p>
+              <p className="font-serif font-semibold text-lg mb-2">Küsi minult midagi</p>
               <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                I can help with fermentation timing, troubleshooting your SCOBY, flavoring ideas, and more.
+                Saan aidata käärimisaja, SCOBY tõrkeotsingu, maitsestamisidede ja muuga.
               </p>
             </div>
           ) : (
@@ -189,7 +189,7 @@ export default function AdvisorPage() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about your brew..."
+              placeholder="Küsi oma pruulimise kohta..."
               disabled={chat.isPending}
               className="flex-1"
             />
@@ -203,7 +203,7 @@ export default function AdvisorPage() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2 text-center">
-            TTS: {ttsEnabled ? "on" : "off"} — toggle in settings
+            Kõnesüntees: {ttsEnabled ? "sees" : "väljas"} — muuda seadetes
           </p>
         </div>
       </div>

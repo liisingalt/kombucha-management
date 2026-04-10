@@ -1,12 +1,22 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { useGetProfile, getGetProfileQueryKey, useUpdateProfile } from "@workspace/api-client-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  useGetProfile,
+  getGetProfileQueryKey,
+  useUpdateProfile,
+  useListPersonaMaterials,
+  getListPersonaMaterialsQueryKey,
+  useDeletePersonaMaterial,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@clerk/react";
 import { useToast } from "@/hooks/use-toast";
+import { Trash2, Upload, Loader2, FileText, Key } from "lucide-react";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -15,6 +25,27 @@ export default function SettingsPage() {
   const profile = useGetProfile({ query: { queryKey: getGetProfileQueryKey() } });
   const updateProfile = useUpdateProfile();
 
+  const [adminKey, setAdminKey] = useState(() => localStorage.getItem("teadmusbaas_admin_key") ?? "");
+  const [adminKeyInput, setAdminKeyInput] = useState(() => localStorage.getItem("teadmusbaas_admin_key") ?? "");
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const materialsQuery = useListPersonaMaterials({
+    query: {
+      queryKey: [...getListPersonaMaterialsQueryKey(), adminKey],
+      enabled: !!adminKey,
+    },
+    request: {
+      headers: { "x-admin-key": adminKey },
+    },
+  });
+
+  const deleteMaterial = useDeletePersonaMaterial({
+    request: {
+      headers: { "x-admin-key": adminKey },
+    },
+  });
+
   const handleTtsToggle = async (enabled: boolean) => {
     try {
       await updateProfile.mutateAsync({ data: { ttsEnabled: enabled } });
@@ -22,6 +53,58 @@ export default function SettingsPage() {
       toast({ title: `TTS ${enabled ? "enabled" : "disabled"}` });
     } catch {
       toast({ title: "Could not update settings", variant: "destructive" });
+    }
+  };
+
+  const handleSaveAdminKey = () => {
+    const trimmed = adminKeyInput.trim();
+    localStorage.setItem("teadmusbaas_admin_key", trimmed);
+    setAdminKey(trimmed);
+    if (trimmed) {
+      toast({ title: "Admin-võti salvestatud" });
+    } else {
+      toast({ title: "Admin-võti eemaldatud" });
+    }
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const resp = await fetch("/api/persona/materials/upload", {
+        method: "POST",
+        headers: { "x-admin-key": adminKey },
+        body: formData,
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error ?? `Viga: ${resp.status}`);
+      }
+
+      await queryClient.invalidateQueries({ queryKey: [...getListPersonaMaterialsQueryKey(), adminKey] });
+      toast({ title: "Dokument edukalt üles laaditud" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Üleslaadimise viga";
+      toast({ title: msg, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (id: number, title: string) => {
+    try {
+      await deleteMaterial.mutateAsync({ id });
+      await queryClient.invalidateQueries({ queryKey: [...getListPersonaMaterialsQueryKey(), adminKey] });
+      toast({ title: `"${title}" kustutatud` });
+    } catch {
+      toast({ title: "Kustutamine ebaõnnestus", variant: "destructive" });
     }
   };
 
@@ -80,7 +163,7 @@ export default function SettingsPage() {
 
         {/* Brewing profile */}
         {profile.data && (
-          <Card className="border-card-border">
+          <Card className="mb-4 border-card-border">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold">Brewing profile</CardTitle>
             </CardHeader>
@@ -105,6 +188,116 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Teadmusbaas */}
+        <Card className="border-card-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Teadmusbaas</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Lae üles Word dokumendid (.docx, .doc), mida Kombucha Abiline kasutab vastuste koostamisel.
+            </p>
+
+            {/* Admin key input */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Key size={13} />
+                Admin-võti
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  data-testid="input-admin-key"
+                  type="password"
+                  placeholder="Sisesta admin-võti..."
+                  value={adminKeyInput}
+                  onChange={e => setAdminKeyInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") handleSaveAdminKey(); }}
+                  className="flex-1 text-sm"
+                />
+                <Button
+                  data-testid="button-save-admin-key"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSaveAdminKey}
+                >
+                  Salvesta
+                </Button>
+              </div>
+            </div>
+
+            {/* Upload button */}
+            {adminKey && (
+              <div className="space-y-3">
+                <div>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".docx,.doc"
+                    className="hidden"
+                    onChange={handleUpload}
+                    data-testid="input-file-upload"
+                  />
+                  <Button
+                    data-testid="button-upload-document"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={uploading}
+                    className="w-full"
+                  >
+                    {uploading ? (
+                      <><Loader2 size={14} className="animate-spin mr-2" />Laen üles...</>
+                    ) : (
+                      <><Upload size={14} className="mr-2" />Lae üles dokument (.docx, .doc)</>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Materials list */}
+                {materialsQuery.isLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 size={14} className="animate-spin" />
+                    Laen materjale...
+                  </div>
+                ) : materialsQuery.isError ? (
+                  <p className="text-sm text-destructive">
+                    Vigane admin-võti või serveri viga.
+                  </p>
+                ) : materialsQuery.data && materialsQuery.data.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground font-medium">
+                      Olemasolevad materjalid ({materialsQuery.data.length})
+                    </p>
+                    <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                      {materialsQuery.data.map(mat => (
+                        <div
+                          key={mat.id}
+                          data-testid={`material-item-${mat.id}`}
+                          className="flex items-center gap-2 p-2 rounded-md border border-border bg-card/50 text-sm"
+                        >
+                          <FileText size={13} className="text-muted-foreground flex-shrink-0" />
+                          <span className="flex-1 truncate text-xs">{mat.title}</span>
+                          <button
+                            data-testid={`button-delete-material-${mat.id}`}
+                            onClick={() => handleDelete(mat.id, mat.title)}
+                            disabled={deleteMaterial.isPending}
+                            className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 p-0.5 rounded"
+                            title="Kustuta"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : materialsQuery.data && materialsQuery.data.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">Materjale pole üles laaditud.</p>
+                ) : null}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   );

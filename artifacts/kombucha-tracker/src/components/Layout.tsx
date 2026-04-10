@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 const bottomTabs = [
   { href: "/dashboard", label: "Today", icon: Home },
   { href: "/insights", label: "Insights", icon: BookOpen },
-  { href: "/advisor", label: "Advisor", icon: MessageSquare },
+  { href: "/advisor", label: "Abiline", icon: MessageSquare },
   { href: "/maaraja", label: "Määraja", icon: FlaskConical },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

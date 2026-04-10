@@ -199,6 +199,27 @@ router.post("/ai/chat", requireAuth, async (req, res) => {
     const lowerMessage = message.toLowerCase();
     const messageMatches = kombuchaKeywords.some(kw => lowerMessage.includes(kw));
 
+    // Fetch uploaded manual knowledge base documents (always included up to limit)
+    const manualMaterials = await db.query.personaMaterialsTable.findMany({
+      where: eq(personaMaterialsTable.type, "manual"),
+      orderBy: [desc(personaMaterialsTable.createdAt)],
+      limit: 10,
+    });
+
+    let manualContext = "";
+    if (manualMaterials.length > 0) {
+      const MAX_MANUAL_CHARS = 6000;
+      let combined = "";
+      for (const mat of manualMaterials) {
+        const snippet = `--- ${mat.title} ---\n${mat.content.slice(0, 1000).replace(/\s+/g, " ").trim()}\n\n`;
+        if (combined.length + snippet.length > MAX_MANUAL_CHARS) break;
+        combined += snippet;
+      }
+      if (combined.trim()) {
+        manualContext = `\n\nTeadmusbaasi materjalid (kasuta neid vastuste koostamisel):\n${combined.trim()}`;
+      }
+    }
+
     let articleContext = "";
     if (messageMatches) {
       const allArticles = await db.query.personaMaterialsTable.findMany({
@@ -227,7 +248,7 @@ router.post("/ai/chat", requireAuth, async (req, res) => {
       }
     }
 
-    const systemContent = `You are a knowledgeable, friendly kombucha expert and brewing mentor. Help the user with their kombucha questions. Be practical, specific, and encouraging.${contextParts.length > 0 ? `\n\nUser's brewing context: ${contextParts.join(" ")}` : ""}${articleContext}`;
+    const systemContent = `Sa oled Kombucha Abiline — sõbralik ja teadlik kombucha ekspert ning pruulimismentor. Vasta ALATI eesti keeles, isegi kui kasutaja kirjutab sulle inglise keeles. Aita kasutajal kombucha küsimustega, ole praktiline, konkreetne ja julgustav. Nimeta ennast "Kombucha Abiline"-ks kui esitled ennast.${contextParts.length > 0 ? `\n\nKasutaja pruulimine: ${contextParts.join(" ")}` : ""}${manualContext}${articleContext}`;
 
     const conversationMessages = previousMessages
       .reverse()
