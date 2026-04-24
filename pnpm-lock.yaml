@@ -409,6 +409,9 @@ importers:
       word-extractor:
         specifier: ^1.0.4
         version: 1.0.4
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
     devDependencies:
       '@types/cookie-parser':
         specifier: ^1.4.10

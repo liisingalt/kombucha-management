@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod/v4";
 import { db } from "@workspace/db";
 import { bottleTestsTable } from "@workspace/db";
 import { eq, and, asc, desc, sql } from "drizzle-orm";
@@ -16,50 +17,17 @@ function addMonths(date: Date, months: number): Date {
   return result;
 }
 
-function validateCreate(body: unknown): {
-  ok: true;
-  data: { product: string; bottleId: string; bottledDate: string; intervalMonths: number };
-} | { ok: false; error: string } {
-  if (!body || typeof body !== "object") return { ok: false, error: "Invalid body" };
-  const b = body as Record<string, unknown>;
-  if (typeof b.product !== "string" || !b.product.trim())
-    return { ok: false, error: "product is required" };
-  if (typeof b.bottleId !== "string" || !b.bottleId.trim())
-    return { ok: false, error: "bottleId is required" };
-  if (typeof b.bottledDate !== "string" || !b.bottledDate)
-    return { ok: false, error: "bottledDate is required" };
-  const months =
-    typeof b.intervalMonths === "number"
-      ? b.intervalMonths
-      : Number(b.intervalMonths);
-  if (!Number.isInteger(months) || months < 1 || months > 120)
-    return { ok: false, error: "intervalMonths must be an integer between 1 and 120" };
-  return {
-    ok: true,
-    data: {
-      product: b.product.trim(),
-      bottleId: (b.bottleId as string).trim(),
-      bottledDate: b.bottledDate,
-      intervalMonths: months,
-    },
-  };
-}
+const createSchema = z.object({
+  product: z.string().min(1),
+  bottleId: z.string().min(1),
+  bottledDate: z.string().min(1),
+  intervalMonths: z.number().int().min(1).max(120),
+});
 
-function validateTaste(body: unknown): {
-  ok: true;
-  data: { result: string; conclusion: string };
-} | { ok: false; error: string } {
-  if (!body || typeof body !== "object") return { ok: false, error: "Invalid body" };
-  const b = body as Record<string, unknown>;
-  if (typeof b.result !== "string" || !b.result.trim())
-    return { ok: false, error: "result is required" };
-  if (typeof b.conclusion !== "string" || !b.conclusion.trim())
-    return { ok: false, error: "conclusion is required" };
-  return {
-    ok: true,
-    data: { result: b.result.trim(), conclusion: b.conclusion.trim() },
-  };
-}
+const tasteSchema = z.object({
+  result: z.string().min(1),
+  conclusion: z.string().min(1),
+});
 
 router.get("/bottle-tests", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
@@ -82,12 +50,12 @@ router.get("/bottle-tests", requireAuth, async (req, res) => {
 
 router.post("/bottle-tests", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
-  const validation = validateCreate(req.body);
-  if (!validation.ok) {
-    res.status(400).json({ error: validation.error });
+  const parsed = createSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
     return;
   }
-  const { product, bottleId, bottledDate, intervalMonths } = validation.data;
+  const { product, bottleId, bottledDate, intervalMonths } = parsed.data;
   const bottledDateObj = new Date(bottledDate);
   if (isNaN(bottledDateObj.getTime())) {
     res.status(400).json({ error: "Invalid bottledDate" });
@@ -121,12 +89,12 @@ router.post("/bottle-tests/:id/taste", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const validation = validateTaste(req.body);
-  if (!validation.ok) {
-    res.status(400).json({ error: validation.error });
+  const parsed = tasteSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
     return;
   }
-  const { result, conclusion } = validation.data;
+  const { result, conclusion } = parsed.data;
   try {
     const [existing] = await db
       .select()

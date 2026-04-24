@@ -4,7 +4,7 @@ import { format, differenceInDays } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Plus, FlaskConical, Trash2, CheckCircle, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Plus, FlaskConical, Trash2, CheckCircle, X } from "lucide-react";
 
 type BottleTest = {
   id: number;
@@ -64,7 +64,6 @@ export default function KestvuskatsedPage() {
   const [tasteError, setTasteError] = useState<string | null>(null);
   const [tasteLoading, setTasteLoading] = useState(false);
 
-  const [tastedOpen, setTastedOpen] = useState(true);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -299,23 +298,15 @@ export default function KestvuskatsedPage() {
 
             {/* Tasted results section — always visible */}
             <section>
-              <button
-                className="flex items-center gap-2 w-full text-left mb-3"
-                onClick={() => setTastedOpen((o) => !o)}
-              >
-                <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide flex-1">
-                  Maitsitud tulemused ({tasted.length})
-                </h2>
-                {tastedOpen ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
-              </button>
+              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3">
+                Maitsitud tulemused ({tasted.length})
+              </h2>
 
-              {tastedOpen && (
-                <>
-                  {tasted.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-border p-6 text-center text-muted-foreground text-sm">
-                      Maitsitud tulemusi pole veel. Märgi ootav katse maitsituks, et tulemused siia ilmuksid.
-                    </div>
-                  ) : (
+              {tasted.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border p-6 text-center text-muted-foreground text-sm">
+                  Maitsitud tulemusi pole veel. Märgi ootav katse maitsituks, et tulemused siia ilmuksid.
+                </div>
+              ) : (
                     <>
                       {/* Desktop table */}
                       <div className="hidden md:block overflow-x-auto rounded-2xl border border-border">
@@ -397,8 +388,6 @@ export default function KestvuskatsedPage() {
                       </div>
                     </>
                   )}
-                </>
-              )}
             </section>
           </>
         )}
