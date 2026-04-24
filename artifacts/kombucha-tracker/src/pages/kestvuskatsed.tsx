@@ -241,8 +241,8 @@ export default function KestvuskatsedPage() {
         const d = await res.json();
         throw new Error(d.error ?? "Viga");
       }
-      const updated = await res.json();
-      setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+      await res.json();
+      await fetchItems();
       setEditTarget(null);
     } catch (e: unknown) {
       setEditError(e instanceof Error ? e.message : "Viga");
@@ -689,6 +689,7 @@ export default function KestvuskatsedPage() {
                     <label className="block text-sm font-medium mb-1.5">Tulemus</label>
                     <textarea
                       data-testid="edit-input-result"
+                      required
                       rows={3}
                       placeholder="Kirjelda maitset, lõhna, karbonisatsiooni..."
                       className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
@@ -700,6 +701,7 @@ export default function KestvuskatsedPage() {
                     <label className="block text-sm font-medium mb-1.5">Järeldus</label>
                     <textarea
                       data-testid="edit-input-conclusion"
+                      required
                       rows={3}
                       placeholder="Mida muudad järgmine kord? Kas jätkad?"
                       className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"

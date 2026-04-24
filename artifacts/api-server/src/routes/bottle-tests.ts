@@ -34,8 +34,8 @@ const updateSchema = z.object({
   bottleId: z.string().min(1),
   bottledDate: z.string().min(1),
   intervalMonths: z.number().int().min(1).max(120),
-  result: z.string().optional(),
-  conclusion: z.string().optional(),
+  result: z.string().min(1).optional(),
+  conclusion: z.string().min(1).optional(),
 });
 
 router.get("/bottle-tests", requireAuth, async (req, res) => {
