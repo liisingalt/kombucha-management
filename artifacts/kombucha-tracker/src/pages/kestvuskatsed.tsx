@@ -297,103 +297,109 @@ export default function KestvuskatsedPage() {
               </div>
             </section>
 
-            {/* Tasted results section */}
-            {tasted.length > 0 && (
-              <section>
-                <button
-                  className="flex items-center gap-2 w-full text-left mb-3"
-                  onClick={() => setTastedOpen((o) => !o)}
-                >
-                  <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide flex-1">
-                    Maitsitud tulemused ({tasted.length})
-                  </h2>
-                  {tastedOpen ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
-                </button>
+            {/* Tasted results section — always visible */}
+            <section>
+              <button
+                className="flex items-center gap-2 w-full text-left mb-3"
+                onClick={() => setTastedOpen((o) => !o)}
+              >
+                <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide flex-1">
+                  Maitsitud tulemused ({tasted.length})
+                </h2>
+                {tastedOpen ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
+              </button>
 
-                {tastedOpen && (
-                  <>
-                    {/* Desktop table */}
-                    <div className="hidden md:block overflow-x-auto rounded-2xl border border-border">
-                      <table className="w-full text-sm" data-testid="tasted-table">
-                        <thead>
-                          <tr className="border-b border-border bg-muted/40">
-                            <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Toode</th>
-                            <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Pudeli ID</th>
-                            <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Villitud</th>
-                            <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Maitsitud</th>
-                            <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Tulemus</th>
-                            <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Järeldus</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {tasted.map((item, idx) => (
-                            <tr
-                              key={item.id}
-                              data-testid={`tasted-row-${item.id}`}
-                              className={cn(
-                                "border-b border-border last:border-0 transition-colors",
-                                idx % 2 === 0 ? "bg-card" : "bg-muted/20"
-                              )}
-                            >
-                              <td className="px-4 py-3 font-medium">{item.product}</td>
-                              <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{item.bottleId}</td>
-                              <td className="px-4 py-3 text-muted-foreground text-xs">{format(new Date(item.bottledDate), "d. MMM yyyy")}</td>
-                              <td className="px-4 py-3 text-muted-foreground text-xs">
-                                {item.tastedDate ? format(new Date(item.tastedDate), "d. MMM yyyy") : "—"}
-                              </td>
-                              <td className="px-4 py-3 max-w-[200px]">
-                                <span className="text-xs line-clamp-2">{item.result ?? "—"}</span>
-                              </td>
-                              <td className="px-4 py-3 max-w-[200px]">
-                                <span className="text-xs line-clamp-2 text-muted-foreground">{item.conclusion ?? "—"}</span>
-                              </td>
+              {tastedOpen && (
+                <>
+                  {tasted.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-border p-6 text-center text-muted-foreground text-sm">
+                      Maitsitud tulemusi pole veel. Märgi ootav katse maitsituks, et tulemused siia ilmuksid.
+                    </div>
+                  ) : (
+                    <>
+                      {/* Desktop table */}
+                      <div className="hidden md:block overflow-x-auto rounded-2xl border border-border">
+                        <table className="w-full text-sm" data-testid="tasted-table">
+                          <thead>
+                            <tr className="border-b border-border bg-muted/40">
+                              <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Toode</th>
+                              <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Pudeli ID</th>
+                              <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Villitud</th>
+                              <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Maitsitud</th>
+                              <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Tulemus</th>
+                              <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Järeldus</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {tasted.map((item, idx) => (
+                              <tr
+                                key={item.id}
+                                data-testid={`tasted-row-${item.id}`}
+                                className={cn(
+                                  "border-b border-border last:border-0 transition-colors",
+                                  idx % 2 === 0 ? "bg-card" : "bg-muted/20"
+                                )}
+                              >
+                                <td className="px-4 py-3 font-medium">{item.product}</td>
+                                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{item.bottleId}</td>
+                                <td className="px-4 py-3 text-muted-foreground text-xs">{format(new Date(item.bottledDate), "d. MMM yyyy")}</td>
+                                <td className="px-4 py-3 text-muted-foreground text-xs">
+                                  {item.tastedDate ? format(new Date(item.tastedDate), "d. MMM yyyy") : "—"}
+                                </td>
+                                <td className="px-4 py-3 max-w-[200px]">
+                                  <span className="text-xs line-clamp-2">{item.result ?? "—"}</span>
+                                </td>
+                                <td className="px-4 py-3 max-w-[200px]">
+                                  <span className="text-xs line-clamp-2 text-muted-foreground">{item.conclusion ?? "—"}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
 
-                    {/* Mobile cards */}
-                    <div className="md:hidden space-y-3" data-testid="tasted-table">
-                      {tasted.map((item) => (
-                        <div
-                          key={item.id}
-                          data-testid={`tasted-row-${item.id}`}
-                          className="rounded-2xl border border-border bg-muted/20 p-4 space-y-2"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-sm">{item.product}</span>
-                            <span className="font-mono text-xs text-muted-foreground bg-muted rounded px-1.5 py-0.5">{item.bottleId}</span>
+                      {/* Mobile cards */}
+                      <div className="md:hidden space-y-3" data-testid="tasted-table">
+                        {tasted.map((item) => (
+                          <div
+                            key={item.id}
+                            data-testid={`tasted-row-${item.id}`}
+                            className="rounded-2xl border border-border bg-muted/20 p-4 space-y-2"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-sm">{item.product}</span>
+                              <span className="font-mono text-xs text-muted-foreground bg-muted rounded px-1.5 py-0.5">{item.bottleId}</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                              <div>
+                                <span className="text-muted-foreground">Villitud: </span>
+                                {format(new Date(item.bottledDate), "d. MMM yyyy")}
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">Maitsitud: </span>
+                                {item.tastedDate ? format(new Date(item.tastedDate), "d. MMM yyyy") : "—"}
+                              </div>
+                            </div>
+                            {item.result && (
+                              <div className="text-xs">
+                                <span className="text-muted-foreground font-medium">Tulemus: </span>
+                                {item.result}
+                              </div>
+                            )}
+                            {item.conclusion && (
+                              <div className="text-xs text-muted-foreground">
+                                <span className="font-medium">Järeldus: </span>
+                                {item.conclusion}
+                              </div>
+                            )}
                           </div>
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                            <div>
-                              <span className="text-muted-foreground">Villitud: </span>
-                              {format(new Date(item.bottledDate), "d. MMM yyyy")}
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Maitsitud: </span>
-                              {item.tastedDate ? format(new Date(item.tastedDate), "d. MMM yyyy") : "—"}
-                            </div>
-                          </div>
-                          {item.result && (
-                            <div className="text-xs">
-                              <span className="text-muted-foreground font-medium">Tulemus: </span>
-                              {item.result}
-                            </div>
-                          )}
-                          {item.conclusion && (
-                            <div className="text-xs text-muted-foreground">
-                              <span className="font-medium">Järeldus: </span>
-                              {item.conclusion}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </section>
-            )}
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </section>
           </>
         )}
       </div>
