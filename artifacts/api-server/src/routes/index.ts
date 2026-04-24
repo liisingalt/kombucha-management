@@ -9,6 +9,7 @@ import storageRouter from "./storage";
 import dashboardRouter from "./dashboard";
 import personaRouter from "./persona";
 import scobyRouter from "./scoby";
+import bottleTestsRouter from "./bottle-tests";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(storageRouter);
 router.use(dashboardRouter);
 router.use(personaRouter);
 router.use(scobyRouter);
+router.use(bottleTestsRouter);
 
 export default router;

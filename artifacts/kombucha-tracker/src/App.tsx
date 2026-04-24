@@ -19,6 +19,7 @@ import InsightsPage from "@/pages/insights";
 import FlavoringPage from "@/pages/flavoring";
 import MaarajaPage from "@/pages/maaraja";
 import SettingsPage from "@/pages/settings";
+import KestvuskatsedPage from "@/pages/kestvuskatsed";
 import NotFound from "@/pages/not-found";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -176,6 +177,9 @@ function ClerkProviderWithRoutes() {
             </Route>
             <Route path="/settings">
               {() => <ProtectedRoute component={SettingsPage} />}
+            </Route>
+            <Route path="/kestvuskatsed">
+              {() => <ProtectedRoute component={KestvuskatsedPage} />}
             </Route>
             <Route component={NotFound} />
           </Switch>

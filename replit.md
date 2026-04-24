@@ -61,12 +61,16 @@ All routes are under `/api/`:
 - `GET /api/dashboard/summary` — dashboard stats
 - `GET/POST/DELETE /api/persona/materials` — AI Persona knowledge base (admin key required)
 - `POST /api/persona/chat` — public AI persona chat (no auth)
+- `GET /api/bottle-tests` — list user's bottle tests (auth)
+- `POST /api/bottle-tests` — create bottle test entry (auth)
+- `POST /api/bottle-tests/:id/taste` — mark as tasted with result+conclusion (auth)
+- `DELETE /api/bottle-tests/:id` — delete pending entry only, tasted entries cannot be deleted (auth)
 
 ## Frontend Pages (Kombucha Tracker)
 
 Flo-app-inspired navigation with bottom tab bar (mobile) and sidebar (desktop):
 - Bottom tabs: Today (`/dashboard`), Insights (`/insights`), Advisor (`/advisor`), Settings (`/settings`)
-- Secondary sidebar links: Batches, Photos, Flavoring
+- Secondary sidebar links: Batches, Photos, Flavoring, Katsed
 
 ### Routes
 - `/` — landing (public)
@@ -83,6 +87,7 @@ Flo-app-inspired navigation with bottom tab bar (mobile) and sidebar (desktop):
 - `/advisor` — AI chat with TTS (protected)
 - `/flavoring` — F2 flavoring guide with preference selector (protected)
 - `/settings` — TTS toggle, profile info (protected)
+- `/kestvuskatsed` — bottle durability tests: add entries, track tasting dates, mark tasted with results; tasted results persist in a separate table (protected)
 
 ## AI Persona Chatbot (`/ai-persona/`)
 

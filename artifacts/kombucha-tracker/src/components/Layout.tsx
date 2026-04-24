@@ -16,6 +16,7 @@ const sidebarSecondary = [
   { href: "/batches", label: "My batches", icon: Beaker },
   { href: "/photos", label: "Photos", icon: Image },
   { href: "/flavoring", label: "Flavoring", icon: Sparkles },
+  { href: "/kestvuskatsed", label: "Katsed", icon: FlaskConical },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {

@@ -8,7 +8,7 @@ import {
   useGetProfile,
   getGetProfileQueryKey,
 } from "@workspace/api-client-react";
-import { Plus, ArrowRight, CalendarDays, Beaker, Clock, ChevronRight, X, Image, Sparkles } from "lucide-react";
+import { Plus, ArrowRight, CalendarDays, Beaker, Clock, ChevronRight, X, Image, Sparkles, FlaskConical } from "lucide-react";
 import {
   format, startOfWeek, addDays, isToday,
   startOfMonth, endOfMonth, getDay, getDaysInMonth, addMonths, subMonths,
@@ -456,13 +456,14 @@ export default function DashboardPage() {
           <InsightCards activeBatch={primaryBatch} recentLog={recentLog} />
         </div>
 
-        {/* Quick navigation links — Batches, Photos, Flavoring (always visible on mobile) */}
+        {/* Quick navigation links — Batches, Photos, Flavoring, Katsed (always visible on mobile) */}
         <div className="px-5 mt-3 mb-1 lg:hidden">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {[
               { href: "/batches", label: "Batches", icon: Beaker, color: "bg-primary/10 text-primary" },
               { href: "/photos", label: "Photos", icon: Image, color: "bg-amber-100 text-amber-700" },
               { href: "/flavoring", label: "Flavoring", icon: Sparkles, color: "bg-green-100 text-green-700" },
+              { href: "/kestvuskatsed", label: "Katsed", icon: FlaskConical, color: "bg-purple-100 text-purple-700" },
             ].map(({ href, label, icon: Icon, color }) => (
               <Link
                 key={href}
