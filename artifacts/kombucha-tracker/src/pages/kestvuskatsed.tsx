@@ -4,7 +4,7 @@ import { format, differenceInDays } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Plus, FlaskConical, Trash2, CheckCircle, X } from "lucide-react";
+import { Plus, FlaskConical, Trash2, CheckCircle, X, Download } from "lucide-react";
 
 type BottleTest = {
   id: number;
@@ -184,6 +184,34 @@ export default function KestvuskatsedPage() {
     }
   }
 
+  function handleExportCSV() {
+    const headers = ["Toode", "Pudeli ID", "Villitud", "Maitsitud", "Tulemus", "Järeldus"];
+    const escape = (val: string | null) => {
+      let s = val ?? "";
+      if (/^[=+\-@]/.test(s)) s = `'${s}`;
+      if (s.includes('"') || s.includes(",") || s.includes("\n")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+    const rows = tasted.map((item) => [
+      escape(item.product),
+      escape(item.bottleId),
+      escape(format(new Date(item.bottledDate), "d. MMM yyyy")),
+      escape(item.tastedDate ? format(new Date(item.tastedDate), "d. MMM yyyy") : ""),
+      escape(item.result),
+      escape(item.conclusion),
+    ]);
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "kestvuskatsed.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <Layout>
       {/* Header */}
@@ -298,9 +326,23 @@ export default function KestvuskatsedPage() {
 
             {/* Tasted results section — always visible */}
             <section>
-              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3">
-                Maitsitud tulemused ({tasted.length})
-              </h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+                  Maitsitud tulemused ({tasted.length})
+                </h2>
+                {tasted.length > 0 && (
+                  <Button
+                    data-testid="button-export-csv"
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-xs h-8"
+                    onClick={handleExportCSV}
+                  >
+                    <Download size={13} />
+                    Ekspordi CSV
+                  </Button>
+                )}
+              </div>
 
               {tasted.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border p-6 text-center text-muted-foreground text-sm">
