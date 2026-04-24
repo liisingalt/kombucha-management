@@ -4,7 +4,7 @@ import { format, differenceInDays } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Plus, FlaskConical, Trash2, CheckCircle, X, Download } from "lucide-react";
+import { Plus, FlaskConical, Trash2, CheckCircle, X, Download, Pencil } from "lucide-react";
 
 type BottleTest = {
   id: number;
@@ -64,6 +64,17 @@ export default function KestvuskatsedPage() {
   const [tasteError, setTasteError] = useState<string | null>(null);
   const [tasteLoading, setTasteLoading] = useState(false);
 
+  const [editTarget, setEditTarget] = useState<BottleTest | null>(null);
+  const [editForm, setEditForm] = useState({
+    product: "",
+    bottleId: "",
+    bottledDate: todayISO(),
+    intervalMonths: 1,
+    result: "",
+    conclusion: "",
+  });
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -181,6 +192,62 @@ export default function KestvuskatsedPage() {
       setItems((prev) => prev.filter((i) => i.id !== item.id));
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Kustutamine ebaõnnestus");
+    }
+  }
+
+  function openEdit(item: BottleTest) {
+    setEditTarget(item);
+    setEditForm({
+      product: item.product,
+      bottleId: item.bottleId,
+      bottledDate: new Date(item.bottledDate).toISOString().slice(0, 10),
+      intervalMonths: item.intervalMonths,
+      result: item.result ?? "",
+      conclusion: item.conclusion ?? "",
+    });
+    setEditError(null);
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editTarget) return;
+    setEditError(null);
+    if (!editForm.product.trim() || !editForm.bottleId.trim()) {
+      setEditError("Toote nimi ja pudeli ID on kohustuslikud.");
+      return;
+    }
+    setEditLoading(true);
+    try {
+      const token = await getToken();
+      const body: Record<string, unknown> = {
+        product: editForm.product.trim(),
+        bottleId: editForm.bottleId.trim(),
+        bottledDate: editForm.bottledDate,
+        intervalMonths: Number(editForm.intervalMonths),
+      };
+      if (editTarget.status === "maitsitud") {
+        body.result = editForm.result.trim();
+        body.conclusion = editForm.conclusion.trim();
+      }
+      const res = await fetch(`${BASE_URL}/api/bottle-tests/${editTarget.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error ?? "Viga");
+      }
+      const updated = await res.json();
+      setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+      setEditTarget(null);
+    } catch (e: unknown) {
+      setEditError(e instanceof Error ? e.message : "Viga");
+    } finally {
+      setEditLoading(false);
     }
   }
 
@@ -307,6 +374,16 @@ export default function KestvuskatsedPage() {
                             Maitsitud
                           </Button>
                           <Button
+                            data-testid={`button-edit-${item.id}`}
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1 text-xs h-8"
+                            onClick={() => openEdit(item)}
+                          >
+                            <Pencil size={13} />
+                            Muuda
+                          </Button>
+                          <Button
                             data-testid={`button-delete-${item.id}`}
                             size="sm"
                             variant="ghost"
@@ -361,6 +438,7 @@ export default function KestvuskatsedPage() {
                               <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Maitsitud</th>
                               <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Tulemus</th>
                               <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase">Järeldus</th>
+                              <th className="px-4 py-2.5"></th>
                             </tr>
                           </thead>
                           <tbody>
@@ -384,6 +462,16 @@ export default function KestvuskatsedPage() {
                                 </td>
                                 <td className="px-4 py-3 max-w-[200px]">
                                   <span className="text-xs line-clamp-2 text-muted-foreground">{item.conclusion ?? "—"}</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <button
+                                    data-testid={`button-edit-${item.id}`}
+                                    onClick={() => openEdit(item)}
+                                    className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted"
+                                    title="Muuda"
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
                                 </td>
                               </tr>
                             ))}
@@ -425,6 +513,16 @@ export default function KestvuskatsedPage() {
                                 {item.conclusion}
                               </div>
                             )}
+                            <div className="pt-1">
+                              <button
+                                data-testid={`button-edit-${item.id}`}
+                                onClick={() => openEdit(item)}
+                                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                <Pencil size={12} />
+                                Muuda
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -515,6 +613,119 @@ export default function KestvuskatsedPage() {
                   disabled={addLoading}
                 >
                   {addLoading ? "Salvestan..." : "Lisa katse"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-serif font-semibold text-lg">Muuda kirjet</h2>
+              <button
+                onClick={() => { setEditTarget(null); setEditError(null); }}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleEdit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Toote nimi</label>
+                <input
+                  data-testid="edit-input-product"
+                  type="text"
+                  required
+                  placeholder="nt. Maasika F2"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  value={editForm.product}
+                  onChange={(e) => setEditForm((f) => ({ ...f, product: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Pudeli ID</label>
+                <input
+                  data-testid="edit-input-bottle-id"
+                  type="text"
+                  required
+                  placeholder="nt. P-01"
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  value={editForm.bottleId}
+                  onChange={(e) => setEditForm((f) => ({ ...f, bottleId: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Villimise kuupäev</label>
+                <input
+                  data-testid="edit-input-bottled-date"
+                  type="date"
+                  required
+                  max={todayISO()}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  value={editForm.bottledDate}
+                  onChange={(e) => setEditForm((f) => ({ ...f, bottledDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Maitsemisintervall (kuudes)</label>
+                <input
+                  data-testid="edit-input-interval-months"
+                  type="number"
+                  required
+                  min={1}
+                  max={120}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  value={editForm.intervalMonths}
+                  onChange={(e) => setEditForm((f) => ({ ...f, intervalMonths: Number(e.target.value) }))}
+                />
+              </div>
+              {editTarget.status === "maitsitud" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">Tulemus</label>
+                    <textarea
+                      data-testid="edit-input-result"
+                      rows={3}
+                      placeholder="Kirjelda maitset, lõhna, karbonisatsiooni..."
+                      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                      value={editForm.result}
+                      onChange={(e) => setEditForm((f) => ({ ...f, result: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">Järeldus</label>
+                    <textarea
+                      data-testid="edit-input-conclusion"
+                      rows={3}
+                      placeholder="Mida muudad järgmine kord? Kas jätkad?"
+                      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                      value={editForm.conclusion}
+                      onChange={(e) => setEditForm((f) => ({ ...f, conclusion: e.target.value }))}
+                    />
+                  </div>
+                </>
+              )}
+              {editError && <p className="text-red-600 text-sm">{editError}</p>}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => { setEditTarget(null); setEditError(null); }}
+                >
+                  Tühista
+                </Button>
+                <Button
+                  data-testid="button-submit-edit"
+                  type="submit"
+                  className="flex-1"
+                  disabled={editLoading}
+                >
+                  {editLoading ? "Salvestan..." : "Salvesta muudatused"}
                 </Button>
               </div>
             </form>

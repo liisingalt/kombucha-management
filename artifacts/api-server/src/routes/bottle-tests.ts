@@ -29,6 +29,15 @@ const tasteSchema = z.object({
   conclusion: z.string().min(1),
 });
 
+const updateSchema = z.object({
+  product: z.string().min(1),
+  bottleId: z.string().min(1),
+  bottledDate: z.string().min(1),
+  intervalMonths: z.number().int().min(1).max(120),
+  result: z.string().optional(),
+  conclusion: z.string().optional(),
+});
+
 router.get("/bottle-tests", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   try {
@@ -116,6 +125,57 @@ router.post("/bottle-tests/:id/taste", requireAuth, async (req, res) => {
     res.json(updated);
   } catch (err) {
     req.log.error({ err }, "Failed to mark bottle test as tasted");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/bottle-tests/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const parsed = updateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
+    return;
+  }
+  const { product, bottleId, bottledDate, intervalMonths, result, conclusion } = parsed.data;
+  const bottledDateObj = new Date(bottledDate);
+  if (isNaN(bottledDateObj.getTime())) {
+    res.status(400).json({ error: "Invalid bottledDate" });
+    return;
+  }
+  const nextTasting = addMonths(bottledDateObj, intervalMonths);
+  try {
+    const [existing] = await db
+      .select()
+      .from(bottleTestsTable)
+      .where(and(eq(bottleTestsTable.id, id), eq(bottleTestsTable.userId, userId)));
+    if (!existing) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    const updateFields: Record<string, unknown> = {
+      product,
+      bottleId,
+      bottledDate: bottledDateObj,
+      intervalMonths,
+      nextTasting,
+    };
+    if (existing.status === "maitsitud") {
+      if (result !== undefined) updateFields.result = result;
+      if (conclusion !== undefined) updateFields.conclusion = conclusion;
+    }
+    const [updated] = await db
+      .update(bottleTestsTable)
+      .set(updateFields)
+      .where(and(eq(bottleTestsTable.id, id), eq(bottleTestsTable.userId, userId)))
+      .returning();
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update bottle test");
     res.status(500).json({ error: "Internal server error" });
   }
 });
