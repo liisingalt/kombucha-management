@@ -76,6 +76,10 @@ export default function KestvuskatsedPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
 
+  const [filterProduct, setFilterProduct] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+
   const fetchItems = useCallback(async () => {
     try {
       const token = await getToken();
@@ -104,6 +108,13 @@ export default function KestvuskatsedPage() {
   const tasted = items
     .filter((i) => i.status === "maitsitud")
     .sort((a, b) => new Date(b.tastedDate ?? 0).getTime() - new Date(a.tastedDate ?? 0).getTime());
+
+  const filteredTasted = tasted.filter((i) => {
+    if (filterProduct && !i.product.toLowerCase().includes(filterProduct.toLowerCase())) return false;
+    if (filterDateFrom && i.tastedDate && i.tastedDate < filterDateFrom) return false;
+    if (filterDateTo && i.tastedDate && i.tastedDate > filterDateTo) return false;
+    return true;
+  });
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -261,7 +272,7 @@ export default function KestvuskatsedPage() {
       }
       return s;
     };
-    const rows = tasted.map((item) => [
+    const rows = filteredTasted.map((item) => [
       escape(item.product),
       escape(item.bottleId),
       escape(format(new Date(item.bottledDate), "d. MMM yyyy")),
@@ -405,7 +416,7 @@ export default function KestvuskatsedPage() {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
-                  Maitsitud tulemused ({tasted.length})
+                  Maitsitud tulemused ({filteredTasted.length}{filteredTasted.length !== tasted.length ? `/${tasted.length}` : ""})
                 </h2>
                 {tasted.length > 0 && (
                   <Button
@@ -414,6 +425,7 @@ export default function KestvuskatsedPage() {
                     variant="outline"
                     className="gap-1.5 text-xs h-8"
                     onClick={handleExportCSV}
+                    disabled={filteredTasted.length === 0}
                   >
                     <Download size={13} />
                     Ekspordi CSV
@@ -421,9 +433,51 @@ export default function KestvuskatsedPage() {
                 )}
               </div>
 
+              {tasted.length > 0 && (
+                <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                  <input
+                    data-testid="filter-product"
+                    type="text"
+                    placeholder="Otsi toote nime järgi..."
+                    className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    value={filterProduct}
+                    onChange={(e) => setFilterProduct(e.target.value)}
+                  />
+                  <input
+                    data-testid="filter-date-from"
+                    type="date"
+                    className="rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    value={filterDateFrom}
+                    onChange={(e) => setFilterDateFrom(e.target.value)}
+                    title="Maitsitud alates"
+                  />
+                  <input
+                    data-testid="filter-date-to"
+                    type="date"
+                    className="rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    value={filterDateTo}
+                    onChange={(e) => setFilterDateTo(e.target.value)}
+                    title="Maitsitud kuni"
+                  />
+                  {(filterProduct || filterDateFrom || filterDateTo) && (
+                    <button
+                      data-testid="filter-clear"
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 whitespace-nowrap"
+                      onClick={() => { setFilterProduct(""); setFilterDateFrom(""); setFilterDateTo(""); }}
+                    >
+                      Tühista filtrid
+                    </button>
+                  )}
+                </div>
+              )}
+
               {tasted.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border p-6 text-center text-muted-foreground text-sm">
                   Maitsitud tulemusi pole veel. Märgi ootav katse maitsituks, et tulemused siia ilmuksid.
+                </div>
+              ) : filteredTasted.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border p-6 text-center text-muted-foreground text-sm">
+                  Ükski kirje ei vasta filtritingimustele.
                 </div>
               ) : (
                     <>
@@ -442,7 +496,7 @@ export default function KestvuskatsedPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {tasted.map((item, idx) => (
+                            {filteredTasted.map((item, idx) => (
                               <tr
                                 key={item.id}
                                 data-testid={`tasted-row-${item.id}`}
@@ -481,7 +535,7 @@ export default function KestvuskatsedPage() {
 
                       {/* Mobile cards */}
                       <div className="md:hidden space-y-3" data-testid="tasted-table">
-                        {tasted.map((item) => (
+                        {filteredTasted.map((item) => (
                           <div
                             key={item.id}
                             data-testid={`tasted-row-${item.id}`}
