@@ -80,6 +80,8 @@ export default function KestvuskatsedPage() {
   const [filterProduct, setFilterProduct] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
+  const [filterBottledFrom, setFilterBottledFrom] = useState("");
+  const [filterBottledTo, setFilterBottledTo] = useState("");
 
   const fetchItems = useCallback(async () => {
     try {
@@ -114,6 +116,9 @@ export default function KestvuskatsedPage() {
     if (filterProduct && !i.product.toLowerCase().includes(filterProduct.toLowerCase())) return false;
     if (filterDateFrom && i.tastedDate && i.tastedDate < filterDateFrom) return false;
     if (filterDateTo && i.tastedDate && i.tastedDate > filterDateTo) return false;
+    const bottledISO = i.bottledDate.slice(0, 10);
+    if (filterBottledFrom && bottledISO < filterBottledFrom) return false;
+    if (filterBottledTo && bottledISO > filterBottledTo) return false;
     return true;
   });
 
@@ -441,36 +446,64 @@ export default function KestvuskatsedPage() {
               </div>
 
               {tasted.length > 0 && (
-                <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                <div className="flex flex-col gap-2 mb-4">
                   <input
                     data-testid="filter-product"
                     type="text"
                     placeholder="Otsi toote nime järgi..."
-                    className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                     value={filterProduct}
                     onChange={(e) => setFilterProduct(e.target.value)}
                   />
-                  <input
-                    data-testid="filter-date-from"
-                    type="date"
-                    className="rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    value={filterDateFrom}
-                    onChange={(e) => setFilterDateFrom(e.target.value)}
-                    title="Maitsitud alates"
-                  />
-                  <input
-                    data-testid="filter-date-to"
-                    type="date"
-                    className="rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    value={filterDateTo}
-                    onChange={(e) => setFilterDateTo(e.target.value)}
-                    title="Maitsitud kuni"
-                  />
-                  {(filterProduct || filterDateFrom || filterDateTo) && (
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+                    <span className="text-xs font-medium text-muted-foreground whitespace-nowrap w-36">Maitsmise kuupäev</span>
+                    <input
+                      data-testid="filter-date-from"
+                      type="date"
+                      className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      value={filterDateFrom}
+                      onChange={(e) => setFilterDateFrom(e.target.value)}
+                      title="Maitsitud alates"
+                    />
+                    <input
+                      data-testid="filter-date-to"
+                      type="date"
+                      className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      value={filterDateTo}
+                      onChange={(e) => setFilterDateTo(e.target.value)}
+                      title="Maitsitud kuni"
+                    />
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+                    <span className="text-xs font-medium text-muted-foreground whitespace-nowrap w-36">Villimise kuupäev</span>
+                    <input
+                      data-testid="filter-bottled-from"
+                      type="date"
+                      className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      value={filterBottledFrom}
+                      onChange={(e) => setFilterBottledFrom(e.target.value)}
+                      title="Villitud alates"
+                    />
+                    <input
+                      data-testid="filter-bottled-to"
+                      type="date"
+                      className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      value={filterBottledTo}
+                      onChange={(e) => setFilterBottledTo(e.target.value)}
+                      title="Villitud kuni"
+                    />
+                  </div>
+                  {(filterProduct || filterDateFrom || filterDateTo || filterBottledFrom || filterBottledTo) && (
                     <button
                       data-testid="filter-clear"
-                      className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 whitespace-nowrap"
-                      onClick={() => { setFilterProduct(""); setFilterDateFrom(""); setFilterDateTo(""); }}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 self-start whitespace-nowrap"
+                      onClick={() => {
+                        setFilterProduct("");
+                        setFilterDateFrom("");
+                        setFilterDateTo("");
+                        setFilterBottledFrom("");
+                        setFilterBottledTo("");
+                      }}
                     >
                       Tühista filtrid
                     </button>
