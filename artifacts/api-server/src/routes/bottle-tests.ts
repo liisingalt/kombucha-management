@@ -7,6 +7,14 @@ import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAu
 
 const router = Router();
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseDateOnly(value: string): Date | null {
+  if (!ISO_DATE_RE.test(value)) return null;
+  const d = new Date(`${value}T00:00:00.000Z`);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function addMonths(date: Date, months: number): Date {
   const result = new Date(date);
   const targetDay = result.getDate();
@@ -108,9 +116,9 @@ router.post("/bottle-tests/:id/taste", requireAuth, async (req, res) => {
   const { result, conclusion, tastedDate: tastedDateStr } = parsed.data;
   let tastedDateObj = new Date();
   if (tastedDateStr) {
-    const parsed2 = new Date(tastedDateStr);
-    if (isNaN(parsed2.getTime())) {
-      res.status(400).json({ error: "Invalid tastedDate" });
+    const parsed2 = parseDateOnly(tastedDateStr);
+    if (!parsed2) {
+      res.status(400).json({ error: "Invalid tastedDate: must be YYYY-MM-DD" });
       return;
     }
     if (parsed2 > new Date()) {
@@ -165,9 +173,9 @@ router.put("/bottle-tests/:id", requireAuth, async (req, res) => {
   const nextTasting = addMonths(bottledDateObj, intervalMonths);
   let editTastedDate: Date | undefined;
   if (tastedDateStr) {
-    const parsed3 = new Date(tastedDateStr);
-    if (isNaN(parsed3.getTime())) {
-      res.status(400).json({ error: "Invalid tastedDate" });
+    const parsed3 = parseDateOnly(tastedDateStr);
+    if (!parsed3) {
+      res.status(400).json({ error: "Invalid tastedDate: must be YYYY-MM-DD" });
       return;
     }
     if (parsed3 > new Date()) {
