@@ -114,8 +114,8 @@ export default function KestvuskatsedPage() {
 
   const filteredTasted = tasted.filter((i) => {
     if (filterProduct && !i.product.toLowerCase().includes(filterProduct.toLowerCase())) return false;
-    if (filterDateFrom && i.tastedDate && i.tastedDate < filterDateFrom) return false;
-    if (filterDateTo && i.tastedDate && i.tastedDate > filterDateTo) return false;
+    if (filterDateFrom && i.tastedDate && i.tastedDate.slice(0, 10) < filterDateFrom) return false;
+    if (filterDateTo && i.tastedDate && i.tastedDate.slice(0, 10) > filterDateTo) return false;
     const bottledISO = i.bottledDate.slice(0, 10);
     if (filterBottledFrom && bottledISO < filterBottledFrom) return false;
     if (filterBottledTo && bottledISO > filterBottledTo) return false;
