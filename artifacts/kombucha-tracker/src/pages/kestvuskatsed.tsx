@@ -629,8 +629,8 @@ export default function KestvuskatsedPage() {
 
       {/* Add modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm px-4 pt-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+          <div className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-md p-6 max-h-[85dvh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-serif font-semibold text-lg">Lisa kestvuskatse</h2>
               <button
@@ -716,8 +716,8 @@ export default function KestvuskatsedPage() {
 
       {/* Edit modal */}
       {editTarget && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm px-4 pt-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+          <div className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-md p-6 max-h-[85dvh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-serif font-semibold text-lg">Muuda kirjet</h2>
               <button
@@ -843,8 +843,8 @@ export default function KestvuskatsedPage() {
 
       {/* Taste modal */}
       {tasteTarget && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-md p-6">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm px-4 pt-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+          <div className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-md p-6 max-h-[85dvh] overflow-y-auto">
             <div className="flex items-center justify-between mb-1">
               <h2 className="font-serif font-semibold text-lg">Maitsimise tulemus</h2>
               <button
