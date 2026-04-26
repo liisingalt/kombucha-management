@@ -27,6 +27,7 @@ const createSchema = z.object({
 const tasteSchema = z.object({
   result: z.string().min(1),
   conclusion: z.string().min(1),
+  tastedDate: z.string().optional(),
 });
 
 const updateSchema = z.object({
@@ -36,6 +37,7 @@ const updateSchema = z.object({
   intervalMonths: z.number().int().min(1).max(120),
   result: z.string().min(1).optional(),
   conclusion: z.string().min(1).optional(),
+  tastedDate: z.string().optional(),
 });
 
 router.get("/bottle-tests", requireAuth, async (req, res) => {
@@ -103,7 +105,20 @@ router.post("/bottle-tests/:id/taste", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
     return;
   }
-  const { result, conclusion } = parsed.data;
+  const { result, conclusion, tastedDate: tastedDateStr } = parsed.data;
+  let tastedDateObj = new Date();
+  if (tastedDateStr) {
+    const parsed2 = new Date(tastedDateStr);
+    if (isNaN(parsed2.getTime())) {
+      res.status(400).json({ error: "Invalid tastedDate" });
+      return;
+    }
+    if (parsed2 > new Date()) {
+      res.status(400).json({ error: "tastedDate cannot be in the future" });
+      return;
+    }
+    tastedDateObj = parsed2;
+  }
   try {
     const [existing] = await db
       .select()
@@ -119,7 +134,7 @@ router.post("/bottle-tests/:id/taste", requireAuth, async (req, res) => {
     }
     const [updated] = await db
       .update(bottleTestsTable)
-      .set({ status: "maitsitud", result, conclusion, tastedDate: new Date() })
+      .set({ status: "maitsitud", result, conclusion, tastedDate: tastedDateObj })
       .where(and(eq(bottleTestsTable.id, id), eq(bottleTestsTable.userId, userId)))
       .returning();
     res.json(updated);
@@ -141,13 +156,26 @@ router.put("/bottle-tests/:id", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
     return;
   }
-  const { product, bottleId, bottledDate, intervalMonths, result, conclusion } = parsed.data;
+  const { product, bottleId, bottledDate, intervalMonths, result, conclusion, tastedDate: tastedDateStr } = parsed.data;
   const bottledDateObj = new Date(bottledDate);
   if (isNaN(bottledDateObj.getTime())) {
     res.status(400).json({ error: "Invalid bottledDate" });
     return;
   }
   const nextTasting = addMonths(bottledDateObj, intervalMonths);
+  let editTastedDate: Date | undefined;
+  if (tastedDateStr) {
+    const parsed3 = new Date(tastedDateStr);
+    if (isNaN(parsed3.getTime())) {
+      res.status(400).json({ error: "Invalid tastedDate" });
+      return;
+    }
+    if (parsed3 > new Date()) {
+      res.status(400).json({ error: "tastedDate cannot be in the future" });
+      return;
+    }
+    editTastedDate = parsed3;
+  }
   try {
     const [existing] = await db
       .select()
@@ -167,6 +195,7 @@ router.put("/bottle-tests/:id", requireAuth, async (req, res) => {
     if (existing.status === "maitsitud") {
       if (result !== undefined) updateFields.result = result;
       if (conclusion !== undefined) updateFields.conclusion = conclusion;
+      if (editTastedDate !== undefined) updateFields.tastedDate = editTastedDate;
     }
     const [updated] = await db
       .update(bottleTestsTable)

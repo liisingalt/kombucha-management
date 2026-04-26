@@ -60,7 +60,7 @@ export default function KestvuskatsedPage() {
   const [addLoading, setAddLoading] = useState(false);
 
   const [tasteTarget, setTasteTarget] = useState<BottleTest | null>(null);
-  const [tasteForm, setTasteForm] = useState({ result: "", conclusion: "" });
+  const [tasteForm, setTasteForm] = useState({ result: "", conclusion: "", tastedDate: todayISO() });
   const [tasteError, setTasteError] = useState<string | null>(null);
   const [tasteLoading, setTasteLoading] = useState(false);
 
@@ -72,6 +72,7 @@ export default function KestvuskatsedPage() {
     intervalMonths: 1,
     result: "",
     conclusion: "",
+    tastedDate: todayISO(),
   });
   const [editError, setEditError] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
@@ -171,7 +172,11 @@ export default function KestvuskatsedPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ result: tasteForm.result.trim(), conclusion: tasteForm.conclusion.trim() }),
+        body: JSON.stringify({
+          result: tasteForm.result.trim(),
+          conclusion: tasteForm.conclusion.trim(),
+          tastedDate: tasteForm.tastedDate,
+        }),
       });
       if (!res.ok) {
         const d = await res.json();
@@ -180,7 +185,7 @@ export default function KestvuskatsedPage() {
       const updated = await res.json();
       setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
       setTasteTarget(null);
-      setTasteForm({ result: "", conclusion: "" });
+      setTasteForm({ result: "", conclusion: "", tastedDate: todayISO() });
     } catch (e: unknown) {
       setTasteError(e instanceof Error ? e.message : "Viga");
     } finally {
@@ -215,6 +220,7 @@ export default function KestvuskatsedPage() {
       intervalMonths: item.intervalMonths,
       result: item.result ?? "",
       conclusion: item.conclusion ?? "",
+      tastedDate: item.tastedDate ? new Date(item.tastedDate).toISOString().slice(0, 10) : todayISO(),
     });
     setEditError(null);
   }
@@ -239,6 +245,7 @@ export default function KestvuskatsedPage() {
       if (editTarget.status === "maitsitud") {
         body.result = editForm.result.trim();
         body.conclusion = editForm.conclusion.trim();
+        body.tastedDate = editForm.tastedDate;
       }
       const res = await fetch(`${BASE_URL}/api/bottle-tests/${editTarget.id}`, {
         method: "PUT",
@@ -377,7 +384,7 @@ export default function KestvuskatsedPage() {
                             className="gap-1.5 text-xs h-8"
                             onClick={() => {
                               setTasteTarget(item);
-                              setTasteForm({ result: "", conclusion: "" });
+                              setTasteForm({ result: "", conclusion: "", tastedDate: todayISO() });
                               setTasteError(null);
                             }}
                           >
@@ -740,6 +747,18 @@ export default function KestvuskatsedPage() {
               {editTarget.status === "maitsitud" && (
                 <>
                   <div>
+                    <label className="block text-sm font-medium mb-1.5">Maitsimise kuupäev</label>
+                    <input
+                      data-testid="edit-input-tasted-date"
+                      type="date"
+                      required
+                      max={todayISO()}
+                      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      value={editForm.tastedDate}
+                      onChange={(e) => setEditForm((f) => ({ ...f, tastedDate: e.target.value }))}
+                    />
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium mb-1.5">Tulemus</label>
                     <textarea
                       data-testid="edit-input-result"
@@ -806,6 +825,18 @@ export default function KestvuskatsedPage() {
               {tasteTarget.product} · {tasteTarget.bottleId}
             </p>
             <form onSubmit={handleTaste} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Maitsimise kuupäev</label>
+                <input
+                  data-testid="input-taste-date"
+                  type="date"
+                  required
+                  max={todayISO()}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  value={tasteForm.tastedDate}
+                  onChange={(e) => setTasteForm((f) => ({ ...f, tastedDate: e.target.value }))}
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium mb-1.5">Tulemus</label>
                 <textarea
