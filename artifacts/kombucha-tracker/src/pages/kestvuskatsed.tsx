@@ -34,29 +34,35 @@ type StatsGroup = {
   avgDays: number;
   minDays: number;
   maxDays: number;
+  heaCount: number;
 };
 
 type AnalyticsData = {
   totalCompleted: number;
+  heaCount: number;
   withJourney: number;
   avgShelfLifeDays: number;
+  avgHeaShelfLifeDays: number;
   records: {
     testId: number;
     product: string;
     bottledDate: string;
     tastedDate: string;
     shelfLifeDays: number;
+    isHea: boolean;
     result: string | null;
     conclusion: string | null;
     steepMin: number | null;
     temp: number | null;
     teaG: number | null;
     sugarG: number | null;
+    avgCoeff: number | null;
     f1Days: number | null;
     f2Days: number | null;
   }[];
   bySteepping: StatsGroup[];
   byTemp: StatsGroup[];
+  byCoeff: StatsGroup[];
 };
 
 type JourneyData = {
@@ -673,20 +679,26 @@ export default function KestvuskatsedPage() {
             {!analyticsLoading && !analyticsError && analytics && (
               <>
                 {/* Summary cards */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="rounded-2xl border border-border bg-muted/30 p-3 text-center">
                     <div className="text-2xl font-bold text-foreground">{analytics.totalCompleted}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">Lõpetatud katset</div>
                   </div>
-                  <div className="rounded-2xl border border-border bg-muted/30 p-3 text-center">
-                    <div className="text-2xl font-bold text-foreground">{analytics.withJourney}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">Seotud pruulimisega</div>
+                  <div className="rounded-2xl border border-border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 p-3 text-center">
+                    <div className="text-2xl font-bold text-green-700 dark:text-green-300">{analytics.heaCount}</div>
+                    <div className="text-xs text-green-600 dark:text-green-400 mt-0.5">"Hea" tulemus</div>
                   </div>
                   <div className="rounded-2xl border border-border bg-muted/30 p-3 text-center">
                     <div className="text-2xl font-bold text-foreground">
                       {analytics.avgShelfLifeDays > 0 ? `${Math.round(analytics.avgShelfLifeDays / 30.5)}k` : "—"}
                     </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">Kesk. säilivus</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Kesk. säilivus (kõik)</div>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 p-3 text-center">
+                    <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">
+                      {analytics.avgHeaShelfLifeDays > 0 ? `${Math.round(analytics.avgHeaShelfLifeDays / 30.5)}k` : "—"}
+                    </div>
+                    <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Kesk. säilivus ("hea")</div>
                   </div>
                 </div>
 
@@ -702,8 +714,8 @@ export default function KestvuskatsedPage() {
                           <tr className="border-b border-border bg-muted/40">
                             <th className="text-left px-4 py-2 text-xs font-semibold text-muted-foreground">Tõmbeaeg</th>
                             <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Katseid</th>
+                            <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">"Hea"</th>
                             <th className="text-right px-4 py-2 text-xs font-semibold text-muted-foreground">Kesk. säilivus</th>
-                            <th className="text-right px-4 py-2 text-xs font-semibold text-muted-foreground">Vahemik</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -713,11 +725,11 @@ export default function KestvuskatsedPage() {
                               <tr key={g.label} className={i % 2 === 0 ? "" : "bg-muted/20"}>
                                 <td className="px-4 py-2.5 font-medium">{g.label}</td>
                                 <td className="px-3 py-2.5 text-center text-muted-foreground">{g.count}</td>
+                                <td className="px-3 py-2.5 text-center">
+                                  <span className="text-green-700 dark:text-green-400 font-medium">{g.heaCount}</span>
+                                </td>
                                 <td className="px-4 py-2.5 text-right font-semibold">
                                   {Math.round(g.avgDays / 30.5)}k ({g.avgDays}p)
-                                </td>
-                                <td className="px-4 py-2.5 text-right text-muted-foreground text-xs">
-                                  {g.minDays}–{g.maxDays}p
                                 </td>
                               </tr>
                           ))}
@@ -739,8 +751,8 @@ export default function KestvuskatsedPage() {
                           <tr className="border-b border-border bg-muted/40">
                             <th className="text-left px-4 py-2 text-xs font-semibold text-muted-foreground">Temperatuur</th>
                             <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Katseid</th>
+                            <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">"Hea"</th>
                             <th className="text-right px-4 py-2 text-xs font-semibold text-muted-foreground">Kesk. säilivus</th>
-                            <th className="text-right px-4 py-2 text-xs font-semibold text-muted-foreground">Vahemik</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -750,11 +762,11 @@ export default function KestvuskatsedPage() {
                               <tr key={g.label} className={i % 2 === 0 ? "" : "bg-muted/20"}>
                                 <td className="px-4 py-2.5 font-medium">{g.label}</td>
                                 <td className="px-3 py-2.5 text-center text-muted-foreground">{g.count}</td>
+                                <td className="px-3 py-2.5 text-center">
+                                  <span className="text-green-700 dark:text-green-400 font-medium">{g.heaCount}</span>
+                                </td>
                                 <td className="px-4 py-2.5 text-right font-semibold">
                                   {Math.round(g.avgDays / 30.5)}k ({g.avgDays}p)
-                                </td>
-                                <td className="px-4 py-2.5 text-right text-muted-foreground text-xs">
-                                  {g.minDays}–{g.maxDays}p
                                 </td>
                               </tr>
                           ))}
@@ -764,7 +776,44 @@ export default function KestvuskatsedPage() {
                   </div>
                 )}
 
-                {analytics.bySteepping.length === 0 && analytics.byTemp.length === 0 && analytics.totalCompleted > 0 && (
+                {/* By flavoring coefficient */}
+                {analytics.byCoeff.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2">
+                      Maitsestuskoefitsiendi järgi
+                    </h3>
+                    <div className="rounded-2xl border border-border overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/40">
+                            <th className="text-left px-4 py-2 text-xs font-semibold text-muted-foreground">Koefitsient</th>
+                            <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Katseid</th>
+                            <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">"Hea"</th>
+                            <th className="text-right px-4 py-2 text-xs font-semibold text-muted-foreground">Kesk. säilivus</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {analytics.byCoeff
+                            .sort((a, b) => a.label.localeCompare(b.label))
+                            .map((g, i) => (
+                              <tr key={g.label} className={i % 2 === 0 ? "" : "bg-muted/20"}>
+                                <td className="px-4 py-2.5 font-medium">{g.label}</td>
+                                <td className="px-3 py-2.5 text-center text-muted-foreground">{g.count}</td>
+                                <td className="px-3 py-2.5 text-center">
+                                  <span className="text-green-700 dark:text-green-400 font-medium">{g.heaCount}</span>
+                                </td>
+                                <td className="px-4 py-2.5 text-right font-semibold">
+                                  {Math.round(g.avgDays / 30.5)}k ({g.avgDays}p)
+                                </td>
+                              </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {analytics.bySteepping.length === 0 && analytics.byTemp.length === 0 && analytics.byCoeff.length === 0 && analytics.totalCompleted > 0 && (
                   <div className="rounded-2xl border border-dashed border-border p-6 text-center text-muted-foreground text-sm">
                     Seosta kestvuskatseid maitsestamissündmustega, et pruulimisparameetrite statistika ilmuks siia.
                   </div>

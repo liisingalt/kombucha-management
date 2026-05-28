@@ -92,15 +92,32 @@ router.get("/bottle-tests/analytics", requireAuth, async (req, res) => {
       bottledDate: string;
       tastedDate: string;
       shelfLifeDays: number;
+      isHea: boolean;
       result: string | null;
       conclusion: string | null;
       steepMin: number | null;
       temp: number | null;
       teaG: number | null;
       sugarG: number | null;
+      avgCoeff: number | null;
       f1Days: number | null;
       f2Days: number | null;
     };
+
+    function extractAvgCoeff(blocks: unknown): number | null {
+      if (!Array.isArray(blocks) || blocks.length === 0) return null;
+      const coeffs = blocks
+        .map((b: unknown) => (b && typeof b === "object" && "coefficient" in b ? Number((b as Record<string, unknown>).coefficient) : NaN))
+        .filter((n) => !isNaN(n) && n > 0);
+      if (coeffs.length === 0) return null;
+      return Math.round((coeffs.reduce((s, n) => s + n, 0) / coeffs.length) * 100) / 100;
+    }
+
+    function isHeaConclusion(conclusion: string | null): boolean {
+      if (!conclusion) return false;
+      const lower = conclusion.toLowerCase();
+      return lower.includes("hea") || lower.includes("hästi") || lower.includes("suurepärane") || lower.includes("tubli");
+    }
 
     const records: EnrichedRecord[] = [];
 
@@ -113,6 +130,7 @@ router.get("/bottle-tests/analytics", requireAuth, async (req, res) => {
       let temp: number | null = null;
       let teaG: number | null = null;
       let sugarG: number | null = null;
+      let avgCoeff: number | null = null;
       let f1Days: number | null = null;
       let f2Days: number | null = null;
 
@@ -123,6 +141,7 @@ router.get("/bottle-tests/analytics", requireAuth, async (req, res) => {
           .where(and(eq(flavoringEventTable.id, test.flavoringEventId), eq(flavoringEventTable.userId, userId)));
         if (flavEv) {
           f2Days = daysBetween(flavEv.date, flavEv.bottlingDate);
+          avgCoeff = extractAvgCoeff(flavEv.blocks);
           if (flavEv.fermentationBatchId) {
             const [ferm] = await db
               .select()
@@ -150,38 +169,51 @@ router.get("/bottle-tests/analytics", requireAuth, async (req, res) => {
         bottledDate: bDate,
         tastedDate: tDate,
         shelfLifeDays,
+        isHea: isHeaConclusion(test.conclusion ?? null),
         result: test.result ?? null,
         conclusion: test.conclusion ?? null,
         steepMin,
         temp,
         teaG,
         sugarG,
+        avgCoeff,
         f1Days,
         f2Days,
       });
     }
 
-    function bucket<T extends Record<string, unknown>>(
-      recs: T[],
-      getKey: (r: T) => string | null,
-      getValue: (r: T) => number
-    ) {
-      const groups: Record<string, { count: number; total: number; values: number[] }> = {};
+    type StatsGroup = {
+      label: string;
+      count: number;
+      avgDays: number;
+      minDays: number;
+      maxDays: number;
+      heaCount: number;
+    };
+
+    function bucket(
+      recs: EnrichedRecord[],
+      getKey: (r: EnrichedRecord) => string | null,
+      getValue: (r: EnrichedRecord) => number
+    ): StatsGroup[] {
+      const groups: Record<string, { count: number; total: number; values: number[]; heaCount: number }> = {};
       for (const r of recs) {
         const k = getKey(r);
         if (!k) continue;
-        if (!groups[k]) groups[k] = { count: 0, total: 0, values: [] };
+        if (!groups[k]) groups[k] = { count: 0, total: 0, values: [], heaCount: 0 };
         const v = getValue(r);
         groups[k].count++;
         groups[k].total += v;
         groups[k].values.push(v);
+        if (r.isHea) groups[k].heaCount++;
       }
-      return Object.entries(groups).map(([label, { count, total, values }]) => ({
+      return Object.entries(groups).map(([label, { count, total, values, heaCount }]) => ({
         label,
         count,
         avgDays: Math.round(total / count),
         minDays: Math.min(...values),
         maxDays: Math.max(...values),
+        heaCount,
       }));
     }
 
@@ -191,16 +223,27 @@ router.get("/bottle-tests/analytics", requireAuth, async (req, res) => {
     const tempBucket = (r: EnrichedRecord) =>
       r.temp == null ? null : r.temp < 22 ? "< 22°C" : r.temp <= 25 ? "22–25°C" : "> 25°C";
 
+    const coeffBucket = (r: EnrichedRecord) =>
+      r.avgCoeff == null ? null : r.avgCoeff < 1.2 ? "< 1.2" : r.avgCoeff <= 1.5 ? "1.2–1.5" : "> 1.5";
+
     const bySteepping = bucket(records, steepBucket, (r) => r.shelfLifeDays);
     const byTemp = bucket(records, tempBucket, (r) => r.shelfLifeDays);
+    const byCoeff = bucket(records, coeffBucket, (r) => r.shelfLifeDays);
+
+    const heaRecords = records.filter((r) => r.isHea);
+    const avgShelfLifeDays = records.length > 0 ? Math.round(records.reduce((s, r) => s + r.shelfLifeDays, 0) / records.length) : 0;
+    const avgHeaShelfLifeDays = heaRecords.length > 0 ? Math.round(heaRecords.reduce((s, r) => s + r.shelfLifeDays, 0) / heaRecords.length) : 0;
 
     res.json({
       totalCompleted: completed.length,
-      withJourney: records.filter((r) => r.steepMin != null || r.temp != null).length,
-      avgShelfLifeDays: records.length > 0 ? Math.round(records.reduce((s, r) => s + r.shelfLifeDays, 0) / records.length) : 0,
+      heaCount: heaRecords.length,
+      withJourney: records.filter((r) => r.steepMin != null || r.temp != null || r.avgCoeff != null).length,
+      avgShelfLifeDays,
+      avgHeaShelfLifeDays,
       records,
       bySteepping,
       byTemp,
+      byCoeff,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch analytics");
@@ -232,13 +275,25 @@ router.post("/bottle-tests/analytics/ai-summary", requireAuth, async (req, res) 
       let line = `Toode "${test.product}": villitud ${bDate}, maitsitud ${tDate} (${days}p), järeldus: "${test.conclusion ?? "—"}".`;
 
       if (test.flavoringEventId) {
-        const [flavEv] = await db.select().from(flavoringEventTable).where(eq(flavoringEventTable.id, test.flavoringEventId));
-        if (flavEv?.fermentationBatchId) {
-          const [ferm] = await db.select().from(fermentationBatchTable).where(eq(fermentationBatchTable.id, flavEv.fermentationBatchId));
-          if (ferm?.brewId) {
-            const [brew] = await db.select().from(brewsTable).where(eq(brewsTable.id, ferm.brewId));
-            if (brew) {
-              line += ` Pruulimine: tõmbis ${brew.steepMin ?? "?"}min, temp ${brew.temp ?? "?"}°C, suhkrut ${brew.sugarG}g.`;
+        const [flavEv] = await db.select().from(flavoringEventTable).where(
+          and(eq(flavoringEventTable.id, test.flavoringEventId), eq(flavoringEventTable.userId, userId))
+        );
+        if (flavEv) {
+          const blocks = Array.isArray(flavEv.blocks) ? flavEv.blocks : [];
+          const coeffs = blocks
+            .map((b: unknown) => (b && typeof b === "object" && "coefficient" in b ? Number((b as Record<string, unknown>).coefficient) : NaN))
+            .filter((n: number) => !isNaN(n) && n > 0);
+          if (coeffs.length > 0) {
+            const avgC = Math.round((coeffs.reduce((s: number, n: number) => s + n, 0) / coeffs.length) * 100) / 100;
+            line += ` Koefitsient: ${avgC}.`;
+          }
+          if (flavEv.fermentationBatchId) {
+            const [ferm] = await db.select().from(fermentationBatchTable).where(eq(fermentationBatchTable.id, flavEv.fermentationBatchId));
+            if (ferm?.brewId) {
+              const [brew] = await db.select().from(brewsTable).where(eq(brewsTable.id, ferm.brewId));
+              if (brew) {
+                line += ` Pruulimine: tõmbis ${brew.steepMin ?? "?"}min, temp ${brew.temp ?? "?"}°C, suhkrut ${brew.sugarG}g.`;
+              }
             }
           }
         }
