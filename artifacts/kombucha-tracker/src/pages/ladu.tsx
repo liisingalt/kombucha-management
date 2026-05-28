@@ -1604,30 +1604,13 @@ function TooraineTab({
   const [addCustomUnit, setAddCustomUnit] = useState("");
   const [adjustingId, setAdjustingId] = useState<number | null>(null);
   const [adjustQty, setAdjustQty] = useState("");
+  const [adjustMode, setAdjustMode] = useState<"suurenda" | "vähenda">("suurenda");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editUnit, setEditUnit] = useState("kg");
   const [editCustomUnit, setEditCustomUnit] = useState("");
-  const [reduceOpen, setReduceOpen] = useState(false);
-  const [reduceMaterialId, setReduceMaterialId] = useState<number | "">("");
-  const [reduceAmount, setReduceAmount] = useState("");
-  const [reduceInputUnit, setReduceInputUnit] = useState<"native" | "g">("native");
-
   const resolvedAddUnit = addUnit === "__custom__" ? addCustomUnit.trim() : addUnit;
   const resolvedEditUnit = editUnit === "__custom__" ? editCustomUnit.trim() : editUnit;
-
-  const reduceMat = data.materials.find((m) => m.id === reduceMaterialId) ?? null;
-  const reduceIsKg = reduceMat?.unit === "kg";
-  const reduceDisplayUnit = reduceIsKg && reduceInputUnit === "g" ? "g" : (reduceMat?.unit ?? "");
-  const reduceRaw = parseFloat(reduceAmount.replace(",", "."));
-  const reduceAmountNative = !isNaN(reduceRaw) && reduceRaw > 0
-    ? (reduceIsKg && reduceInputUnit === "g" ? reduceRaw / 1000 : reduceRaw)
-    : 0;
-  const reduceNewQty = reduceMat ? (reduceMat.qty ?? 0) - reduceAmountNative : 0;
-  const reduceConvHint = reduceIsKg && reduceInputUnit === "g" && reduceAmountNative > 0
-    ? `= ${formatQty(reduceAmountNative)} kg`
-    : null;
-  const reduceBelowZero = reduceMat && reduceAmountNative > 0 && reduceNewQty < 0;
 
   const handleAdd = () => {
     const name = addName.trim();
@@ -1669,45 +1652,26 @@ function TooraineTab({
     );
   };
 
-  const handleReduce = () => {
-    if (!reduceMat) return flash("Vali tooraine");
-    if (reduceAmountNative <= 0) return flash("Sisesta kehtiv kogus");
-    commitMutation.mutate(
-      {
-        deltas: [{ kind: "material", materialId: reduceMat.id, amount: -reduceAmountNative }],
-        type: "kasutatud",
-        summary: `${reduceMat.name}: kasutatud ${formatQty(reduceAmountNative)} ${reduceMat.unit}`,
-      },
-      {
-        onSuccess: () => {
-          flash("Laoseis vähendatud");
-          setReduceAmount("");
-          setReduceOpen(false);
-          setReduceMaterialId("");
-          setReduceInputUnit("native");
-        },
-      }
-    );
+  const openAdjust = (m: Material, mode: "suurenda" | "vähenda") => {
+    setAdjustingId(m.id);
+    setAdjustMode(mode);
+    setAdjustQty("");
   };
 
   const handleAdjust = (m: Material) => {
-    const newQty = parseFloat(adjustQty.replace(",", "."));
-    if (isNaN(newQty) || newQty < 0) return flash("Sisesta kehtiv kogus");
-    const delta = newQty - (m.qty ?? 0);
-    if (delta === 0) {
-      setAdjustingId(null);
-      setAdjustQty("");
-      return;
-    }
+    const raw = parseFloat(adjustQty.replace(",", "."));
+    if (isNaN(raw) || raw <= 0) return flash("Sisesta kehtiv kogus");
+    const delta = adjustMode === "suurenda" ? raw : -raw;
+    const newQty = (m.qty ?? 0) + delta;
     commitMutation.mutate(
       {
         deltas: [{ kind: "material", materialId: m.id, amount: delta }],
-        type: "korrigeerimine",
+        type: adjustMode === "suurenda" ? "ost" : "kasutatud",
         summary: `${m.name}: ${formatQty(m.qty)} → ${formatQty(newQty)} ${m.unit}`,
       },
       {
         onSuccess: () => {
-          flash("Laoseis uuendatud");
+          flash(adjustMode === "suurenda" ? "Laoseis suurendatud" : "Laoseis vähendatud");
           setAdjustingId(null);
           setAdjustQty("");
         },
@@ -1789,11 +1753,27 @@ function TooraineTab({
                       <span className="text-base font-normal text-stone-500">{m.unit}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                  <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => openAdjust(m, "suurenda")}
+                      className="flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-xs text-stone-600 hover:border-amber-400 hover:bg-amber-50 hover:text-amber-800 transition"
+                      title="Suurenda laoseisu"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openAdjust(m, "vähenda")}
+                      className="flex items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-xs text-stone-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700 transition"
+                      title="Vähenda laoseisu"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => startEdit(m)}
-                      className="text-stone-400 hover:text-amber-700"
+                      className="text-stone-300 hover:text-amber-700 ml-1"
                       title="Muuda nime/ühikut"
                     >
                       <Pencil className="w-4 h-4" />
@@ -1805,7 +1785,7 @@ function TooraineTab({
                         deleteMaterialMutation.mutate(m.id);
                       }}
                       disabled={deleteMaterialMutation.isPending}
-                      className="text-stone-400 hover:text-red-600 disabled:opacity-40"
+                      className="text-stone-300 hover:text-red-600 disabled:opacity-40"
                       title="Kustuta"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1813,44 +1793,54 @@ function TooraineTab({
                   </div>
                 </div>
 
-                {adjustingId === m.id ? (
-                  <div className="mt-3 flex gap-2 items-center">
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="any"
-                      value={adjustQty}
-                      onChange={(e) => setAdjustQty(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") handleAdjust(m); }}
-                      placeholder={`uus kogus (${m.unit})`}
-                      className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleAdjust(m)}
-                      disabled={commitMutation.isPending}
-                      className="flex items-center gap-1 rounded-lg bg-amber-700 px-3 py-2 text-xs text-white hover:bg-amber-800 disabled:opacity-60"
-                    >
-                      <Check className="w-3 h-3" /> OK
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setAdjustingId(null); setAdjustQty(""); }}
-                      className="rounded-lg border border-stone-300 px-3 py-2 text-xs text-stone-600 hover:bg-stone-100"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
+                {adjustingId === m.id && (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex rounded-lg border border-stone-200 overflow-hidden text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setAdjustMode("suurenda")}
+                        className={`flex-1 py-1.5 font-medium transition ${adjustMode === "suurenda" ? "bg-amber-700 text-white" : "bg-stone-50 text-stone-600 hover:bg-stone-100"}`}
+                      >
+                        + Suurenda
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAdjustMode("vähenda")}
+                        className={`flex-1 py-1.5 font-medium transition ${adjustMode === "vähenda" ? "bg-red-600 text-white" : "bg-stone-50 text-stone-600 hover:bg-stone-100"}`}
+                      >
+                        − Vähenda
+                      </button>
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="any"
+                        value={adjustQty}
+                        onChange={(e) => setAdjustQty(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleAdjust(m); if (e.key === "Escape") { setAdjustingId(null); setAdjustQty(""); } }}
+                        placeholder={`kogus (${m.unit})`}
+                        className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAdjust(m)}
+                        disabled={commitMutation.isPending}
+                        className={`flex items-center gap-1 rounded-lg px-3 py-2 text-xs text-white disabled:opacity-60 ${adjustMode === "suurenda" ? "bg-amber-700 hover:bg-amber-800" : "bg-red-600 hover:bg-red-700"}`}
+                      >
+                        <Check className="w-3 h-3" /> OK
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setAdjustingId(null); setAdjustQty(""); }}
+                        className="rounded-lg border border-stone-300 px-3 py-2 text-xs text-stone-600 hover:bg-stone-100"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => { setAdjustingId(m.id); setAdjustQty(String(m.qty ?? 0)); }}
-                    className="mt-3 text-xs text-amber-700 hover:underline flex items-center gap-1"
-                  >
-                    <Pencil className="w-3 h-3" /> Muuda laoseisu
-                  </button>
                 )}
               </div>
             );
@@ -1858,105 +1848,6 @@ function TooraineTab({
         </div>
       )}
 
-      {data.materials.length > 0 && (
-        <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setReduceOpen(!reduceOpen)}
-            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-stone-50 transition"
-          >
-            <span className="font-serif text-base text-stone-900 flex items-center gap-2">
-              <Minus className="w-4 h-4 text-amber-700" /> Vähenda laoseisu
-            </span>
-            <span className="text-xs text-stone-400">{reduceOpen ? "Sulge" : "Ava"}</span>
-          </button>
-
-          {reduceOpen && (
-            <div className="px-5 pb-5 space-y-3 border-t border-stone-100 pt-4">
-              <div>
-                <label className="block text-xs text-stone-500 mb-1">Tooraine</label>
-                <select
-                  value={reduceMaterialId}
-                  onChange={(e) => {
-                    setReduceMaterialId(e.target.value ? Number(e.target.value) : "");
-                    setReduceAmount("");
-                    setReduceInputUnit("native");
-                  }}
-                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
-                >
-                  <option value="">— vali tooraine —</option>
-                  {data.materials.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({formatQty(m.qty)} {m.unit})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {reduceMat && (
-                <>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs text-stone-500">Kogus ({reduceDisplayUnit})</label>
-                      {reduceIsKg && (
-                        <button
-                          type="button"
-                          onClick={() => { setReduceInputUnit(reduceInputUnit === "g" ? "native" : "g"); setReduceAmount(""); }}
-                          className="text-xs text-amber-700 hover:underline"
-                        >
-                          Sisesta {reduceInputUnit === "g" ? "kg-des" : "grammides"}
-                        </button>
-                      )}
-                    </div>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="any"
-                      value={reduceAmount}
-                      onChange={(e) => setReduceAmount(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") handleReduce(); }}
-                      placeholder={`kogus ${reduceDisplayUnit}`}
-                      className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600"
-                      autoFocus
-                    />
-                    {reduceConvHint && (
-                      <p className="text-xs text-stone-400 mt-1">{reduceConvHint}</p>
-                    )}
-                  </div>
-
-                  {reduceBelowZero && (
-                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-700">
-                        Laoseis läheb miinusesse: {formatQty(reduceNewQty)} {reduceMat.unit}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={handleReduce}
-                      disabled={commitMutation.isPending}
-                      className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm text-white hover:bg-amber-800 disabled:opacity-60"
-                    >
-                      <Minus className="w-4 h-4" /> Vähenda
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setReduceOpen(false); setReduceAmount(""); setReduceMaterialId(""); setReduceInputUnit("native"); }}
-                      className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100"
-                    >
-                      Tühista
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <h3 className="font-serif text-base text-stone-900 mb-3">Lisa tooraine</h3>
