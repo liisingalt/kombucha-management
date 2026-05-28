@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, Pencil, Check, X } from "lucide-react";
 import { Layout } from "@/components/Layout";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -412,6 +412,45 @@ function TeeVaru({
     },
   });
 
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  const renameMut = useMutation({
+    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+      const res = await authFetch(`/brews/tea-stock/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      onChange();
+      setEditingId(null);
+      setRenameError(null);
+    },
+    onError: (err: Error) => {
+      setRenameError(err.message);
+    },
+  });
+
+  const startEdit = (t: Tea) => {
+    setEditingId(t.id);
+    setEditName(t.name);
+    setRenameError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setRenameError(null);
+  };
+
+  const saveEdit = (id: number) => {
+    const trimmed = editName.trim();
+    if (!trimmed) return;
+    renameMut.mutate({ id, name: trimmed });
+  };
+
   const add = () => {
     const q = parseInt(qty) || 0;
     if (mode === "olemasolev") {
@@ -491,12 +530,58 @@ function TeeVaru({
           <tbody>
             {teas.length === 0 ? (
               <tr>
-                <td className="px-4 py-3 text-stone-400" colSpan={2}>Ühtegi sorti pole veel lisatud.</td>
+                <td className="px-4 py-3 text-stone-400" colSpan={3}>Ühtegi sorti pole veel lisatud.</td>
               </tr>
             ) : (
               teas.map((t) => (
                 <tr key={t.id} className="border-t border-stone-100">
-                  <td className="px-4 py-2">{t.name}</td>
+                  <td className="px-4 py-2">
+                    {editingId === t.id ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1">
+                          <input
+                            autoFocus
+                            value={editName}
+                            onChange={(e) => { setEditName(e.target.value); setRenameError(null); }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveEdit(t.id);
+                              if (e.key === "Escape") cancelEdit();
+                            }}
+                            className="flex-1 rounded border border-amber-400 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-600"
+                          />
+                          <button
+                            onClick={() => saveEdit(t.id)}
+                            disabled={renameMut.isPending}
+                            className="p-1 text-green-700 hover:text-green-900 disabled:opacity-50"
+                            title="Salvesta"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            className="p-1 text-stone-400 hover:text-stone-700"
+                            title="Tühista"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {renameError && (
+                          <p className="text-xs text-red-600">{renameError}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 group">
+                        <span>{t.name}</span>
+                        <button
+                          onClick={() => startEdit(t)}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 text-stone-400 hover:text-amber-700 transition-opacity"
+                          title="Muuda nime"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </td>
                   <td className={`px-4 py-2 text-right font-medium ${t.qtyG <= 0 ? "text-red-600" : ""}`}>
                     {t.qtyG} g
                   </td>

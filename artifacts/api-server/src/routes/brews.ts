@@ -116,6 +116,43 @@ router.post("/brews", requireAuth, async (req, res) => {
   }
 });
 
+router.patch("/brews/tea-stock/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = Number(req.params.id);
+  const { name } = req.body;
+  if (!name || !String(name).trim()) {
+    res.status(400).json({ error: "nimi puudub" });
+    return;
+  }
+  try {
+    const trimmed = String(name).trim();
+    const [row] = await db
+      .select()
+      .from(teaStockTable)
+      .where(and(eq(teaStockTable.id, id), eq(teaStockTable.userId, userId)));
+    if (!row) {
+      res.status(404).json({ error: "ei leitud" });
+      return;
+    }
+    const [conflict] = await db
+      .select()
+      .from(teaStockTable)
+      .where(and(eq(teaStockTable.userId, userId), eq(teaStockTable.name, trimmed)));
+    if (conflict && conflict.id !== id) {
+      res.status(409).json({ error: "Sama nimega sort on juba olemas" });
+      return;
+    }
+    await db
+      .update(teaStockTable)
+      .set({ name: trimmed })
+      .where(eq(teaStockTable.id, id));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to rename tea stock");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.delete("/brews/:id", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const id = Number(req.params.id);
