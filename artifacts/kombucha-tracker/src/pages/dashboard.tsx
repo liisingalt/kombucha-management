@@ -8,12 +8,16 @@ import {
   useGetProfile,
   getGetProfileQueryKey,
 } from "@workspace/api-client-react";
-import { Plus, ArrowRight, CalendarDays, Beaker, Clock, ChevronRight, X, Image, Sparkles, FlaskConical } from "lucide-react";
+import { useAuth } from "@clerk/react";
+import { useQuery } from "@tanstack/react-query";
+import { Plus, ArrowRight, CalendarDays, Beaker, Clock, ChevronRight, X, Sparkles, FlaskConical, Package } from "lucide-react";
 import {
   format, startOfWeek, addDays, isToday,
   startOfMonth, endOfMonth, getDay, getDaysInMonth, addMonths, subMonths,
 } from "date-fns";
 import { cn } from "@/lib/utils";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 type BatchSummary = {
   id: number;
@@ -22,6 +26,20 @@ type BatchSummary = {
   teaType?: string | null;
   logCount: number;
   startedAt: string | Date;
+};
+
+type FermBatch = {
+  id: number;
+  teaSort: string;
+  startDate: string;
+  flavoringDate: string | null;
+};
+
+type FlavEventMin = {
+  id: number;
+  date: string;
+  bottlingDate: string | null;
+  fermentationBatchId: number | null;
 };
 
 type RecentLog = {
@@ -304,9 +322,32 @@ function InsightCards({ activeBatch, recentLog }: {
 export default function DashboardPage() {
   const [, setLocation] = useLocation();
   const [showMonthView, setShowMonthView] = useState(false);
+  const { getToken } = useAuth();
 
   const profile = useGetProfile({ query: { queryKey: getGetProfileQueryKey() } });
   const summary = useGetDashboardSummary({ query: { queryKey: getGetDashboardSummaryQueryKey() } });
+
+  const fermsQ = useQuery<FermBatch[]>({
+    queryKey: ["dashboard-fermentations"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch(`${BASE_URL}/api/fermentations`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res.json();
+    },
+  });
+
+  const flavEventsQ = useQuery<FlavEventMin[]>({
+    queryKey: ["dashboard-flavoring-events"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch(`${BASE_URL}/api/flavoring/events`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res.json();
+    },
+  });
 
   useEffect(() => {
     if (profile.data && !profile.data.hasCompletedOnboarding) {
@@ -319,6 +360,10 @@ export default function DashboardPage() {
 
   const primaryBatch: BatchSummary | undefined = data?.activeBatches?.[0] as BatchSummary | undefined;
   const recentLog: RecentLog | undefined = data?.recentLogs?.[0] as RecentLog | undefined;
+
+  const fermBatches = fermsQ.data ?? [];
+  const flavEvents = flavEventsQ.data ?? [];
+  const activeFerms = fermBatches.slice(0, 8);
 
   if (profile.isLoading || summary.isLoading) {
     return (
@@ -456,14 +501,14 @@ export default function DashboardPage() {
           <InsightCards activeBatch={primaryBatch} recentLog={recentLog} />
         </div>
 
-        {/* Quick navigation links — Batches, Photos, Flavoring, Katsed (always visible on mobile) */}
-        <div className="px-5 mt-3 mb-1 lg:hidden">
+        {/* Quick navigation links — Ladu, Valmistamine, Käärimine, Maitsestamine */}
+        <div className="px-5 mt-3 mb-1">
           <div className="grid grid-cols-4 gap-2">
             {[
-              { href: "/batches", label: "Batches", icon: Beaker, color: "bg-primary/10 text-primary" },
-              { href: "/photos", label: "Photos", icon: Image, color: "bg-amber-100 text-amber-700" },
-              { href: "/flavoring", label: "Flavoring", icon: Sparkles, color: "bg-green-100 text-green-700" },
-              { href: "/kestvuskatsed", label: "Katsed", icon: FlaskConical, color: "bg-purple-100 text-purple-700" },
+              { href: "/ladu", label: "Ladu", icon: Package, color: "bg-stone-100 text-stone-700" },
+              { href: "/valmistamine", label: "Valmist.", icon: FlaskConical, color: "bg-blue-100 text-blue-700" },
+              { href: "/kaarimine", label: "Käärimine", icon: Beaker, color: "bg-amber-100 text-amber-700" },
+              { href: "/maitsestamine", label: "Maitsest.", icon: Sparkles, color: "bg-green-100 text-green-700" },
             ].map(({ href, label, icon: Icon, color }) => (
               <Link
                 key={href}
@@ -479,6 +524,75 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+
+        {/* Protsessi vaade — käärimised koos maitsestamis- ja villimiskuupäevaga */}
+        {activeFerms.length > 0 && (
+          <div className="px-5 mt-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-foreground">Protsess</h2>
+              <Link href="/kaarimine" className="text-xs text-primary font-medium flex items-center gap-0.5 hover:underline">
+                Kõik <ArrowRight size={13} />
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {activeFerms.map((batch) => {
+                const linkedEvent = flavEvents.find((e) => e.fermentationBatchId === batch.id);
+                const daysSince = Math.floor(
+                  (Date.now() - new Date(batch.startDate).getTime()) / 86400000
+                );
+                const hasFlavoringDate = !!batch.flavoringDate;
+                const hasBottlingDate = !!linkedEvent?.bottlingDate;
+
+                const stageColor = hasBottlingDate
+                  ? "bg-purple-100 text-purple-700"
+                  : hasFlavoringDate
+                  ? "bg-green-100 text-green-700"
+                  : "bg-amber-100 text-amber-700";
+                const stageLabel = hasBottlingDate
+                  ? "Villimiseks"
+                  : hasFlavoringDate
+                  ? "Maitsestatud"
+                  : "Käärimas";
+
+                return (
+                  <Link
+                    key={batch.id}
+                    href="/kaarimine"
+                    className="flex items-center gap-3 p-3 rounded-2xl border border-border bg-card hover:border-primary/20 transition-all"
+                  >
+                    <div className={cn("shrink-0 rounded-xl px-2 py-1 text-[10px] font-semibold", stageColor)}>
+                      {stageLabel}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm text-foreground truncate">
+                        {batch.teaSort || "tee märkimata"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(batch.startDate).toLocaleDateString("et-EE")}
+                        {!hasFlavoringDate && ` · ${daysSince} päeva`}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 space-y-0.5">
+                      {hasFlavoringDate && (
+                        <div className="text-[11px] text-green-700">
+                          🍵 {new Date(batch.flavoringDate!).toLocaleDateString("et-EE")}
+                        </div>
+                      )}
+                      {hasBottlingDate && (
+                        <div className="text-[11px] text-purple-700">
+                          🍾 {new Date(linkedEvent!.bottlingDate!).toLocaleDateString("et-EE")}
+                        </div>
+                      )}
+                      {!hasFlavoringDate && (
+                        <div className="text-[11px] text-muted-foreground">maitsestamine ootel</div>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* All batches section */}
         {data?.activeBatches && data.activeBatches.length > 0 && (
