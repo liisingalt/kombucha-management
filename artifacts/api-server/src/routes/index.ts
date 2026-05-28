@@ -11,7 +11,6 @@ import personaRouter from "./persona";
 import scobyRouter from "./scoby";
 import bottleTestsRouter from "./bottle-tests";
 import laduRouter from "./ladu";
-import migrateLaduTempRouter from "./migrate-ladu-temp";
 
 const router: IRouter = Router();
 
@@ -27,6 +26,5 @@ router.use(personaRouter);
 router.use(scobyRouter);
 router.use(bottleTestsRouter);
 router.use(laduRouter);
-router.use(migrateLaduTempRouter);
 
 export default router;

@@ -1,0 +1,1 @@
+- [Supabase pooler connection](supabase-pooler.md) — direct IPv6 Supabase connection unreachable from Replit shell; must use session pooler URI with URL-encoded password.
