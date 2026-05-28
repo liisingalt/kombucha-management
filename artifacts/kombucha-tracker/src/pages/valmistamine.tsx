@@ -590,6 +590,18 @@ function TeeVaru({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await authFetch(`/brews/tea-stock/${id}`, { method: "DELETE" });
+      return res.json();
+    },
+    onSuccess: () => {
+      onChange();
+      setConfirmDeleteId(null);
+    },
+  });
 
   const renameMut = useMutation({
     mutationFn: async ({ id, name }: { id: number; name: string }) => {
@@ -700,6 +712,7 @@ function TeeVaru({
             <tr>
               <th className="px-4 py-2 font-medium">Tee sort</th>
               <th className="px-4 py-2 font-medium text-right">Grammid</th>
+              <th className="px-4 py-2 font-medium text-right"></th>
             </tr>
           </thead>
           <tbody>
@@ -709,58 +722,102 @@ function TeeVaru({
               </tr>
             ) : (
               teas.map((t) => (
-                <tr key={t.id} className="border-t border-stone-100">
-                  <td className="px-4 py-2">
-                    {editingId === t.id ? (
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-1">
-                          <input
-                            autoFocus
-                            value={editName}
-                            onChange={(e) => { setEditName(e.target.value); setRenameError(null); }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") saveEdit(t.id);
-                              if (e.key === "Escape") cancelEdit();
-                            }}
-                            className="flex-1 rounded border border-amber-400 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-600"
-                          />
+                <React.Fragment key={t.id}>
+                  <tr className="border-t border-stone-100">
+                    <td className="px-4 py-2">
+                      {editingId === t.id ? (
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1">
+                            <input
+                              autoFocus
+                              value={editName}
+                              onChange={(e) => { setEditName(e.target.value); setRenameError(null); }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveEdit(t.id);
+                                if (e.key === "Escape") cancelEdit();
+                              }}
+                              className="flex-1 rounded border border-amber-400 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-600"
+                            />
+                            <button
+                              onClick={() => saveEdit(t.id)}
+                              disabled={renameMut.isPending}
+                              className="p-1 text-green-700 hover:text-green-900 disabled:opacity-50"
+                              title="Salvesta"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              className="p-1 text-stone-400 hover:text-stone-700"
+                              title="Tühista"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {renameError && (
+                            <p className="text-xs text-red-600">{renameError}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 group">
+                          <span>{t.name}</span>
                           <button
-                            onClick={() => saveEdit(t.id)}
-                            disabled={renameMut.isPending}
-                            className="p-1 text-green-700 hover:text-green-900 disabled:opacity-50"
-                            title="Salvesta"
+                            onClick={() => startEdit(t)}
+                            className="opacity-0 group-hover:opacity-100 p-0.5 text-stone-400 hover:text-amber-700 transition-opacity"
+                            title="Muuda nime"
                           >
-                            <Check className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={cancelEdit}
-                            className="p-1 text-stone-400 hover:text-stone-700"
-                            title="Tühista"
-                          >
-                            <X className="w-4 h-4" />
+                            <Pencil className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        {renameError && (
-                          <p className="text-xs text-red-600">{renameError}</p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 group">
-                        <span>{t.name}</span>
+                      )}
+                    </td>
+                    <td className={`px-4 py-2 text-right font-medium ${t.qtyG <= 0 ? "text-red-600" : ""}`}>
+                      {t.qtyG} g
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {confirmDeleteId !== t.id && (
                         <button
-                          onClick={() => startEdit(t)}
-                          className="opacity-0 group-hover:opacity-100 p-0.5 text-stone-400 hover:text-amber-700 transition-opacity"
-                          title="Muuda nime"
+                          onClick={() => setConfirmDeleteId(t.id)}
+                          className="text-stone-400 hover:text-red-600 text-xs transition"
+                          title="Kustuta sort"
                         >
-                          <Pencil className="w-3.5 h-3.5" />
+                          kustuta
                         </button>
-                      </div>
-                    )}
-                  </td>
-                  <td className={`px-4 py-2 text-right font-medium ${t.qtyG <= 0 ? "text-red-600" : ""}`}>
-                    {t.qtyG} g
-                  </td>
-                </tr>
+                      )}
+                    </td>
+                  </tr>
+                  {confirmDeleteId === t.id && (
+                    <tr className="border-t border-red-100 bg-red-50">
+                      <td colSpan={3} className="px-4 py-2.5">
+                        <div className="flex items-center gap-3 text-xs">
+                          {t.qtyG > 0 && (
+                            <span className="text-red-700 font-medium">
+                              Laos on veel {t.qtyG} g — kustutad ka saldo!
+                            </span>
+                          )}
+                          {t.qtyG <= 0 && (
+                            <span className="text-stone-600">Kustuta sort „{t.name}"?</span>
+                          )}
+                          <div className="flex items-center gap-2 ml-auto">
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="text-stone-500 hover:text-stone-800 transition"
+                            >
+                              Tühista
+                            </button>
+                            <button
+                              onClick={() => deleteMut.mutate(t.id)}
+                              disabled={deleteMut.isPending}
+                              className="bg-red-600 hover:bg-red-700 text-white rounded-md px-2.5 py-1 transition disabled:opacity-50"
+                            >
+                              {deleteMut.isPending ? "Kustutan…" : "Kustuta"}
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))
             )}
           </tbody>

@@ -313,6 +313,20 @@ router.patch("/brews/tea-stock/:id", requireAuth, async (req, res) => {
   }
 });
 
+router.delete("/brews/tea-stock/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = Number(req.params.id);
+  try {
+    await db
+      .delete(teaStockTable)
+      .where(and(eq(teaStockTable.id, id), eq(teaStockTable.userId, userId)));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete tea stock");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.patch("/brews/:id", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const id = Number(req.params.id);
