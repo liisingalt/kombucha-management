@@ -222,6 +222,64 @@ export async function runMigrations(): Promise<void> {
         created_at      TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
+
+    // One-time consolidation: merge all named blank label types into __default__ per user.
+    // Idempotent — already-zeroed or deleted rows are skipped.
+
+    // 1. Ensure every user who has any blank label type also has a __default__ type.
+    await client.query(`
+      INSERT INTO ladu_blank_label_types (user_id, name)
+      SELECT DISTINCT user_id, '__default__'
+      FROM ladu_blank_label_types
+      WHERE user_id NOT IN (
+        SELECT user_id FROM ladu_blank_label_types WHERE name = '__default__'
+      );
+    `);
+
+    // 2a. Add non-default stock into existing default rows (per user+size).
+    await client.query(`
+      UPDATE ladu_blank_labels AS target
+      SET qty = target.qty + source.agg_qty
+      FROM (
+        SELECT dt.id AS default_type_id, nd.size, SUM(nd.qty) AS agg_qty
+        FROM ladu_blank_labels nd
+        JOIN ladu_blank_label_types nt ON nt.id = nd.blank_label_type_id AND nt.name != '__default__'
+        JOIN ladu_blank_label_types dt ON dt.user_id = nd.user_id AND dt.name = '__default__'
+        WHERE nd.qty != 0
+        GROUP BY dt.id, nd.size
+      ) source
+      WHERE target.blank_label_type_id = source.default_type_id
+        AND target.size = source.size;
+    `);
+
+    // 2b. Insert new default rows for sizes that have no existing default row yet.
+    await client.query(`
+      INSERT INTO ladu_blank_labels (user_id, blank_label_type_id, size, qty)
+      SELECT nd.user_id, dt.id, nd.size, SUM(nd.qty)
+      FROM ladu_blank_labels nd
+      JOIN ladu_blank_label_types nt ON nt.id = nd.blank_label_type_id AND nt.name != '__default__'
+      JOIN ladu_blank_label_types dt ON dt.user_id = nd.user_id AND dt.name = '__default__'
+      WHERE nd.qty != 0
+        AND NOT EXISTS (
+          SELECT 1 FROM ladu_blank_labels ex
+          WHERE ex.blank_label_type_id = dt.id AND ex.size = nd.size
+        )
+      GROUP BY nd.user_id, dt.id, nd.size;
+    `);
+
+    // 3. Delete all ladu_blank_labels rows belonging to non-default types.
+    await client.query(`
+      DELETE FROM ladu_blank_labels
+      WHERE blank_label_type_id IN (
+        SELECT id FROM ladu_blank_label_types WHERE name != '__default__'
+      );
+    `);
+
+    // 4. Delete the non-default type definitions themselves.
+    await client.query(`
+      DELETE FROM ladu_blank_label_types WHERE name != '__default__';
+    `);
+
     logger.info("Migrations complete");
   } finally {
     client.release();
