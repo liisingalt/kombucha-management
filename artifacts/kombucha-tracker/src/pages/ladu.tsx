@@ -546,17 +546,11 @@ function LaduTab({ data, flavorName, bottleQty, updateCapMutation, flash }: { da
 
       <section>
         <h2 className="font-serif text-lg text-stone-900 mb-3">Korduvkasutatavad punnkorgid</h2>
-        <div className="grid grid-cols-3 gap-3">
-          {SIZES.map((s) => {
-            const n = data.reusableCaps.find((r) => r.size === s)?.qty ?? 0;
-            return (
-              <div key={s} className="rounded-xl border border-stone-200 bg-white p-4 text-center">
-                <div className="text-xs text-stone-500">{s} ml</div>
-                <div className={`text-2xl font-semibold ${n <= 0 ? "text-red-600" : "text-stone-900"}`}>{n}</div>
-                <Low show={n <= 0} />
-              </div>
-            );
-          })}
+        <div className="rounded-xl border border-stone-200 bg-white p-4 text-center max-w-[8rem]">
+          <div className={`text-2xl font-semibold ${(data.reusableCaps.find((r) => r.size === 750)?.qty ?? 0) <= 0 ? "text-red-600" : "text-stone-900"}`}>
+            {data.reusableCaps.find((r) => r.size === 750)?.qty ?? 0}
+          </div>
+          <Low show={(data.reusableCaps.find((r) => r.size === 750)?.qty ?? 0) <= 0} />
         </div>
         <p className="text-xs text-stone-400 mt-2">
           Puhtad punnkorgid, mis on valmis taaskasutusse — villimise ajal arvatakse maha.
@@ -1134,7 +1128,7 @@ function LisaVaruTab({
   const [lSize, setLSize] = useState<number>(330);
   const [lQty, setLQty] = useState("");
   const [wcQty, setWcQty] = useState("");
-  const [rcSize, setRcSize] = useState<number>(330);
+  const [rcSize] = useState<number>(750);
   const [rcQty, setRcQty] = useState("");
   const [cMode, setCMode] = useState<"olemasolev" | "uus">("olemasolev");
   const [cExisting, setCExisting] = useState<number | "">(data.caps[0]?.id ?? "");
@@ -1272,10 +1266,8 @@ function LisaVaruTab({
       </Card>
 
       <Card title="Korduvkasutatavad punnkorgid">
-        <p className="text-xs text-stone-400 mb-3">Puhtad punnkorgid, valmis taaskasutusse — villimise ajal arvatakse valitud suuruse laost maha.</p>
-        <label className="block text-sm text-stone-600 mb-1">Suurus</label>
-        <Seg options={SIZES.map((s) => ({ value: s, label: `${s} ml` }))} value={rcSize} onChange={(v) => setRcSize(v as number)} />
-        <div className="mt-3 flex gap-2">
+        <p className="text-xs text-stone-400 mb-3">Puhtad punnkorgid, valmis taaskasutusse — villimise ajal arvatakse laost maha.</p>
+        <div className="flex gap-2">
           <Num value={rcQty} onChange={setRcQty} onKeyDown={(e) => { if (e.key === "Enter") addReusableCaps(); }} className="flex-1" />
           <button type="button" onClick={addReusableCaps} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
