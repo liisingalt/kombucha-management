@@ -811,9 +811,12 @@ function Ajalugu({
       {events.map((ev) => {
         const ferm = ev.fermentationBatchId != null ? ferms.find((f) => f.id === ev.fermentationBatchId) : null;
         const brew = ferm?.brewId != null ? brews.find((b) => b.id === ferm.brewId) : null;
-        const sessionPortCount = brew?.sessionId != null
-          ? brews.filter((b) => b.sessionId === brew.sessionId).length
-          : 1;
+        let portionLabel: string | null = null;
+        if (brew?.sessionId != null) {
+          const sessionBrews = brews.filter((b) => b.sessionId === brew.sessionId).sort((a, b) => a.id - b.id);
+          const idx = sessionBrews.findIndex((b) => b.id === brew.id) + 1;
+          portionLabel = `Ports ${idx}/${sessionBrews.length}`;
+        }
 
         return (
           <div key={ev.id} className="rounded-xl border border-stone-200 bg-white p-4">
@@ -838,7 +841,7 @@ function Ajalugu({
             {brew && (
               <div className="text-xs text-stone-400 mt-0.5">
                 Pruulimine: {new Date(brew.date).toLocaleDateString("et-EE")}
-                {sessionPortCount > 1 && ` · ${sessionPortCount} ports ühel päeval`}
+                {portionLabel && ` · ${portionLabel}`}
               </div>
             )}
             <div className="text-sm text-stone-600 mt-1 space-y-0.5">

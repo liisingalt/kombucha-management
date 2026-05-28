@@ -82,7 +82,12 @@ const commitSchema = z.object({
   summary: z.string().min(1),
   deltas: z.array(deltaSchema),
   villimineGoods: z
-    .object({ flavorId: z.number().int(), size: z.number().int(), amount: z.number().int().min(1) })
+    .object({
+      flavorId: z.number().int(),
+      size: z.number().int(),
+      amount: z.number().int().min(1),
+      flavoringEventId: z.number().int().optional(),
+    })
     .optional(),
 });
 
@@ -118,7 +123,8 @@ type StoredDelta =
   | { kind: "reusable_cap"; size: number; amount: number }
   | { kind: "blank_label"; blankLabelTypeId: number; size: number; amount: number }
   | { kind: "finished_goods"; flavorId: number; size: number; amount: number }
-  | { kind: "material"; materialId: number; amount: number };
+  | { kind: "material"; materialId: number; amount: number }
+  | { kind: "trace"; flavoringEventId: number };
 
 type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -494,6 +500,9 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
           await tx.insert(laduFinishedGoodsTable).values({ userId, flavorId: vFlavorId, size: vSize, qty: vAmount });
         }
         storedDeltas.push({ kind: "finished_goods", flavorId: vFlavorId, size: vSize, amount: vAmount });
+        if (villimineGoods.flavoringEventId != null) {
+          storedDeltas.push({ kind: "trace", flavoringEventId: villimineGoods.flavoringEventId });
+        }
       }
 
       await tx
