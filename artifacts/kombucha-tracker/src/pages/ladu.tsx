@@ -35,10 +35,11 @@ type LaduData = {
   caps: Cap[];
   labeledBottles: LabeledBottle[];
   customLabelBottles: CustomLabelBottle[];
+  wireCageQty: number;
   movements: Movement[];
 };
 
-const EMPTY: LaduData = { flavors: [], bottles: [], labels: [], caps: [], labeledBottles: [], customLabelBottles: [], movements: [] };
+const EMPTY: LaduData = { flavors: [], bottles: [], labels: [], caps: [], labeledBottles: [], customLabelBottles: [], wireCageQty: 0, movements: [] };
 
 const capLabel = (c: Cap | undefined) =>
   c ? `${c.size} ml · ${c.type || "kork"}${c.color ? " · " + c.color : ""}` : "";
@@ -414,6 +415,12 @@ function LaduTab({ data, flavorName, bottleQty }: { data: LaduData; flavorName: 
 
       <section>
         <h2 className="font-serif text-lg text-stone-900 mb-3">Korgid</h2>
+        <div className="rounded-xl border border-stone-200 bg-white overflow-hidden mb-3">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-stone-100">
+            <span className="text-sm font-medium text-stone-700">Traatkorgi (750 ml)</span>
+            <span className={`text-lg font-semibold ${data.wireCageQty <= 0 ? "text-red-600" : "text-stone-900"}`}>{data.wireCageQty}</span>
+          </div>
+        </div>
         {data.caps.length === 0 ? (
           <p className="text-sm text-stone-400">Veel ühtegi korki pole lisatud.</p>
         ) : (
@@ -430,7 +437,9 @@ function LaduTab({ data, flavorName, bottleQty }: { data: LaduData; flavorName: 
                   <tr key={c.id} className="border-t border-stone-100">
                     <td className="px-4 py-2">
                       <ColorDot color={c.color} />
-                      {capLabel(c)}
+                      {c.type === "punnkork"
+                        ? `${c.size} ml · punnkork${c.color ? ` · ${c.color}` : ""}`
+                        : capLabel(c)}
                     </td>
                     <td className={`px-4 py-2 text-right font-medium ${c.qty <= 0 ? "text-red-600" : ""}`}>{c.qty}</td>
                   </tr>
@@ -440,7 +449,7 @@ function LaduTab({ data, flavorName, bottleQty }: { data: LaduData; flavorName: 
           </div>
         )}
         <p className="text-xs text-stone-400 mt-2">
-          750 ml korke saad villimisel märkida vanadena, siis neid maha ei arvata.
+          750 ml punnkorkide kasutamisel arvatakse traatkorgi automaatselt maha.
         </p>
       </section>
     </div>
@@ -466,11 +475,13 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
   const fromCust = Math.min(newCount, Math.max(0, parseInt(fromCustom) || 0));
   const old = Math.min(t, Math.max(0, parseInt(oldCaps) || 0));
 
+  const selectedCap = data.caps.find((c) => c.id === capId);
   const bottleDeduct = newCount - fromCust;
   const customLabelBottleDeduct = fromCust;
   const labelDeduct = newCount - fromCust;
   const labeledBottleDeduct = fromLab;
   const capDeduct = capId !== "" ? t - old : 0;
+  const wireCageDeduct = size === 750 && selectedCap?.type === "punnkork" ? t : 0;
 
   const villi = () => {
     if (!flavorId) return flash("Vali maitse");
@@ -482,14 +493,16 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
     if (labelDeduct > 0) deltas.push({ kind: "label", flavorId, size, amount: -labelDeduct });
     if (labeledBottleDeduct > 0) deltas.push({ kind: "labeled_bottle", flavorId, size, amount: -labeledBottleDeduct });
     if (capId !== "" && capDeduct > 0) deltas.push({ kind: "cap", key: capId, amount: -capDeduct });
+    if (wireCageDeduct > 0) deltas.push({ kind: "wire_cage", amount: -wireCageDeduct });
 
-    const cap = data.caps.find((c) => c.id === capId);
+    const cap = selectedCap;
     const parts = [`Villisin ${t} × ${flavorName(flavorId as number)} ${size} ml`];
     if (ret) parts.push(`${ret} tagasi tulnud pudelit`);
     if (fromLab) parts.push(`sh ${fromLab} sildistatud varust`);
     if (fromCust) parts.push(`${fromCust} kohandatud sildiga pudelit`);
     if (old) parts.push(`${old} vana korki`);
     if (cap) parts.push(`kork: ${capLabel(cap)}`);
+    if (wireCageDeduct > 0) parts.push(`${wireCageDeduct} traatkorki`);
 
     commitMutation.mutate(
       { deltas, type: "villimine", summary: parts.join(" · ") },
@@ -582,8 +595,9 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
           <li>Sildistatud pudelid: <b>{labeledBottleDeduct}</b></li>
           <li>
             Korgid: <b>{capId !== "" ? capDeduct : 0}</b>
-            {capId !== "" && <span className="text-stone-500"> ({capLabel(data.caps.find((c) => c.id === capId))})</span>}
+            {capId !== "" && <span className="text-stone-500"> ({capLabel(selectedCap)})</span>}
           </li>
+          {wireCageDeduct > 0 && <li>Traatkorgi: <b>{wireCageDeduct}</b></li>}
         </ul>
       </div>
 
@@ -609,11 +623,13 @@ function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMu
   const [lbFlavor, setLbFlavor] = useState<number | "">(data.flavors[0]?.id ?? "");
   const [lbSize, setLbSize] = useState<number>(330);
   const [lbQty, setLbQty] = useState("");
+  const [wcQty, setWcQty] = useState("");
   const [cMode, setCMode] = useState<"olemasolev" | "uus">("olemasolev");
   const [cExisting, setCExisting] = useState<number | "">(data.caps[0]?.id ?? "");
   const [cSize, setCSize] = useState<number>(330);
   const [cType, setCType] = useState("kroonkork");
   const [cColor, setCColor] = useState("");
+  const [cPunnkorkKat, setCPunnkorkKat] = useState<"uus" | "taaskasutus">("uus");
   const [cQty, setCQty] = useState("");
 
   const flavorN = (id: number | "") => (id !== "" ? (data.flavors.find((f) => f.id === id)?.name ?? "?") : "—");
@@ -664,6 +680,15 @@ function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMu
     );
   };
 
+  const addWireCages = () => {
+    const q = parseInt(wcQty) || 0;
+    if (q <= 0) return flash("Sisesta kogus");
+    commitMutation.mutate(
+      { deltas: [{ kind: "wire_cage", amount: q }], type: "ost", summary: `Ostsin ${q} × traatkorgi` },
+      { onSuccess: () => { flash("Traatkorgi lisatud"); setWcQty(""); } }
+    );
+  };
+
   const addCaps = () => {
     const q = parseInt(cQty) || 0;
     if (q <= 0) return flash("Sisesta kogus");
@@ -675,11 +700,12 @@ function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMu
         { onSuccess: () => { flash("Korgid lisatud"); setCQty(""); } }
       );
     } else {
+      const color = cType === "punnkork" ? cPunnkorkKat : cColor.trim();
       commitMutation.mutate(
         {
-          deltas: [{ kind: "cap", key: 0, amount: q, create: { size: cSize, type: cType, color: cColor.trim() } }],
+          deltas: [{ kind: "cap", key: 0, amount: q, create: { size: cSize, type: cType, color } }],
           type: "ost",
-          summary: `Ostsin ${q} × ${cSize} ml ${cType}${cColor ? " " + cColor : ""}`,
+          summary: `Ostsin ${q} × ${cSize} ml ${cType}${color ? " " + color : ""}`,
         },
         { onSuccess: () => { flash("Korgid lisatud"); setCQty(""); } }
       );
@@ -754,6 +780,14 @@ function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMu
         </div>
       </Card>
 
+      <Card title="Traatkorgi">
+        <p className="text-xs text-stone-400 mb-3">750 ml punnkorkide jaoks — üks traatkork ühe pudeli kohta.</p>
+        <div className="flex gap-2">
+          <Num value={wcQty} onChange={setWcQty} className="flex-1" />
+          <button type="button" onClick={addWireCages} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
+        </div>
+      </Card>
+
       <Card title="Korgid">
         <Seg
           options={[
@@ -774,19 +808,35 @@ function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMu
             )}
           </div>
         ) : (
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <select value={cSize} onChange={(e) => setCSize(parseInt(e.target.value))} className="rounded-lg border border-stone-300 px-2 py-2">
-              {SIZES.map((s) => <option key={s} value={s}>{s} ml</option>)}
-            </select>
-            <select value={cType} onChange={(e) => setCType(e.target.value)} className="rounded-lg border border-stone-300 px-2 py-2">
-              {CAP_TYPES.map((tp) => <option key={tp} value={tp}>{tp}</option>)}
-            </select>
-            <input
-              value={cColor}
-              onChange={(e) => setCColor(e.target.value)}
-              placeholder="värv"
-              className="rounded-lg border border-stone-300 px-2 py-2"
-            />
+          <div className="mt-3 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <select value={cSize} onChange={(e) => setCSize(parseInt(e.target.value))} className="rounded-lg border border-stone-300 px-2 py-2">
+                {SIZES.map((s) => <option key={s} value={s}>{s} ml</option>)}
+              </select>
+              <select value={cType} onChange={(e) => { setCType(e.target.value); setCColor(""); }} className="rounded-lg border border-stone-300 px-2 py-2">
+                {CAP_TYPES.map((tp) => <option key={tp} value={tp}>{tp}</option>)}
+              </select>
+            </div>
+            {cType === "punnkork" ? (
+              <div>
+                <label className="block text-xs text-stone-500 mb-1">Kategooria</label>
+                <Seg
+                  options={[
+                    { value: "uus", label: "Uus" },
+                    { value: "taaskasutus", label: "Taaskasutus" },
+                  ]}
+                  value={cPunnkorkKat}
+                  onChange={(v) => setCPunnkorkKat(v as "uus" | "taaskasutus")}
+                />
+              </div>
+            ) : (
+              <input
+                value={cColor}
+                onChange={(e) => setCColor(e.target.value)}
+                placeholder="värv (valikuline)"
+                className="w-full rounded-lg border border-stone-300 px-2 py-2"
+              />
+            )}
           </div>
         )}
         <div className="mt-3 flex gap-2">

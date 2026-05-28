@@ -8,6 +8,7 @@ import {
   laduCapsTable,
   laduLabeledBottlesTable,
   laduCustomLabelBottlesTable,
+  laduWireCagesTable,
   laduMovementsTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
@@ -50,6 +51,10 @@ const deltaSchema = z.discriminatedUnion("kind", [
     size: z.number().int(),
     amount: z.number().int(),
   }),
+  z.object({
+    kind: z.literal("wire_cage"),
+    amount: z.number().int(),
+  }),
 ]);
 
 const commitSchema = z.object({
@@ -68,16 +73,18 @@ type StoredDelta =
   | { kind: "label"; flavorId: number; size: number; amount: number }
   | { kind: "cap"; key: number; amount: number }
   | { kind: "labeled_bottle"; flavorId: number; size: number; amount: number }
-  | { kind: "custom_label_bottle"; size: number; amount: number };
+  | { kind: "custom_label_bottle"; size: number; amount: number }
+  | { kind: "wire_cage"; amount: number };
 
 async function fetchAll(userId: string) {
-  const [flavors, bottles, labels, caps, labeledBottles, customLabelBottles, movements] = await Promise.all([
+  const [flavors, bottles, labels, caps, labeledBottles, customLabelBottles, wireCageRows, movements] = await Promise.all([
     db.select().from(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId)),
     db.select().from(laduBottlesTable).where(eq(laduBottlesTable.userId, userId)),
     db.select().from(laduLabelsTable).where(eq(laduLabelsTable.userId, userId)),
     db.select().from(laduCapsTable).where(eq(laduCapsTable.userId, userId)),
     db.select().from(laduLabeledBottlesTable).where(eq(laduLabeledBottlesTable.userId, userId)),
     db.select().from(laduCustomLabelBottlesTable).where(eq(laduCustomLabelBottlesTable.userId, userId)),
+    db.select().from(laduWireCagesTable).where(eq(laduWireCagesTable.userId, userId)),
     db
       .select()
       .from(laduMovementsTable)
@@ -91,6 +98,7 @@ async function fetchAll(userId: string) {
     caps,
     labeledBottles,
     customLabelBottles,
+    wireCageQty: wireCageRows[0]?.qty ?? 0,
     movements: movements.reverse().slice(0, 200),
   };
 }
@@ -238,6 +246,22 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
               .values({ userId, size: delta.size, qty: delta.amount });
           }
           storedDeltas.push({ kind: "custom_label_bottle", size: delta.size, amount: delta.amount });
+        } else if (delta.kind === "wire_cage") {
+          const [existing] = await tx
+            .select()
+            .from(laduWireCagesTable)
+            .where(eq(laduWireCagesTable.userId, userId));
+          if (existing) {
+            await tx
+              .update(laduWireCagesTable)
+              .set({ qty: existing.qty + delta.amount })
+              .where(eq(laduWireCagesTable.id, existing.id));
+          } else {
+            await tx
+              .insert(laduWireCagesTable)
+              .values({ userId, qty: delta.amount });
+          }
+          storedDeltas.push({ kind: "wire_cage", amount: delta.amount });
         }
       }
 
@@ -344,6 +368,17 @@ router.delete("/ladu/movements/:id", requireAuth, async (req, res) => {
               .set({ qty: existing.qty - delta.amount })
               .where(eq(laduCustomLabelBottlesTable.id, existing.id));
           }
+        } else if (delta.kind === "wire_cage") {
+          const [existing] = await tx
+            .select()
+            .from(laduWireCagesTable)
+            .where(eq(laduWireCagesTable.userId, userId));
+          if (existing) {
+            await tx
+              .update(laduWireCagesTable)
+              .set({ qty: existing.qty - delta.amount })
+              .where(eq(laduWireCagesTable.id, existing.id));
+          }
         }
       }
       await tx.delete(laduMovementsTable).where(eq(laduMovementsTable.id, id));
@@ -412,6 +447,7 @@ router.delete("/ladu/reset", requireAuth, async (req, res) => {
       await tx.delete(laduLabelsTable).where(eq(laduLabelsTable.userId, userId));
       await tx.delete(laduLabeledBottlesTable).where(eq(laduLabeledBottlesTable.userId, userId));
       await tx.delete(laduCustomLabelBottlesTable).where(eq(laduCustomLabelBottlesTable.userId, userId));
+      await tx.delete(laduWireCagesTable).where(eq(laduWireCagesTable.userId, userId));
       await tx.delete(laduBottlesTable).where(eq(laduBottlesTable.userId, userId));
       await tx.delete(laduCapsTable).where(eq(laduCapsTable.userId, userId));
       await tx.delete(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId));

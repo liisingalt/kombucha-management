@@ -44,6 +44,12 @@ export async function runMigrations(): Promise<void> {
         qty       INTEGER NOT NULL DEFAULT 0
       );
 
+      CREATE TABLE IF NOT EXISTS ladu_wire_cages (
+        id      SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        qty     INTEGER NOT NULL DEFAULT 0
+      );
+
       CREATE TABLE IF NOT EXISTS ladu_custom_label_bottles (
         id      SERIAL PRIMARY KEY,
         user_id TEXT NOT NULL,
