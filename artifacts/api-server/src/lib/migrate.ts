@@ -36,14 +36,6 @@ export async function runMigrations(): Promise<void> {
         qty     INTEGER NOT NULL DEFAULT 0
       );
 
-      CREATE TABLE IF NOT EXISTS ladu_labeled_bottles (
-        id        SERIAL PRIMARY KEY,
-        user_id   TEXT NOT NULL,
-        flavor_id INTEGER NOT NULL,
-        size      INTEGER NOT NULL,
-        qty       INTEGER NOT NULL DEFAULT 0
-      );
-
       CREATE TABLE IF NOT EXISTS ladu_wire_cages (
         id      SERIAL PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -73,6 +65,7 @@ export async function runMigrations(): Promise<void> {
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
+    await client.query(`DROP TABLE IF EXISTS ladu_labeled_bottles`);
     logger.info("Migrations complete");
   } finally {
     client.release();

@@ -6,7 +6,6 @@ import {
   laduBottlesTable,
   laduLabelsTable,
   laduCapsTable,
-  laduLabeledBottlesTable,
   laduCustomLabelBottlesTable,
   laduWireCagesTable,
   laduReusableCapsTable,
@@ -40,12 +39,6 @@ const deltaSchema = z.discriminatedUnion("kind", [
         color: z.string(),
       })
       .optional(),
-  }),
-  z.object({
-    kind: z.literal("labeled_bottle"),
-    flavorId: z.number().int(),
-    size: z.number().int(),
-    amount: z.number().int(),
   }),
   z.object({
     kind: z.literal("custom_label_bottle"),
@@ -84,18 +77,16 @@ type StoredDelta =
   | { kind: "bottle"; key: number; amount: number }
   | { kind: "label"; flavorId: number; size: number; amount: number }
   | { kind: "cap"; key: number; amount: number }
-  | { kind: "labeled_bottle"; flavorId: number; size: number; amount: number }
   | { kind: "custom_label_bottle"; size: number; amount: number }
   | { kind: "wire_cage"; amount: number }
   | { kind: "reusable_cap"; size: number; amount: number };
 
 async function fetchAll(userId: string) {
-  const [flavors, bottles, labels, caps, labeledBottles, customLabelBottles, wireCageRows, reusableCapRows, movements] = await Promise.all([
+  const [flavors, bottles, labels, caps, customLabelBottles, wireCageRows, reusableCapRows, movements] = await Promise.all([
     db.select().from(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId)),
     db.select().from(laduBottlesTable).where(eq(laduBottlesTable.userId, userId)),
     db.select().from(laduLabelsTable).where(eq(laduLabelsTable.userId, userId)),
     db.select().from(laduCapsTable).where(eq(laduCapsTable.userId, userId)),
-    db.select().from(laduLabeledBottlesTable).where(eq(laduLabeledBottlesTable.userId, userId)),
     db.select().from(laduCustomLabelBottlesTable).where(eq(laduCustomLabelBottlesTable.userId, userId)),
     db.select().from(laduWireCagesTable).where(eq(laduWireCagesTable.userId, userId)),
     db.select().from(laduReusableCapsTable).where(eq(laduReusableCapsTable.userId, userId)),
@@ -110,7 +101,6 @@ async function fetchAll(userId: string) {
     bottles,
     labels,
     caps,
-    labeledBottles,
     customLabelBottles,
     wireCageQty: wireCageRows[0]?.qty ?? 0,
     reusableCaps: reusableCapRows.map((r) => ({ size: r.size, qty: r.qty })),
@@ -218,28 +208,6 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
               storedDeltas.push({ kind: "cap", key: inserted.id, amount: delta.amount });
             }
           }
-        } else if (delta.kind === "labeled_bottle") {
-          const [existing] = await tx
-            .select()
-            .from(laduLabeledBottlesTable)
-            .where(
-              and(
-                eq(laduLabeledBottlesTable.userId, userId),
-                eq(laduLabeledBottlesTable.flavorId, delta.flavorId),
-                eq(laduLabeledBottlesTable.size, delta.size)
-              )
-            );
-          if (existing) {
-            await tx
-              .update(laduLabeledBottlesTable)
-              .set({ qty: existing.qty + delta.amount })
-              .where(eq(laduLabeledBottlesTable.id, existing.id));
-          } else {
-            await tx
-              .insert(laduLabeledBottlesTable)
-              .values({ userId, flavorId: delta.flavorId, size: delta.size, qty: delta.amount });
-          }
-          storedDeltas.push({ kind: "labeled_bottle", flavorId: delta.flavorId, size: delta.size, amount: delta.amount });
         } else if (delta.kind === "custom_label_bottle") {
           const [existing] = await tx
             .select()
@@ -365,23 +333,6 @@ router.delete("/ladu/movements/:id", requireAuth, async (req, res) => {
               .update(laduCapsTable)
               .set({ qty: existing.qty - delta.amount })
               .where(eq(laduCapsTable.id, existing.id));
-          }
-        } else if (delta.kind === "labeled_bottle") {
-          const [existing] = await tx
-            .select()
-            .from(laduLabeledBottlesTable)
-            .where(
-              and(
-                eq(laduLabeledBottlesTable.userId, userId),
-                eq(laduLabeledBottlesTable.flavorId, delta.flavorId),
-                eq(laduLabeledBottlesTable.size, delta.size)
-              )
-            );
-          if (existing) {
-            await tx
-              .update(laduLabeledBottlesTable)
-              .set({ qty: existing.qty - delta.amount })
-              .where(eq(laduLabeledBottlesTable.id, existing.id));
           }
         } else if (delta.kind === "custom_label_bottle") {
           const [existing] = await tx
