@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useClerk, useUser } from "@clerk/react";
-import { Home, BookOpen, MessageSquare, Settings, Beaker, Image, Sparkles, LogOut, ChevronRight, FlaskConical, Package } from "lucide-react";
+import { Home, BookOpen, MessageSquare, Settings, Beaker, Image, Sparkles, LogOut, ChevronRight, FlaskConical, Package, Droplets, Leaf } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,9 @@ const sidebarSecondary = [
   { href: "/flavoring", label: "Flavoring", icon: Sparkles },
   { href: "/kestvuskatsed", label: "Katsed", icon: FlaskConical },
   { href: "/ladu", label: "Ladu", icon: Package },
+  { href: "/valmistamine", label: "Valmistamine", icon: FlaskConical },
+  { href: "/kaarimine", label: "Käärimine", icon: Droplets },
+  { href: "/maitsestamine", label: "Maitsestamine", icon: Leaf },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {

@@ -11,6 +11,9 @@ import personaRouter from "./persona";
 import scobyRouter from "./scoby";
 import bottleTestsRouter from "./bottle-tests";
 import laduRouter from "./ladu";
+import brewsRouter from "./brews";
+import fermentationsRouter from "./fermentations";
+import flavoringRouter from "./flavoring";
 
 const router: IRouter = Router();
 
@@ -26,5 +29,8 @@ router.use(personaRouter);
 router.use(scobyRouter);
 router.use(bottleTestsRouter);
 router.use(laduRouter);
+router.use(brewsRouter);
+router.use(fermentationsRouter);
+router.use(flavoringRouter);
 
 export default router;

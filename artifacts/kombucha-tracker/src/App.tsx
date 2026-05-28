@@ -21,6 +21,9 @@ import MaarajaPage from "@/pages/maaraja";
 import SettingsPage from "@/pages/settings";
 import KestvuskatsedPage from "@/pages/kestvuskatsed";
 import LaduPage from "@/pages/ladu";
+import ValmistaminePage from "@/pages/valmistamine";
+import KaariminePage from "@/pages/kaarimine";
+import MaitsestaminePage from "@/pages/maitsestamine";
 import NotFound from "@/pages/not-found";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -184,6 +187,15 @@ function ClerkProviderWithRoutes() {
             </Route>
             <Route path="/ladu">
               {() => <ProtectedRoute component={LaduPage} />}
+            </Route>
+            <Route path="/valmistamine">
+              {() => <ProtectedRoute component={ValmistaminePage} />}
+            </Route>
+            <Route path="/kaarimine">
+              {() => <ProtectedRoute component={KaariminePage} />}
+            </Route>
+            <Route path="/maitsestamine">
+              {() => <ProtectedRoute component={MaitsestaminePage} />}
             </Route>
             <Route component={NotFound} />
           </Switch>
