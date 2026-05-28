@@ -741,12 +741,14 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
   const [oldCaps, setOldCaps] = useState("");
 
   useEffect(() => {
-    if (!flavorId) { setCapId(""); return; }
+    const capsForSize = data.caps.filter((c) => c.size === size);
+    if (!flavorId) { setCapId(capsForSize.length > 0 ? capsForSize[0].id : ""); return; }
     const flavor = data.flavors.find((f) => f.id === flavorId);
-    if (!flavor?.defaultCapId) { setCapId(""); return; }
-    const defaultCap = data.caps.find((c) => c.id === flavor.defaultCapId);
+    const defaultCap = flavor?.defaultCapId ? data.caps.find((c) => c.id === flavor.defaultCapId) : null;
     if (defaultCap && defaultCap.size === size) {
       setCapId(defaultCap.id);
+    } else if (capsForSize.length > 0) {
+      setCapId(capsForSize[0].id);
     } else {
       setCapId("");
     }
@@ -922,10 +924,15 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
               onChange={(e) => { setCapId(e.target.value ? Number(e.target.value) : ""); setOldCaps(""); }}
               className="w-full rounded-lg border border-stone-300 px-3 py-2 focus:border-amber-600 focus:outline-none"
             >
-              {sizeCaps.length === 0 && <option value="">korki pole</option>}
-              {sizeCaps.map((c) => (
-                <option key={c.id} value={c.id}>{capLabel(c)}</option>
-              ))}
+              {sizeCaps.length === 0
+                ? <option value="">— korki pole —</option>
+                : <>
+                    {capId === "" && <option value="" disabled>— vali kork —</option>}
+                    {sizeCaps.map((c) => (
+                      <option key={c.id} value={c.id}>{capLabel(c)}</option>
+                    ))}
+                  </>
+              }
             </select>
           </div>
           {isPunnkork && (
