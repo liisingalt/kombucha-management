@@ -504,7 +504,6 @@ router.delete("/ladu/reset", requireAuth, async (req, res) => {
     await db.transaction(async (tx) => {
       await tx.delete(laduMovementsTable).where(eq(laduMovementsTable.userId, userId));
       await tx.delete(laduLabelsTable).where(eq(laduLabelsTable.userId, userId));
-      await tx.delete(laduLabeledBottlesTable).where(eq(laduLabeledBottlesTable.userId, userId));
       await tx.delete(laduCustomLabelBottlesTable).where(eq(laduCustomLabelBottlesTable.userId, userId));
       await tx.delete(laduWireCagesTable).where(eq(laduWireCagesTable.userId, userId));
       await tx.delete(laduBottlesTable).where(eq(laduBottlesTable.userId, userId));
