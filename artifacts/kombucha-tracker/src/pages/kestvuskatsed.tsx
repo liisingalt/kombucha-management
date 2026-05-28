@@ -21,11 +21,15 @@ type BottleTest = {
   flavoringEventId: number | null;
 };
 
+type FlavEventBlock = { name: string; koguseL: number; vesselL: number; gramsUsed: number; coefficient: number };
+
 type FlavEvent = {
   id: number;
   date: string;
   bottlingDate: string | null;
   fermentationBatchId: number | null;
+  blocks: FlavEventBlock[];
+  notes: string | null;
 };
 
 type StatsGroup = {
@@ -254,13 +258,26 @@ export default function KestvuskatsedPage() {
     return true;
   });
 
-  function relevantFlavEvents(bottledDate: string) {
-    if (!bottledDate) return flavEvents;
-    const base = new Date(bottledDate).getTime();
-    return flavEvents.filter((ev) => {
-      const d = new Date(ev.bottlingDate ?? ev.date).getTime();
-      return Math.abs(d - base) <= 7 * 86400000;
-    });
+  function relevantFlavEvents(bottledDate: string, productName?: string) {
+    let candidates = flavEvents;
+    if (bottledDate) {
+      const base = new Date(bottledDate).getTime();
+      candidates = candidates.filter((ev) => {
+        const d = new Date(ev.bottlingDate ?? ev.date).getTime();
+        return Math.abs(d - base) <= 7 * 86400000;
+      });
+    }
+    if (productName && productName.trim().length > 0) {
+      const nameLower = productName.trim().toLowerCase();
+      const nameMatched = candidates.filter((ev) => {
+        const blockNames = (ev.blocks ?? []).map((b) => b.name.toLowerCase()).filter(Boolean);
+        return blockNames.some(
+          (bn) => nameLower.includes(bn) || bn.includes(nameLower)
+        ) || (ev.notes && ev.notes.toLowerCase().includes(nameLower));
+      });
+      if (nameMatched.length > 0) return nameMatched;
+    }
+    return candidates;
   }
 
   async function toggleJourney(item: BottleTest) {
@@ -494,12 +511,23 @@ export default function KestvuskatsedPage() {
     value,
     onChange,
     bottledDate,
+    productName,
   }: {
     value: number | null;
     onChange: (id: number | null) => void;
     bottledDate: string;
+    productName?: string;
   }) {
-    const candidates = relevantFlavEvents(bottledDate);
+    const candidates = relevantFlavEvents(bottledDate, productName);
+
+    useEffect(() => {
+      if (candidates.length === 1 && value !== candidates[0].id) {
+        onChange(candidates[0].id);
+      }
+    }, [candidates.length, candidates[0]?.id]);
+
+    const autoSelected = candidates.length === 1 && value === candidates[0].id;
+
     return (
       <div>
         <label className="block text-sm font-medium mb-1.5">
@@ -516,12 +544,16 @@ export default function KestvuskatsedPage() {
             <option key={ev.id} value={ev.id}>
               Maitsestamine {ev.date}
               {ev.bottlingDate ? ` → villitud ${ev.bottlingDate}` : ""}
+              {ev.blocks?.length > 0 ? ` (${ev.blocks.map((b) => b.name).filter(Boolean).join(", ")})` : ""}
             </option>
           ))}
           {candidates.length === 0 && flavEvents.length > 0 && (
             <option disabled>Valitud kuupäeva lähedal sündmusi ei leitud</option>
           )}
         </select>
+        {autoSelected && (
+          <p className="text-xs text-green-700 mt-1">Automaatselt valitud — ainuke sobiv sündmus</p>
+        )}
         {candidates.length === 0 && flavEvents.length === 0 && (
           <p className="text-xs text-muted-foreground mt-1">Lisa kõigepealt maitsestamissündmused Maitsestamine lehelt.</p>
         )}
@@ -1235,6 +1267,7 @@ export default function KestvuskatsedPage() {
                 value={addForm.flavoringEventId}
                 onChange={(id) => setAddForm((f) => ({ ...f, flavoringEventId: id }))}
                 bottledDate={addForm.bottledDate}
+                productName={addForm.product}
               />
               <div>
                 <label className="block text-sm font-medium mb-1.5">Maitsemisintervall (kuudes)</label>
@@ -1327,6 +1360,7 @@ export default function KestvuskatsedPage() {
                 value={editForm.flavoringEventId}
                 onChange={(id) => setEditForm((f) => ({ ...f, flavoringEventId: id }))}
                 bottledDate={editForm.bottledDate}
+                productName={editForm.product}
               />
               <div>
                 <label className="block text-sm font-medium mb-1.5">Maitsemisintervall (kuudes)</label>
