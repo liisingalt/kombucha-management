@@ -92,6 +92,14 @@ const blankLabelTypeSchema = z.object({
   name: z.string().min(1),
 });
 
+const finishedGoodsCommitSchema = z.object({
+  flavorId: z.number().int(),
+  size: z.number().int(),
+  sold: z.number().int().min(0),
+  given: z.number().int().min(0),
+  note: z.string().optional(),
+});
+
 type StoredDelta =
   | { kind: "bottle"; key: number; amount: number }
   | { kind: "label"; flavorId: number; size: number; amount: number }
@@ -643,6 +651,76 @@ router.put("/ladu/caps/:id", requireAuth, async (req, res) => {
     res.json(updated);
   } catch (err) {
     req.log.error({ err }, "Failed to update cap");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/ladu/finished-goods", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  try {
+    const rows = await db.select().from(laduFinishedGoodsTable).where(eq(laduFinishedGoodsTable.userId, userId));
+    res.json(rows);
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch finished goods");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/ladu/finished-goods/commit", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const parsed = finishedGoodsCommitSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
+    return;
+  }
+  const { flavorId, size, sold, given, note } = parsed.data;
+  const totalOut = sold + given;
+  if (totalOut <= 0) {
+    res.status(400).json({ error: "Sisesta müüdud või ära antud kogus" });
+    return;
+  }
+  try {
+    await db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(laduFinishedGoodsTable)
+        .where(
+          and(
+            eq(laduFinishedGoodsTable.userId, userId),
+            eq(laduFinishedGoodsTable.flavorId, flavorId),
+            eq(laduFinishedGoodsTable.size, size)
+          )
+        );
+      const currentQty = existing?.qty ?? 0;
+      if (currentQty < totalOut) {
+        const insufficientErr = new Error(`Laos pole piisavalt valmistoodangut — laos ${currentQty}, sooviti ${totalOut}`);
+        (insufficientErr as any).code = "INSUFFICIENT_STOCK";
+        throw insufficientErr;
+      }
+      const [flavor] = await tx
+        .select()
+        .from(laduFlavorsTable)
+        .where(and(eq(laduFlavorsTable.id, flavorId), eq(laduFlavorsTable.userId, userId)));
+      const flavorName = flavor?.name ?? String(flavorId);
+      await tx
+        .update(laduFinishedGoodsTable)
+        .set({ qty: currentQty - totalOut })
+        .where(eq(laduFinishedGoodsTable.id, existing!.id));
+      const parts: string[] = [`${flavorName} ${size} ml`];
+      if (sold > 0) parts.push(`müüdud: ${sold}`);
+      if (given > 0) parts.push(`ära antud: ${given}`);
+      if (note?.trim()) parts.push(note.trim());
+      const type = sold > 0 && given > 0 ? "väljastamine" : sold > 0 ? "müük" : "kinkimine";
+      const storedDelta: StoredDelta = { kind: "finished_goods", flavorId, size, amount: -totalOut };
+      await tx.insert(laduMovementsTable).values({ userId, type, summary: parts.join(" · "), deltas: [storedDelta] as unknown[] });
+    });
+    res.json(await fetchAll(userId));
+  } catch (err) {
+    if ((err as any).code === "INSUFFICIENT_STOCK") {
+      res.status(409).json({ error: (err as Error).message });
+      return;
+    }
+    req.log.error({ err }, "Failed to commit finished goods");
     res.status(500).json({ error: "Internal server error" });
   }
 });

@@ -284,6 +284,20 @@ export default function LaduPage() {
     onError: (err: Error) => flash(err.message),
   });
 
+  const finishedGoodsCommitMutation = useMutation({
+    mutationFn: async ({ flavorId, size, sold, given, note }: { flavorId: number; size: number; sold: number; given: number; note: string }) => {
+      const res = await authFetch("/ladu/finished-goods/commit", {
+        method: "POST",
+        body: JSON.stringify({ flavorId, size, sold, given, note }),
+      });
+      return res.json() as Promise<LaduData>;
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData(LADU_QUERY_KEY, updated);
+    },
+    onError: (err: Error) => flash(err.message),
+  });
+
   const resetMutation = useMutation({
     mutationFn: async () => {
       await authFetch("/ladu/reset", { method: "DELETE" });
@@ -360,7 +374,7 @@ export default function LaduPage() {
         </nav>
 
         {tab === "valmistoodang" && (
-          <ValmistoodangTab data={data} flavorName={flavorName} commitMutation={commitMutation} flash={flash} />
+          <ValmistoodangTab data={data} flavorName={flavorName} finishedGoodsCommitMutation={finishedGoodsCommitMutation} flash={flash} />
         )}
         {tab === "ladu" && <LaduTab data={data} flavorName={flavorName} bottleQty={bottleQty} updateCapMutation={updateCapMutation} flash={flash} />}
         {tab === "villimine" && (
@@ -811,7 +825,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
   );
 }
 
-function ValmistoodangTab({ data, flavorName, commitMutation, flash }: { data: LaduData; flavorName: (id: number) => string; commitMutation: CommitMutation; flash: (msg: string) => void }) {
+function ValmistoodangTab({ data, flavorName, finishedGoodsCommitMutation, flash }: { data: LaduData; flavorName: (id: number) => string; finishedGoodsCommitMutation: ReturnType<typeof useMutation<LaduData, Error, { flavorId: number; size: number; sold: number; given: number; note: string }>>; flash: (msg: string) => void }) {
   const [fgFlavorId, setFgFlavorId] = useState<number | "">(data.flavors[0]?.id ?? "");
   const [fgSize, setFgSize] = useState<number>(330);
   const [sold, setSold] = useState("");
@@ -821,7 +835,10 @@ function ValmistoodangTab({ data, flavorName, commitMutation, flash }: { data: L
   const fgQty = (flavorId: number, size: number) =>
     data.finishedGoods.find((g) => g.flavorId === flavorId && g.size === size)?.qty ?? 0;
 
-  const available = fgFlavorId !== "" ? fgQty(fgFlavorId as number, fgSize) : 0;
+  const availableSizes = fgFlavorId !== "" ? SIZES.filter((s) => fgQty(fgFlavorId as number, s) > 0) : [];
+  const effectiveSize = availableSizes.includes(fgSize) ? fgSize : (availableSizes[0] ?? 330);
+  const available = fgFlavorId !== "" ? fgQty(fgFlavorId as number, effectiveSize) : 0;
+
   const soldAmt = Math.max(0, parseInt(sold) || 0);
   const givenAmt = Math.max(0, parseInt(given) || 0);
   const totalOut = soldAmt + givenAmt;
@@ -829,22 +846,12 @@ function ValmistoodangTab({ data, flavorName, commitMutation, flash }: { data: L
 
   const submit = () => {
     if (!fgFlavorId) return flash("Vali maitse");
+    if (availableSizes.length === 0) return flash("Valitud maitse pole laos");
     if (totalOut <= 0) return flash("Sisesta müüdud või ära antud kogus");
     if (overStock) return flash(`Laos on ainult ${available} pudelit`);
 
-    const parts = [`${flavorName(fgFlavorId as number)} ${fgSize} ml`];
-    if (soldAmt > 0) parts.push(`müüdud: ${soldAmt}`);
-    if (givenAmt > 0) parts.push(`ära antud: ${givenAmt}`);
-    if (note.trim()) parts.push(note.trim());
-
-    const type = soldAmt > 0 && givenAmt > 0 ? "väljastamine" : soldAmt > 0 ? "müük" : "kinkimine";
-
-    commitMutation.mutate(
-      {
-        deltas: [{ kind: "finished_goods", flavorId: fgFlavorId, size: fgSize, amount: -totalOut }],
-        type,
-        summary: parts.join(" · "),
-      },
+    finishedGoodsCommitMutation.mutate(
+      { flavorId: fgFlavorId as number, size: effectiveSize, sold: soldAmt, given: givenAmt, note: note.trim() },
       {
         onSuccess: () => {
           flash("Väljastamine kirja pandud");
@@ -910,7 +917,7 @@ function ValmistoodangTab({ data, flavorName, commitMutation, flash }: { data: L
                 <label className="block text-sm text-stone-600 mb-1">Maitse</label>
                 <select
                   value={fgFlavorId}
-                  onChange={(e) => setFgFlavorId(Number(e.target.value))}
+                  onChange={(e) => { setFgFlavorId(Number(e.target.value)); setSold(""); setGiven(""); }}
                   className="w-full rounded-lg border border-stone-300 px-3 py-2 focus:border-amber-600 focus:outline-none"
                 >
                   {data.flavors.map((f) => (
@@ -920,11 +927,19 @@ function ValmistoodangTab({ data, flavorName, commitMutation, flash }: { data: L
               </div>
               <div>
                 <label className="block text-sm text-stone-600 mb-1">Suurus</label>
-                <Seg options={SIZES.map((s) => ({ value: s, label: `${s}` }))} value={fgSize} onChange={(v) => setFgSize(v as number)} />
+                {availableSizes.length === 0 ? (
+                  <p className="text-sm text-stone-400 py-2">Pole laos</p>
+                ) : (
+                  <Seg
+                    options={availableSizes.map((s) => ({ value: s, label: `${s}` }))}
+                    value={effectiveSize}
+                    onChange={(v) => setFgSize(v as number)}
+                  />
+                )}
               </div>
             </div>
 
-            {fgFlavorId !== "" && (
+            {fgFlavorId !== "" && availableSizes.length > 0 && (
               <p className="text-xs text-stone-500">
                 Saadaval: <span className={`font-semibold ${available <= 0 ? "text-red-600" : "text-amber-800"}`}>{available} tk</span>
               </p>
@@ -961,10 +976,10 @@ function ValmistoodangTab({ data, flavorName, commitMutation, flash }: { data: L
             <button
               type="button"
               onClick={submit}
-              disabled={commitMutation.isPending || available <= 0}
+              disabled={finishedGoodsCommitMutation.isPending || availableSizes.length === 0}
               className="w-full rounded-lg bg-amber-700 py-3 text-white font-medium hover:bg-amber-800 transition disabled:opacity-60"
             >
-              {commitMutation.isPending ? "Salvestan…" : "Pane kirja"}
+              {finishedGoodsCommitMutation.isPending ? "Salvestan…" : "Pane kirja"}
             </button>
           </div>
         </section>
