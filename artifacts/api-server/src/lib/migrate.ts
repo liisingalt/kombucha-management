@@ -169,6 +169,15 @@ export async function runMigrations(): Promise<void> {
       );
     `);
     await client.query(`DROP TABLE IF EXISTS ladu_labeled_bottles`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS brew_sessions (
+        id      SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        date    TEXT NOT NULL
+      );
+      ALTER TABLE brews ADD COLUMN IF NOT EXISTS sugar_stock_id INTEGER;
+      ALTER TABLE brews ADD COLUMN IF NOT EXISTS session_id INTEGER;
+    `);
     logger.info("Migrations complete");
   } finally {
     client.release();

@@ -1,5 +1,11 @@
 import { pgTable, serial, text, integer, real, timestamp } from "drizzle-orm/pg-core";
 
+export const brewSessionsTable = pgTable("brew_sessions", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  date: text("date").notNull(),
+});
+
 export const teaStockTable = pgTable("tea_stock", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
@@ -39,8 +45,10 @@ export const brewsTable = pgTable("brews", {
   starterPct: integer("starter_pct").notNull().default(20),
   starterG: integer("starter_g").notNull().default(0),
   electricityKwh: real("electricity_kwh"),
+  sessionId: integer("session_id"),
 });
 
 export type TeaStock = typeof teaStockTable.$inferSelect;
 export type SugarStock = typeof sugarStockTable.$inferSelect;
 export type Brew = typeof brewsTable.$inferSelect;
+export type BrewSession = typeof brewSessionsTable.$inferSelect;

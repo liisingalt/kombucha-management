@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { teaStockTable, sugarStockTable, brewsTable } from "@workspace/db";
+import { teaStockTable, sugarStockTable, brewsTable, brewSessionsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 
@@ -146,62 +146,96 @@ router.get("/brews", requireAuth, async (req, res) => {
 router.post("/brews", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const b = req.body;
-  const teaG = Number(b.teaG) || 0;
-  const sugarG = Number(b.sugarG) || 0;
-  const teaStockId = b.teaStockId ? Number(b.teaStockId) : null;
+
+  type PortionPayload = {
+    boiledL: number; teaStockId: number | null; teaSort: string;
+    teaG: number; steepMin: number; steepHeat: number;
+    sugarG: number; coldWaterL: number; starterG: number;
+  };
+  const portions: PortionPayload[] = Array.isArray(b.portions) ? b.portions : [{
+    boiledL: Number(b.boiledL) || 0,
+    teaStockId: b.teaStockId ? Number(b.teaStockId) : null,
+    teaSort: b.teaSort ?? "",
+    teaG: Number(b.teaG) || 0,
+    steepMin: Number(b.steepMin) || 0,
+    steepHeat: Number(b.steepHeat) || 0,
+    sugarG: Number(b.sugarG) || 0,
+    coldWaterL: Number(b.coldWaterL) || 0,
+    starterG: Number(b.starterG) || 0,
+  }];
+
   const sugarStockId = b.sugarStockId ? Number(b.sugarStockId) : null;
   if (!sugarStockId) {
     res.status(400).json({ error: "suhkru varu on kohustuslik" });
     return;
   }
+
   try {
     await db.transaction(async (tx) => {
-      await tx.insert(brewsTable).values({
-        userId,
-        date: b.date,
-        boiledL: Number(b.boiledL) || 0,
-        startBoilTime: b.startBoilTime ?? "",
-        tempReachedMin: b.tempReachedMin != null && b.tempReachedMin !== "" ? Number(b.tempReachedMin) : null,
-        temp: b.temp != null && b.temp !== "" ? Number(b.temp) : null,
-        teaStockId,
-        teaSort: b.teaSort ?? "",
-        teaG,
-        steepMin: Number(b.steepMin) || 0,
-        steepHeat: Number(b.steepHeat) || 0,
-        sugarStockId,
-        sugarG,
-        coldWaterL: Number(b.coldWaterL) || 0,
-        coolStartTime: b.coolStartTime ?? "",
-        coolPlace: b.coolPlace ?? "",
-        coolTemp: b.coolTemp != null && b.coolTemp !== "" ? Number(b.coolTemp) : null,
-        continuedTime: b.continuedTime ?? "",
-        notes: b.notes ?? "",
-        starterPct: Number(b.starterPct) || 0,
-        starterG: Number(b.starterG) || 0,
-        electricityKwh: b.electricityKwh != null && b.electricityKwh !== "" ? Number(b.electricityKwh) : null,
-      });
-      if (teaStockId && teaG > 0) {
-        const [ts] = await tx
-          .select()
-          .from(teaStockTable)
-          .where(and(eq(teaStockTable.id, teaStockId), eq(teaStockTable.userId, userId)));
-        if (ts) {
-          await tx
-            .update(teaStockTable)
-            .set({ qtyG: ts.qtyG - teaG })
-            .where(eq(teaStockTable.id, teaStockId));
-        }
+      let sessionId: number | null = null;
+      if (portions.length > 1) {
+        const [sess] = await tx
+          .insert(brewSessionsTable)
+          .values({ userId, date: b.date })
+          .returning({ id: brewSessionsTable.id });
+        sessionId = sess.id;
       }
-      if (sugarStockId && sugarG > 0) {
-        const [ss] = await tx
-          .select()
-          .from(sugarStockTable)
-          .where(and(eq(sugarStockTable.id, sugarStockId), eq(sugarStockTable.userId, userId)));
-        if (ss) {
-          await tx
-            .update(sugarStockTable)
-            .set({ qtyG: ss.qtyG - sugarG })
-            .where(eq(sugarStockTable.id, sugarStockId));
+
+      for (const p of portions) {
+        const teaG = Number(p.teaG) || 0;
+        const sugarG = Number(p.sugarG) || 0;
+        const pTeaStockId = p.teaStockId ? Number(p.teaStockId) : null;
+
+        await tx.insert(brewsTable).values({
+          userId,
+          sessionId,
+          date: b.date,
+          boiledL: Number(p.boiledL) || 0,
+          startBoilTime: b.startBoilTime ?? "",
+          tempReachedMin: b.tempReachedMin != null && b.tempReachedMin !== "" ? Number(b.tempReachedMin) : null,
+          temp: b.temp != null && b.temp !== "" ? Number(b.temp) : null,
+          teaStockId: pTeaStockId,
+          teaSort: p.teaSort ?? "",
+          teaG,
+          steepMin: Number(p.steepMin) || 0,
+          steepHeat: Number(p.steepHeat) || 0,
+          sugarStockId,
+          sugarG,
+          coldWaterL: Number(p.coldWaterL) || 0,
+          coolStartTime: b.coolStartTime ?? "",
+          coolPlace: b.coolPlace ?? "",
+          coolTemp: b.coolTemp != null && b.coolTemp !== "" ? Number(b.coolTemp) : null,
+          continuedTime: b.continuedTime ?? "",
+          notes: b.notes ?? "",
+          starterPct: Number(b.starterPct) || 0,
+          starterG: Number(p.starterG) || 0,
+          electricityKwh: b.electricityKwh != null && b.electricityKwh !== "" ? Number(b.electricityKwh) : null,
+        });
+
+        if (pTeaStockId && teaG > 0) {
+          const [ts] = await tx
+            .select()
+            .from(teaStockTable)
+            .where(and(eq(teaStockTable.id, pTeaStockId), eq(teaStockTable.userId, userId)));
+          if (ts) {
+            await tx
+              .update(teaStockTable)
+              .set({ qtyG: ts.qtyG - teaG })
+              .where(eq(teaStockTable.id, pTeaStockId));
+          }
+        }
+
+        if (sugarStockId && sugarG > 0) {
+          const [ss] = await tx
+            .select()
+            .from(sugarStockTable)
+            .where(and(eq(sugarStockTable.id, sugarStockId), eq(sugarStockTable.userId, userId)));
+          if (ss) {
+            await tx
+              .update(sugarStockTable)
+              .set({ qtyG: ss.qtyG - sugarG })
+              .where(eq(sugarStockTable.id, sugarStockId));
+          }
         }
       }
     });

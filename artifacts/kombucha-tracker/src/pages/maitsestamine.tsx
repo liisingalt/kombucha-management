@@ -8,7 +8,8 @@ const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 type Variant = { id: number; name: string; olek: string; paritolu: string; coefficient: number; qtyG: number };
 type Method = { id: number; name: string };
-type Ferm = { id: number; teaSort: string; startDate: string };
+type Ferm = { id: number; teaSort: string; startDate: string; brewId: number | null };
+type BrewMin = { id: number; date: string; sessionId: number | null };
 type EventBlock = {
   name: string; olek: string; paritolu: string;
   koguseL: number; vesselL: number; method: string;
@@ -17,6 +18,7 @@ type EventBlock = {
 type FlavEvent = {
   id: number; date: string; bottlingDate: string | null;
   bottleFermentNote: string; notes: string; blocks: EventBlock[];
+  fermentationBatchId: number | null;
 };
 
 const inputCls =
@@ -88,6 +90,13 @@ export default function MaitsestaminePage() {
     queryKey: ["flavoring-events"],
     queryFn: async () => {
       const res = await authFetch("/flavoring/events");
+      return res.json();
+    },
+  });
+  const brewsQ = useQuery<BrewMin[]>({
+    queryKey: ["brews"],
+    queryFn: async () => {
+      const res = await authFetch("/brews");
       return res.json();
     },
   });
@@ -167,6 +176,8 @@ export default function MaitsestaminePage() {
         {tab === "ajalugu" && (
           <Ajalugu
             events={eventsQ.data ?? []}
+            ferms={fermQ.data ?? []}
+            brews={brewsQ.data ?? []}
             authFetch={authFetch}
             onChange={() => {
               qc.invalidateQueries({ queryKey: ["flavoring-events"] });
@@ -772,10 +783,14 @@ function Tootlusviisid({
 
 function Ajalugu({
   events,
+  ferms,
+  brews,
   authFetch,
   onChange,
 }: {
   events: FlavEvent[];
+  ferms: Ferm[];
+  brews: BrewMin[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
 }) {
@@ -793,36 +808,50 @@ function Ajalugu({
 
   return (
     <div className="space-y-3">
-      {events.map((ev) => (
-        <div key={ev.id} className="rounded-xl border border-stone-200 bg-white p-4">
-          <div className="flex items-start justify-between">
-            <div className="font-medium text-stone-900">
-              {new Date(ev.date).toLocaleDateString("et-EE")}
-              {ev.bottlingDate && (
-                <span className="text-stone-500 font-normal ml-2 text-sm">
-                  → villimine {new Date(ev.bottlingDate).toLocaleDateString("et-EE")}
-                </span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => del.mutate(ev.id)}
-              disabled={del.isPending}
-              className="text-xs text-stone-400 hover:text-red-600 shrink-0 disabled:opacity-50"
-            >
-              kustuta
-            </button>
-          </div>
-          <div className="text-sm text-stone-600 mt-1 space-y-0.5">
-            {ev.blocks.map((bl, i) => (
-              <div key={i}>
-                {bl.name || "?"} · {bl.koguseL} L → {bl.gramsUsed} g{bl.method ? " · " + bl.method : ""}
+      {events.map((ev) => {
+        const ferm = ev.fermentationBatchId != null ? ferms.find((f) => f.id === ev.fermentationBatchId) : null;
+        const brew = ferm?.brewId != null ? brews.find((b) => b.id === ferm.brewId) : null;
+        const sessionPortCount = brew?.sessionId != null
+          ? brews.filter((b) => b.sessionId === brew.sessionId).length
+          : 1;
+
+        return (
+          <div key={ev.id} className="rounded-xl border border-stone-200 bg-white p-4">
+            <div className="flex items-start justify-between">
+              <div className="font-medium text-stone-900">
+                {new Date(ev.date).toLocaleDateString("et-EE")}
+                {ev.bottlingDate && (
+                  <span className="text-stone-500 font-normal ml-2 text-sm">
+                    → villimine {new Date(ev.bottlingDate).toLocaleDateString("et-EE")}
+                  </span>
+                )}
               </div>
-            ))}
+              <button
+                type="button"
+                onClick={() => del.mutate(ev.id)}
+                disabled={del.isPending}
+                className="text-xs text-stone-400 hover:text-red-600 shrink-0 disabled:opacity-50"
+              >
+                kustuta
+              </button>
+            </div>
+            {brew && (
+              <div className="text-xs text-stone-400 mt-0.5">
+                Pruulimine: {new Date(brew.date).toLocaleDateString("et-EE")}
+                {sessionPortCount > 1 && ` · ${sessionPortCount} ports ühel päeval`}
+              </div>
+            )}
+            <div className="text-sm text-stone-600 mt-1 space-y-0.5">
+              {ev.blocks.map((bl, i) => (
+                <div key={i}>
+                  {bl.name || "?"} · {bl.koguseL} L → {bl.gramsUsed} g{bl.method ? " · " + bl.method : ""}
+                </div>
+              ))}
+            </div>
+            {ev.notes && <p className="mt-2 text-xs text-stone-500">{ev.notes}</p>}
           </div>
-          {ev.notes && <p className="mt-2 text-xs text-stone-500">{ev.notes}</p>}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

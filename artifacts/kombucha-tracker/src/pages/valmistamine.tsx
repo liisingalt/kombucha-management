@@ -31,6 +31,7 @@ type Brew = {
   starterPct: number;
   starterG: number;
   electricityKwh: number | null;
+  sessionId: number | null;
 };
 
 const inputCls =
@@ -199,6 +200,24 @@ export default function ValmistaminePage() {
   );
 }
 
+type PortionForm = {
+  boiledL: string;
+  teaStockId: number | "";
+  steepMin: string;
+  steepHeat: string;
+  coldEdited: boolean;
+  coldWaterL: string;
+};
+
+const emptyPortion = (): PortionForm => ({
+  boiledL: "",
+  teaStockId: "",
+  steepMin: "10",
+  steepHeat: "0",
+  coldEdited: false,
+  coldWaterL: "",
+});
+
 function UusPruulimine({
   teas,
   sugars,
@@ -212,16 +231,10 @@ function UusPruulimine({
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
-  const [boiledL, setBoiledL] = useState("");
   const [startBoilTime, setStartBoilTime] = useState("");
   const [tempReachedMin, setTempReachedMin] = useState("");
   const [temp, setTemp] = useState("");
-  const [teaStockId, setTeaStockId] = useState<number | "">("");
   const [sugarStockId, setSugarStockId] = useState<number | "">("");
-  const [steepMin, setSteepMin] = useState("10");
-  const [steepHeat, setSteepHeat] = useState("0");
-  const [coldEdited, setColdEdited] = useState(false);
-  const [coldWaterL, setColdWaterL] = useState("");
   const [coolStartTime, setCoolStartTime] = useState("");
   const [coolPlace, setCoolPlace] = useState("");
   const [coolTemp, setCoolTemp] = useState("");
@@ -229,14 +242,31 @@ function UusPruulimine({
   const [notes, setNotes] = useState("");
   const [starterPct, setStarterPct] = useState("20");
   const [electricityKwh, setElectricityKwh] = useState("");
+  const [portions, setPortions] = useState<PortionForm[]>([emptyPortion()]);
 
-  const boiled = parseFloat(boiledL) || 0;
-  const cold = coldEdited ? parseFloat(coldWaterL) || 0 : boiled;
-  const totalL = boiled + cold;
-  const teaG = boiled > 0 ? Math.round(boiled * 5 + 5) : 0;
-  const sugarG = Math.round(totalL * 80);
   const pct = parseInt(starterPct) || 0;
-  const starterG = Math.round(totalL * 10 * pct);
+  const portionCalcs = portions.map((p) => {
+    const boiled = parseFloat(p.boiledL) || 0;
+    const cold = p.coldEdited ? parseFloat(p.coldWaterL) || 0 : boiled;
+    const totalL = boiled + cold;
+    return {
+      boiled,
+      cold,
+      totalL,
+      teaG: boiled > 0 ? Math.round(boiled * 5 + 5) : 0,
+      sugarG: Math.round(totalL * 80),
+      starterG: Math.round(totalL * 10 * pct),
+    };
+  });
+  const totalSugarG = portionCalcs.reduce((s, c) => s + c.sugarG, 0);
+  const totalStarterG = portionCalcs.reduce((s, c) => s + c.starterG, 0);
+  const isMulti = portions.length > 1;
+
+  const updatePortion = <K extends keyof PortionForm>(i: number, key: K, val: PortionForm[K]) =>
+    setPortions((prev) => prev.map((p, idx) => (idx === i ? { ...p, [key]: val } : p)));
+
+  const addPortion = () => setPortions((prev) => [...prev, emptyPortion()]);
+  const removePortion = (i: number) => setPortions((prev) => prev.filter((_, idx) => idx !== i));
 
   const formRef = useRef<HTMLDivElement>(null);
   const onKey = (e: React.KeyboardEvent) => {
@@ -258,12 +288,10 @@ function UusPruulimine({
     },
     onSuccess: () => {
       onSaved();
-      setBoiledL("");
+      setPortions([emptyPortion()]);
       setStartBoilTime("");
       setTempReachedMin("");
       setTemp("");
-      setColdEdited(false);
-      setColdWaterL("");
       setCoolStartTime("");
       setCoolPlace("");
       setCoolTemp("");
@@ -274,48 +302,58 @@ function UusPruulimine({
   });
 
   const save = () => {
-    if (boiled <= 0) return;
     if (!sugarStockId) return;
-    const tea = teas.find((t) => t.id === teaStockId);
+    const portionsPayload = portions
+      .map((p, i) => {
+        const calc = portionCalcs[i];
+        if (calc.boiled <= 0) return null;
+        const tea = teas.find((t) => t.id === p.teaStockId);
+        return {
+          boiledL: calc.boiled,
+          teaStockId: p.teaStockId || null,
+          teaSort: tea?.name ?? "",
+          teaG: calc.teaG,
+          steepMin: parseInt(p.steepMin) || 0,
+          steepHeat: parseInt(p.steepHeat) || 0,
+          sugarG: calc.sugarG,
+          coldWaterL: calc.cold,
+          starterG: calc.starterG,
+        };
+      })
+      .filter(Boolean);
+    if (portionsPayload.length === 0) return;
     m.mutate({
       date,
-      boiledL: boiled,
       startBoilTime,
       tempReachedMin,
       temp,
-      teaStockId: teaStockId || null,
-      teaSort: tea?.name ?? "",
-      teaG,
-      steepMin,
-      steepHeat,
       sugarStockId: sugarStockId || null,
-      sugarG,
-      coldWaterL: cold,
       coolStartTime,
       coolPlace,
       coolTemp,
       continuedTime,
       notes,
       starterPct: pct,
-      starterG,
       electricityKwh,
+      portions: portionsPayload,
     });
   };
 
   return (
     <div className="space-y-5" ref={formRef} onKeyDown={onKey}>
       <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
-        <h3 className="font-serif text-lg text-stone-900">Keetmine</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-serif text-lg text-stone-900">Keetmine</h3>
+          <button
+            type="button"
+            onClick={addPortion}
+            className="text-sm text-amber-700 hover:text-amber-900 font-medium"
+          >
+            + lisa uus ports teed
+          </button>
+        </div>
         <Field label="Kuupäev">
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="Vesi keema, L" hint="Sellest arvutatakse tee, suhkur ja juuretis.">
-          <input
-            type="number"
-            value={boiledL}
-            onChange={(e) => setBoiledL(e.target.value)}
-            className={inputCls}
-          />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Alustasin keetmist kl">
@@ -328,36 +366,82 @@ function UusPruulimine({
         <Field label="Temp, °C">
           <input type="number" value={temp} onChange={(e) => setTemp(e.target.value)} className={inputCls} />
         </Field>
-        <Field label="Tee sort">
-          <select
-            value={teaStockId}
-            onChange={(e) => setTeaStockId(e.target.value ? Number(e.target.value) : "")}
-            className={inputCls}
-          >
-            <option value="">— vali tee —</option>
-            {teas.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name} ({t.qtyG} g laos)
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Tee, g" hint="Arvutatud: L × 5 + 5">
-          <input value={teaG} readOnly className={calcCls} />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Min tõmbab">
-            <input type="number" value={steepMin} onChange={(e) => setSteepMin(e.target.value)} className={inputCls} />
-          </Field>
-          <Field label="Tõmbamise kuumus">
-            <input type="number" value={steepHeat} onChange={(e) => setSteepHeat(e.target.value)} className={inputCls} />
-          </Field>
-        </div>
+
+        {portions.map((p, i) => {
+          const calc = portionCalcs[i];
+          return (
+            <div
+              key={i}
+              className={isMulti ? "rounded-lg border border-amber-200 bg-amber-50/40 p-4 space-y-3" : "space-y-3"}
+            >
+              {isMulti && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-amber-800">Ports {i + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => removePortion(i)}
+                    className="text-xs text-stone-400 hover:text-red-600"
+                  >
+                    eemalda
+                  </button>
+                </div>
+              )}
+              <Field label="Vesi keema, L" hint={!isMulti ? "Sellest arvutatakse tee, suhkur ja juuretis." : undefined}>
+                <input
+                  type="number"
+                  value={p.boiledL}
+                  onChange={(e) => updatePortion(i, "boiledL", e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Tee sort">
+                <select
+                  value={p.teaStockId}
+                  onChange={(e) => updatePortion(i, "teaStockId", e.target.value ? Number(e.target.value) : "")}
+                  className={inputCls}
+                >
+                  <option value="">— vali tee —</option>
+                  {teas.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.qtyG} g laos)
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Tee, g" hint="Arvutatud: L × 5 + 5">
+                <input value={calc.teaG} readOnly className={calcCls} />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Min tõmbab">
+                  <input
+                    type="number"
+                    value={p.steepMin}
+                    onChange={(e) => updatePortion(i, "steepMin", e.target.value)}
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="Tõmbamise kuumus">
+                  <input
+                    type="number"
+                    value={p.steepHeat}
+                    onChange={(e) => updatePortion(i, "steepHeat", e.target.value)}
+                    className={inputCls}
+                  />
+                </Field>
+              </div>
+              {isMulti && calc.boiled > 0 && (
+                <div className="text-xs text-amber-800 bg-amber-100 rounded px-3 py-1.5">
+                  Suhkur: {calc.sugarG} g · Juuretis: {calc.starterG} g
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
         <h3 className="font-serif text-lg text-stone-900">Suhkur ja vesi</h3>
-        <Field label="Suhkru varu" hint={sugarG > 0 ? `Lahutatakse: ${sugarG} g` : undefined}>
+        <Field label="Suhkru varu" hint={totalSugarG > 0 ? `Lahutatakse kokku: ${totalSugarG} g` : undefined}>
           <select
             value={sugarStockId}
             onChange={(e) => setSugarStockId(e.target.value ? Number(e.target.value) : "")}
@@ -372,19 +456,21 @@ function UusPruulimine({
           </select>
         </Field>
         <Field label="Suhkur, g" hint="Arvutatud: kogu vedelik × 80">
-          <input value={sugarG} readOnly className={calcCls} />
+          <input value={totalSugarG} readOnly className={calcCls} />
         </Field>
-        <Field label="Külm vesi, L" hint="Vaikimisi sama mis keema läinud vesi, saad muuta.">
-          <input
-            type="number"
-            value={coldEdited ? coldWaterL : boiled || ""}
-            onChange={(e) => {
-              setColdEdited(true);
-              setColdWaterL(e.target.value);
-            }}
-            className={inputCls}
-          />
-        </Field>
+        {!isMulti && (
+          <Field label="Külm vesi, L" hint="Vaikimisi sama mis keema läinud vesi, saad muuta.">
+            <input
+              type="number"
+              value={portions[0].coldEdited ? portions[0].coldWaterL : portionCalcs[0]?.boiled || ""}
+              onChange={(e) => {
+                updatePortion(0, "coldEdited", true);
+                updatePortion(0, "coldWaterL", e.target.value);
+              }}
+              className={inputCls}
+            />
+          </Field>
+        )}
       </div>
 
       <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
@@ -423,7 +509,7 @@ function UusPruulimine({
             <input type="number" value={starterPct} onChange={(e) => setStarterPct(e.target.value)} className={inputCls} />
           </Field>
           <Field label="Juuretis, g" hint="Arvutatud">
-            <input value={starterG} readOnly className={calcCls} />
+            <input value={totalStarterG} readOnly className={calcCls} />
           </Field>
         </div>
         <Field label="Elektrikulu, kW/h">
@@ -436,10 +522,14 @@ function UusPruulimine({
 
       <button
         onClick={save}
-        disabled={m.isPending || boiled <= 0 || !sugarStockId}
+        disabled={m.isPending || !portionCalcs.some((c) => c.boiled > 0) || !sugarStockId}
         className="w-full rounded-lg bg-amber-700 py-3 text-white font-medium hover:bg-amber-800 disabled:opacity-50"
       >
-        {m.isPending ? "Salvestan…" : "Salvesta pruulimine"}
+        {m.isPending
+          ? "Salvestan…"
+          : isMulti
+          ? `Salvesta ${portions.filter((_, i) => portionCalcs[i].boiled > 0).length} portsi teed`
+          : "Salvesta pruulimine"}
       </button>
     </div>
   );
@@ -876,6 +966,13 @@ function Ajalugu({
 }) {
   const [editingId, setEditingId] = useState<number | null>(null);
 
+  const sessionCounts = new Map<number, number>();
+  brews.forEach((b) => {
+    if (b.sessionId != null) {
+      sessionCounts.set(b.sessionId, (sessionCounts.get(b.sessionId) ?? 0) + 1);
+    }
+  });
+
   if (brews.length === 0) {
     return <p className="text-sm text-stone-400">Veel ühtegi pruulimist pole.</p>;
   }
@@ -894,6 +991,7 @@ function Ajalugu({
           onCloseEdit={() => setEditingId(null)}
           onChange={onChange}
           flash={flash}
+          sessionCount={b.sessionId != null ? (sessionCounts.get(b.sessionId) ?? 1) : 1}
         />
       ))}
     </div>
@@ -910,6 +1008,7 @@ function BrewCard({
   onCloseEdit,
   onChange,
   flash,
+  sessionCount,
 }: {
   brew: Brew;
   teas: Tea[];
@@ -920,6 +1019,7 @@ function BrewCard({
   onCloseEdit: () => void;
   onChange: () => void;
   flash: (msg: string) => void;
+  sessionCount: number;
 }) {
   const [date, setDate] = useState(brew.date);
   const [boiledL, setBoiledL] = useState(String(brew.boiledL));
@@ -1020,8 +1120,11 @@ function BrewCard({
     <div className={`rounded-xl border bg-white ${editOpen ? "border-amber-300" : "border-stone-200"}`}>
       <div className="flex items-start justify-between px-4 py-3">
         <div>
-          <div className="text-sm font-medium">
-            {new Date(brew.date).toLocaleDateString("et-EE")} · {brew.boiledL + (brew.coldWaterL ?? brew.boiledL)} L · {brew.teaSort || "tee märkimata"}
+          <div className="text-sm font-medium flex flex-wrap items-center gap-1.5">
+            <span>{new Date(brew.date).toLocaleDateString("et-EE")} · {brew.boiledL + (brew.coldWaterL ?? brew.boiledL)} L · {brew.teaSort || "tee märkimata"}</span>
+            {sessionCount > 1 && (
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-normal text-amber-700">{sessionCount} ports ühel päeval</span>
+            )}
           </div>
           <div className="text-xs text-stone-500 mt-0.5">
             Tee {brew.teaG} g · suhkur {brew.sugarG} g · juuretis {brew.starterG} g

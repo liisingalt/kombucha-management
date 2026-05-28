@@ -7,7 +7,7 @@ import { Layout } from "@/components/Layout";
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 type Tea = { id: number; name: string; qtyG: number };
-type Brew = { id: number; date: string; teaSort: string; boiledL: number };
+type Brew = { id: number; date: string; teaSort: string; boiledL: number; sessionId: number | null };
 type Vessel = { volumeL: number; vesselL: number; count: number; place: string; temp: number | null };
 type Batch = {
   id: number;
@@ -245,6 +245,19 @@ function UusKaarimine({
             ))}
           </select>
         </div>
+        {(() => {
+          if (!brewId) return null;
+          const sel = brews.find((b) => b.id === brewId);
+          if (!sel?.sessionId) return null;
+          const sessionBrews = brews.filter((b) => b.sessionId === sel.sessionId);
+          if (sessionBrews.length <= 1) return null;
+          const totalBoiled = sessionBrews.reduce((s, b) => s + b.boiledL, 0);
+          return (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+              Sessiooni ülevaade: {sessionBrews.length} ports ühel päeval · kokku {totalBoiled} L keedetud vett
+            </div>
+          );
+        })()}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm text-stone-600 mb-1">Tee sort</label>
