@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const bottomTabs = [
-  { href: "/dashboard", label: "Today", icon: Home },
-  { href: "/insights", label: "Insights", icon: BookOpen },
+  { href: "/dashboard", label: "Täna", icon: Home },
+  { href: "/insights", label: "Ülevaade", icon: BookOpen },
   { href: "/advisor", label: "Abiline", icon: MessageSquare },
-  { href: "/maaraja", label: "Määraja", icon: FlaskConical },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/settings", label: "Seaded", icon: Settings },
 ];
 
 const sidebarSecondary = [
