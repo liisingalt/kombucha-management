@@ -33,6 +33,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isSecondaryActive = (href: string) =>
     location === href || location.startsWith(href + "/");
 
+  const isOnSecondaryPage = sidebarSecondary.some((s) => isSecondaryActive(s.href));
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <div className="flex flex-1">
@@ -114,6 +116,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Main content — pb-20 on mobile to clear the bottom tab bar */}
         <main className="flex-1 min-w-0 overflow-auto pb-20 lg:pb-0">
+          {/* Mobile secondary nav strip — shown when on a secondary page */}
+          {isOnSecondaryPage && (
+            <nav className="lg:hidden flex items-center gap-1 overflow-x-auto scrollbar-hide px-3 py-2 border-b border-border bg-background/95 sticky top-0 z-20">
+              {sidebarSecondary.map(({ href, label, icon: Icon }) => {
+                const active = isSecondaryActive(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    data-testid={`mobile-secondary-${label.toLowerCase().replace(/ /g, "-")}`}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all shrink-0",
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <Icon size={13} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </nav>
+          )}
           {children}
         </main>
       </div>

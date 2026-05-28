@@ -150,17 +150,31 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
             }
             storedDeltas.push({ kind: "cap", key: delta.key, amount: delta.amount });
           } else if (delta.create) {
-            const [inserted] = await tx
-              .insert(laduCapsTable)
-              .values({
-                userId,
-                size: delta.create.size,
-                type: delta.create.type,
-                color: delta.create.color,
-                qty: delta.amount,
-              })
-              .returning();
-            storedDeltas.push({ kind: "cap", key: inserted.id, amount: delta.amount });
+            const { size, type, color } = delta.create;
+            const [existingVariant] = await tx
+              .select()
+              .from(laduCapsTable)
+              .where(
+                and(
+                  eq(laduCapsTable.userId, userId),
+                  eq(laduCapsTable.size, size),
+                  eq(laduCapsTable.type, type),
+                  eq(laduCapsTable.color, color)
+                )
+              );
+            if (existingVariant) {
+              await tx
+                .update(laduCapsTable)
+                .set({ qty: existingVariant.qty + delta.amount })
+                .where(eq(laduCapsTable.id, existingVariant.id));
+              storedDeltas.push({ kind: "cap", key: existingVariant.id, amount: delta.amount });
+            } else {
+              const [inserted] = await tx
+                .insert(laduCapsTable)
+                .values({ userId, size, type, color, qty: delta.amount })
+                .returning();
+              storedDeltas.push({ kind: "cap", key: inserted.id, amount: delta.amount });
+            }
           }
         }
       }
