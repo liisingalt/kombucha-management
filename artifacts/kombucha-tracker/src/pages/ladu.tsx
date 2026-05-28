@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle, Pencil, Check, X, PenLine, ShoppingBag, Leaf } from "lucide-react";
@@ -745,8 +745,26 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
   const [total, setTotal] = useState("");
   const [returned, setReturned] = useState("");
   const [fromCustom, setFromCustom] = useState("");
-  const [capId, setCapId] = useState<number | "">("");
+  const [capId, setCapId] = useState<number | "">(() => {
+    const firstFlavor = data.flavors[0];
+    if (!firstFlavor?.defaultCapId) return "";
+    const defaultCap = data.caps.find((c) => c.id === firstFlavor.defaultCapId);
+    if (defaultCap && defaultCap.size === 330) return defaultCap.id;
+    return "";
+  });
   const [oldCaps, setOldCaps] = useState("");
+
+  useEffect(() => {
+    if (!flavorId) { setCapId(""); return; }
+    const flavor = data.flavors.find((f) => f.id === flavorId);
+    if (!flavor?.defaultCapId) { setCapId(""); return; }
+    const defaultCap = data.caps.find((c) => c.id === flavor.defaultCapId);
+    if (defaultCap && defaultCap.size === size) {
+      setCapId(defaultCap.id);
+    } else {
+      setCapId("");
+    }
+  }, [flavorId, size]);
 
   const sizeCaps = data.caps.filter((c) => c.size === size);
 
