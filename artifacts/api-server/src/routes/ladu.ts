@@ -10,6 +10,8 @@ import {
   laduWireCagesTable,
   laduReusableCapsTable,
   laduMovementsTable,
+  laduBlankLabelTypesTable,
+  laduBlankLabelsTable,
 } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
@@ -54,6 +56,12 @@ const deltaSchema = z.discriminatedUnion("kind", [
     size: z.number().int(),
     amount: z.number().int(),
   }),
+  z.object({
+    kind: z.literal("blank_label"),
+    blankLabelTypeId: z.number().int(),
+    size: z.number().int(),
+    amount: z.number().int(),
+  }),
 ]);
 
 const commitSchema = z.object({
@@ -73,16 +81,32 @@ const capUpdateSchema = z.object({
   color: z.string(),
 });
 
+const blankLabelTypeSchema = z.object({
+  name: z.string().min(1),
+});
+
 type StoredDelta =
   | { kind: "bottle"; key: number; amount: number }
   | { kind: "label"; flavorId: number; size: number; amount: number }
   | { kind: "cap"; key: number; amount: number }
   | { kind: "custom_label_bottle"; size: number; amount: number }
   | { kind: "wire_cage"; amount: number }
-  | { kind: "reusable_cap"; size: number; amount: number };
+  | { kind: "reusable_cap"; size: number; amount: number }
+  | { kind: "blank_label"; blankLabelTypeId: number; size: number; amount: number };
 
 async function fetchAll(userId: string) {
-  const [flavors, bottles, labels, caps, customLabelBottles, wireCageRows, reusableCapRows, movements] = await Promise.all([
+  const [
+    flavors,
+    bottles,
+    labels,
+    caps,
+    customLabelBottles,
+    wireCageRows,
+    reusableCapRows,
+    movements,
+    blankLabelTypes,
+    blankLabels,
+  ] = await Promise.all([
     db.select().from(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId)),
     db.select().from(laduBottlesTable).where(eq(laduBottlesTable.userId, userId)),
     db.select().from(laduLabelsTable).where(eq(laduLabelsTable.userId, userId)),
@@ -95,6 +119,8 @@ async function fetchAll(userId: string) {
       .from(laduMovementsTable)
       .where(eq(laduMovementsTable.userId, userId))
       .orderBy(laduMovementsTable.createdAt),
+    db.select().from(laduBlankLabelTypesTable).where(eq(laduBlankLabelTypesTable.userId, userId)),
+    db.select().from(laduBlankLabelsTable).where(eq(laduBlankLabelsTable.userId, userId)),
   ]);
   return {
     flavors,
@@ -105,6 +131,8 @@ async function fetchAll(userId: string) {
     wireCageQty: wireCageRows[0]?.qty ?? 0,
     reusableCaps: reusableCapRows.map((r) => ({ size: r.size, qty: r.qty })),
     movements: movements.reverse().slice(0, 200),
+    blankLabelTypes,
+    blankLabels,
   };
 }
 
@@ -256,11 +284,39 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
               .set({ qty: existing.qty + delta.amount })
               .where(eq(laduReusableCapsTable.id, existing.id));
           } else {
-            await tx
-              .insert(laduReusableCapsTable)
-              .values({ userId, size: delta.size, qty: delta.amount });
+            await tx.insert(laduReusableCapsTable).values({ userId, size: delta.size, qty: delta.amount });
           }
           storedDeltas.push({ kind: "reusable_cap", size: delta.size, amount: delta.amount });
+        } else if (delta.kind === "blank_label") {
+          const [existing] = await tx
+            .select()
+            .from(laduBlankLabelsTable)
+            .where(
+              and(
+                eq(laduBlankLabelsTable.userId, userId),
+                eq(laduBlankLabelsTable.blankLabelTypeId, delta.blankLabelTypeId),
+                eq(laduBlankLabelsTable.size, delta.size)
+              )
+            );
+          if (existing) {
+            await tx
+              .update(laduBlankLabelsTable)
+              .set({ qty: existing.qty + delta.amount })
+              .where(eq(laduBlankLabelsTable.id, existing.id));
+          } else {
+            await tx.insert(laduBlankLabelsTable).values({
+              userId,
+              blankLabelTypeId: delta.blankLabelTypeId,
+              size: delta.size,
+              qty: delta.amount,
+            });
+          }
+          storedDeltas.push({
+            kind: "blank_label",
+            blankLabelTypeId: delta.blankLabelTypeId,
+            size: delta.size,
+            amount: delta.amount,
+          });
         }
       }
 
@@ -371,6 +427,23 @@ router.delete("/ladu/movements/:id", requireAuth, async (req, res) => {
               .update(laduReusableCapsTable)
               .set({ qty: existing.qty - delta.amount })
               .where(eq(laduReusableCapsTable.id, existing.id));
+          }
+        } else if (delta.kind === "blank_label") {
+          const [existing] = await tx
+            .select()
+            .from(laduBlankLabelsTable)
+            .where(
+              and(
+                eq(laduBlankLabelsTable.userId, userId),
+                eq(laduBlankLabelsTable.blankLabelTypeId, delta.blankLabelTypeId),
+                eq(laduBlankLabelsTable.size, delta.size)
+              )
+            );
+          if (existing) {
+            await tx
+              .update(laduBlankLabelsTable)
+              .set({ qty: existing.qty - delta.amount })
+              .where(eq(laduBlankLabelsTable.id, existing.id));
           }
         }
       }
@@ -506,6 +579,62 @@ router.put("/ladu/caps/:id", requireAuth, async (req, res) => {
   }
 });
 
+router.post("/ladu/blank-label-types", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const parsed = blankLabelTypeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const [type] = await db
+      .insert(laduBlankLabelTypesTable)
+      .values({ userId, name: parsed.data.name.trim() })
+      .returning();
+    res.status(201).json(type);
+  } catch (err) {
+    req.log.error({ err }, "Failed to create blank label type");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/ladu/blank-label-types/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  try {
+    const stockRows = await db
+      .select()
+      .from(laduBlankLabelsTable)
+      .where(
+        and(
+          eq(laduBlankLabelsTable.userId, userId),
+          eq(laduBlankLabelsTable.blankLabelTypeId, id)
+        )
+      );
+    const hasStock = stockRows.some((r) => r.qty !== 0);
+    if (hasStock) {
+      res.status(409).json({ error: "Sildil on laovaru — esmalt too kogused nullini" });
+      return;
+    }
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(laduBlankLabelsTable)
+        .where(and(eq(laduBlankLabelsTable.userId, userId), eq(laduBlankLabelsTable.blankLabelTypeId, id)));
+      await tx
+        .delete(laduBlankLabelTypesTable)
+        .where(and(eq(laduBlankLabelTypesTable.id, id), eq(laduBlankLabelTypesTable.userId, userId)));
+    });
+    res.status(204).end();
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete blank label type");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.delete("/ladu/reset", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   try {
@@ -517,6 +646,8 @@ router.delete("/ladu/reset", requireAuth, async (req, res) => {
       await tx.delete(laduBottlesTable).where(eq(laduBottlesTable.userId, userId));
       await tx.delete(laduCapsTable).where(eq(laduCapsTable.userId, userId));
       await tx.delete(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId));
+      await tx.delete(laduBlankLabelsTable).where(eq(laduBlankLabelsTable.userId, userId));
+      await tx.delete(laduBlankLabelTypesTable).where(eq(laduBlankLabelTypesTable.userId, userId));
     });
     res.status(204).end();
   } catch (err) {

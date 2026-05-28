@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle, Pencil, Check, X } from "lucide-react";
+import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle, Pencil, Check, X, PenLine } from "lucide-react";
 import { Layout } from "@/components/Layout";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -26,6 +26,8 @@ type Label = { id: number; flavorId: number; size: number; qty: number };
 type Cap = { id: number; size: number; type: string; color: string; qty: number };
 type CustomLabelBottle = { id: number; size: number; qty: number };
 type Movement = { id: number; type: string; summary: string; deltas: unknown[]; createdAt: string };
+type BlankLabelType = { id: number; userId: string; name: string };
+type BlankLabel = { id: number; userId: string; blankLabelTypeId: number; size: number; qty: number };
 
 type ReusableCap = { size: number; qty: number };
 
@@ -38,9 +40,22 @@ type LaduData = {
   wireCageQty: number;
   reusableCaps: ReusableCap[];
   movements: Movement[];
+  blankLabelTypes: BlankLabelType[];
+  blankLabels: BlankLabel[];
 };
 
-const EMPTY: LaduData = { flavors: [], bottles: [], labels: [], caps: [], customLabelBottles: [], wireCageQty: 0, reusableCaps: [], movements: [] };
+const EMPTY: LaduData = {
+  flavors: [],
+  bottles: [],
+  labels: [],
+  caps: [],
+  customLabelBottles: [],
+  wireCageQty: 0,
+  reusableCaps: [],
+  movements: [],
+  blankLabelTypes: [],
+  blankLabels: [],
+};
 
 const capLabel = (c: Cap | undefined) =>
   c ? `${c.size} ml · ${c.type || "kork"}${c.color ? " · " + c.color : ""}` : "";
@@ -232,6 +247,40 @@ export default function LaduPage() {
     onError: (err: Error) => flash(err.message),
   });
 
+  const addBlankLabelTypeMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await authFetch("/ladu/blank-label-types", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      return res.json() as Promise<BlankLabelType>;
+    },
+    onSuccess: (t) => {
+      qc.setQueryData<LaduData>(LADU_QUERY_KEY, (old = EMPTY) => ({
+        ...old,
+        blankLabelTypes: [...old.blankLabelTypes, t],
+      }));
+      flash("Silditüüp lisatud");
+    },
+    onError: (err: Error) => flash(err.message),
+  });
+
+  const removeBlankLabelTypeMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await authFetch(`/ladu/blank-label-types/${id}`, { method: "DELETE" });
+      return id;
+    },
+    onSuccess: (id) => {
+      qc.setQueryData<LaduData>(LADU_QUERY_KEY, (old = EMPTY) => ({
+        ...old,
+        blankLabelTypes: old.blankLabelTypes.filter((t) => t.id !== id),
+        blankLabels: old.blankLabels.filter((l) => l.blankLabelTypeId !== id),
+      }));
+      flash("Silditüüp eemaldatud");
+    },
+    onError: (err: Error) => flash(err.message),
+  });
+
   const resetMutation = useMutation({
     mutationFn: async () => {
       await authFetch("/ladu/reset", { method: "DELETE" });
@@ -311,7 +360,7 @@ export default function LaduPage() {
           <VillimineTab data={data} flavorName={flavorName} commitMutation={commitMutation} flash={flash} />
         )}
         {tab === "varu" && (
-          <LisaVaruTab data={data} commitMutation={commitMutation} flash={flash} />
+          <LisaVaruTab data={data} commitMutation={commitMutation} addBlankLabelTypeMutation={addBlankLabelTypeMutation} removeBlankLabelTypeMutation={removeBlankLabelTypeMutation} flash={flash} />
         )}
         {tab === "maitsed" && (
           <MaitsedTab
@@ -373,6 +422,9 @@ function LaduTab({ data, flavorName, bottleQty, updateCapMutation, flash }: { da
 
   const customLabelQty = (size: number) =>
     data.customLabelBottles.find((b) => b.size === size)?.qty ?? 0;
+
+  const blankLabelQty = (typeId: number, size: number) =>
+    data.blankLabels.find((l) => l.blankLabelTypeId === typeId && l.size === size)?.qty ?? 0;
 
   return (
     <div className="space-y-7">
@@ -458,6 +510,39 @@ function LaduTab({ data, flavorName, bottleQty, updateCapMutation, flash }: { da
         </div>
         <p className="text-xs text-stone-400 mt-2">
           Puhtad punnkorgid, mis on valmis taaskasutusse — villimise ajal arvatakse maha.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="font-serif text-lg text-stone-900 mb-3 flex items-center gap-2">
+          <PenLine className="w-4 h-4 text-amber-700" /> Vabalt kirjutatavad sildid
+        </h2>
+        {data.blankLabelTypes.length === 0 ? (
+          <p className="text-sm text-stone-400">Veel ühtegi silditüüpi pole lisatud. Lisa "Lisa varu" vahekaardil.</p>
+        ) : (
+          <div className="space-y-3">
+            {data.blankLabelTypes.map((t) => (
+              <div key={t.id} className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+                <div className="px-4 py-2 bg-stone-50 border-b border-stone-100">
+                  <span className="font-medium text-stone-800">{t.name}</span>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-stone-100">
+                  {SIZES.map((s) => {
+                    const n = blankLabelQty(t.id, s);
+                    return (
+                      <div key={s} className="p-3 text-center">
+                        <div className="text-xs text-stone-500">{s} ml</div>
+                        <div className={`text-xl font-semibold ${n <= 0 ? "text-red-600" : "text-stone-900"}`}>{n}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-stone-400 mt-2">
+          Koguste muutmiseks mine "Lisa varu" vahekaardile.
         </p>
       </section>
 
@@ -717,7 +802,155 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
   );
 }
 
-function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMutation: CommitMutation; flash: (msg: string) => void }) {
+function BlankLabelsCard({
+  data,
+  commitMutation,
+  addBlankLabelTypeMutation,
+  removeBlankLabelTypeMutation,
+  flash,
+}: {
+  data: LaduData;
+  commitMutation: CommitMutation;
+  addBlankLabelTypeMutation: ReturnType<typeof useMutation<BlankLabelType, Error, string>>;
+  removeBlankLabelTypeMutation: ReturnType<typeof useMutation<number, Error, number>>;
+  flash: (msg: string) => void;
+}) {
+  const [newName, setNewName] = useState("");
+  const [qtys, setQtys] = useState<Record<string, string>>({});
+
+  const blankLabelQty = (typeId: number, size: number) =>
+    data.blankLabels.find((l) => l.blankLabelTypeId === typeId && l.size === size)?.qty ?? 0;
+
+  const key = (typeId: number, size: number) => `${typeId}_${size}`;
+
+  const addType = () => {
+    if (!newName.trim()) return;
+    addBlankLabelTypeMutation.mutate(newName.trim(), {
+      onSuccess: () => setNewName(""),
+    });
+  };
+
+  const commit = (typeId: number, typeName: string, size: number, amount: number) => {
+    if (amount === 0) return flash("Sisesta kogus");
+    const qKey = key(typeId, size);
+    commitMutation.mutate(
+      {
+        deltas: [{ kind: "blank_label", blankLabelTypeId: typeId, size, amount }],
+        type: amount > 0 ? "ost" : "korrigeerimine",
+        summary: `${amount > 0 ? "Lisasin" : "Eemaldasin"} ${Math.abs(amount)} × vabalt kirjutatav silt "${typeName}" ${size} ml`,
+      },
+      {
+        onSuccess: () => {
+          setQtys((prev) => ({ ...prev, [qKey]: "" }));
+          flash("Saldeeritud");
+        },
+      }
+    );
+  };
+
+  const handleDelete = (t: BlankLabelType) => {
+    const hasStock = SIZES.some((s) => blankLabelQty(t.id, s) > 0);
+    if (hasStock) {
+      flash("Ei saa kustutada — laos on veel varusid");
+      return;
+    }
+    removeBlankLabelTypeMutation.mutate(t.id);
+  };
+
+  return (
+    <Card title="Vabalt kirjutatavad sildid">
+      <p className="text-xs text-stone-400 mb-4">
+        Sildid, kus kogus on trükitud aga nimi kirjutatakse käsitsi (nt "Aroonia").
+      </p>
+
+      <div className="flex gap-2 mb-4">
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") addType(); }}
+          placeholder="Sildi nimi (nt Aroonia)"
+          className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={addType}
+          disabled={addBlankLabelTypeMutation.isPending || !newName.trim()}
+          className="rounded-lg bg-amber-700 px-4 text-sm text-white hover:bg-amber-800 disabled:opacity-60"
+        >
+          Lisa
+        </button>
+      </div>
+
+      {data.blankLabelTypes.length === 0 ? (
+        <p className="text-sm text-stone-400">Pole ühtegi silditüüpi.</p>
+      ) : (
+        <div className="space-y-4">
+          {data.blankLabelTypes.map((t) => (
+            <div key={t.id} className="rounded-lg border border-stone-200 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-stone-50 border-b border-stone-200">
+                <span className="font-medium text-stone-800 text-sm">{t.name}</span>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(t)}
+                  disabled={removeBlankLabelTypeMutation.isPending}
+                  className="text-stone-400 hover:text-red-600 disabled:opacity-40"
+                  title="Kustuta silditüüp"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="divide-y divide-stone-100">
+                {SIZES.map((s) => {
+                  const qKey = key(t.id, s);
+                  const current = blankLabelQty(t.id, s);
+                  const inputVal = qtys[qKey] ?? "";
+                  return (
+                    <div key={s} className="flex items-center gap-3 px-3 py-2">
+                      <span className="text-sm text-stone-500 w-14 shrink-0">{s} ml</span>
+                      <span className={`text-sm font-semibold w-8 text-right shrink-0 ${current <= 0 ? "text-red-600" : "text-stone-900"}`}>
+                        {current}
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={inputVal}
+                        onChange={(e) => setQtys((prev) => ({ ...prev, [qKey]: e.target.value }))}
+                        placeholder="±"
+                        className="w-20 rounded-lg border border-stone-300 px-2 py-1.5 text-sm text-center focus:border-amber-600 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => commit(t.id, t.name, s, parseInt(inputVal) || 0)}
+                        disabled={commitMutation.isPending}
+                        className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs text-white hover:bg-amber-800 disabled:opacity-60"
+                      >
+                        Salvesta
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function LisaVaruTab({
+  data,
+  commitMutation,
+  addBlankLabelTypeMutation,
+  removeBlankLabelTypeMutation,
+  flash,
+}: {
+  data: LaduData;
+  commitMutation: CommitMutation;
+  addBlankLabelTypeMutation: ReturnType<typeof useMutation<BlankLabelType, Error, string>>;
+  removeBlankLabelTypeMutation: ReturnType<typeof useMutation<number, Error, number>>;
+  flash: (msg: string) => void;
+}) {
   const [bSize, setBSize] = useState<number>(330);
   const [bQty, setBQty] = useState("");
   const [clbSize, setClbSize] = useState<number>(330);
@@ -929,6 +1162,14 @@ function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMu
           <button type="button" onClick={addCaps} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
       </Card>
+
+      <BlankLabelsCard
+        data={data}
+        commitMutation={commitMutation}
+        addBlankLabelTypeMutation={addBlankLabelTypeMutation}
+        removeBlankLabelTypeMutation={removeBlankLabelTypeMutation}
+        flash={flash}
+      />
     </div>
   );
 }

@@ -64,6 +64,20 @@ export async function runMigrations(): Promise<void> {
         deltas     JSONB NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS ladu_blank_label_types (
+        id      SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name    TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS ladu_blank_labels (
+        id                   SERIAL PRIMARY KEY,
+        user_id              TEXT NOT NULL,
+        blank_label_type_id  INTEGER NOT NULL,
+        size                 INTEGER NOT NULL,
+        qty                  INTEGER NOT NULL DEFAULT 0
+      );
     `);
     await client.query(`DROP TABLE IF EXISTS ladu_labeled_bottles`);
     logger.info("Migrations complete");
