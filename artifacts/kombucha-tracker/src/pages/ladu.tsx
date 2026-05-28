@@ -810,6 +810,9 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
   const isPunnkork = selectedCap?.type === "punnkork";
   const reusableStock = data.reusableCaps.find((r) => r.size === size)?.qty ?? 0;
   const blankLabelStock = data.blankLabels.filter((l) => l.size === size).reduce((sum, l) => sum + l.qty, 0);
+  const bottleStock = data.bottles.find((b) => b.size === size)?.qty ?? 0;
+  const customLabelBottleStock = data.customLabelBottles.find((b) => b.size === size)?.qty ?? 0;
+  const labelStock = flavorId !== "" ? (data.labels.find((l) => l.flavorId === (flavorId as number) && l.size === size)?.qty ?? 0) : null;
   const returnedStock = flavorId !== ""
     ? (data.returnedBottles.find((r) => r.flavorId === (flavorId as number) && r.size === size)?.qty ?? 0)
     : 0;
@@ -947,6 +950,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
         <div>
           <label className="block text-sm text-stone-600 mb-1">Mitu pudelit kokku tegid?</label>
           <Num value={total} onChange={setTotal} />
+          <p className="text-xs text-stone-400 mt-1">Laos: {bottleStock} tk tühjad pudelid ({size} ml)</p>
         </div>
 
         <div>
@@ -975,12 +979,15 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
         <div>
           <label className="block text-sm text-stone-600 mb-1">Kohandatud sildiga pudelid</label>
           <Num value={fromCustom} onChange={setFromCustom} />
-          <p className="text-xs text-stone-400 mt-1">Uued pudelid kohandatud sildiga — arvatakse vastavast varust</p>
+          <p className="text-xs text-stone-400 mt-1">Laos: {customLabelBottleStock} tk · arvatakse vastavast varust maha</p>
         </div>
 
         <div>
           <label className="block text-sm text-stone-600 mb-1">Vabalt kirjutatavad sildid</label>
           <Num value={fromBlank} onChange={setFromBlank} />
+          {fromBlankRaw <= blankLabelStock && (
+            <p className="text-xs text-stone-400 mt-1">Laos: {blankLabelStock} tk ({size} ml)</p>
+          )}
           {fromBlankRaw > blankLabelStock && (
             <p className="text-xs text-amber-700 mt-1 flex items-center gap-1">
               <AlertTriangle className="w-3 h-3 shrink-0" />
@@ -1016,6 +1023,9 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
                   </>
               }
             </select>
+            {selectedCap && (
+              <p className="text-xs text-stone-400 mt-1">Laos: {selectedCap.qty} tk</p>
+            )}
           </div>
           {isPunnkork && (
             <div>
@@ -1032,7 +1042,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
         <ul className="space-y-1">
           <li>Tühjad pudelid {size} ml: <b>{bottleDeduct}</b></li>
           <li>Kohandatud sildiga pudelid {size} ml: <b>{customLabelBottleDeduct}</b></li>
-          <li>Sildid {flavorId ? flavorName(flavorId as number) : "—"} {size} ml: <b>{labelDeduct}</b></li>
+          <li>Sildid {flavorId ? flavorName(flavorId as number) : "—"} {size} ml: <b>{labelDeduct}</b>{labelStock != null ? <span className="text-stone-400 font-normal"> (laos: {labelStock} tk)</span> : null}</li>
           <li>Vabalt kirjutatavad sildid {size} ml: <b>{blankLabelDeduct}</b></li>
           <li>
             Korgid: <b>{capId !== "" ? capDeduct : 0}</b>
