@@ -696,6 +696,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
   const [total, setTotal] = useState("");
   const [returned, setReturned] = useState("");
   const [fromCustom, setFromCustom] = useState("");
+  const [fromBlank, setFromBlank] = useState("0");
   const [capId, setCapId] = useState<number | "">(() => {
     const firstFlavor = data.flavors[0];
     if (!firstFlavor?.defaultCapId) return "";
@@ -723,14 +724,18 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
   const ret = Math.min(t, Math.max(0, parseInt(returned) || 0));
   const newCount = t - ret;
   const fromCust = Math.min(newCount, Math.max(0, parseInt(fromCustom) || 0));
+  const fromBlankRaw = Math.max(0, parseInt(fromBlank) || 0);
+  const fromBlankUsed = Math.min(fromBlankRaw, newCount - fromCust);
   const old = Math.min(t, Math.max(0, parseInt(oldCaps) || 0));
 
   const selectedCap = data.caps.find((c) => c.id === capId);
   const isPunnkork = selectedCap?.type === "punnkork";
   const reusableStock = data.reusableCaps.find((r) => r.size === size)?.qty ?? 0;
+  const blankLabelStock = data.blankLabels.filter((l) => l.size === size).reduce((sum, l) => sum + l.qty, 0);
   const bottleDeduct = newCount - fromCust;
   const customLabelBottleDeduct = fromCust;
-  const labelDeduct = newCount - fromCust;
+  const labelDeduct = newCount - fromCust - fromBlankUsed;
+  const blankLabelDeduct = fromBlankUsed;
   const capDeduct = capId !== "" ? t - old : 0;
   const wireCageDeduct = size === 750 && isPunnkork ? t : 0;
   const reusableCapDeduct = isPunnkork ? old : 0;
@@ -743,6 +748,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
     if (bottleDeduct > 0) deltas.push({ kind: "bottle", key: size, amount: -bottleDeduct });
     if (customLabelBottleDeduct > 0) deltas.push({ kind: "custom_label_bottle", size, amount: -customLabelBottleDeduct });
     if (labelDeduct > 0) deltas.push({ kind: "label", flavorId, size, amount: -labelDeduct });
+    if (blankLabelDeduct > 0) deltas.push({ kind: "blank_label", blankLabelTypeId: 0, size, amount: -blankLabelDeduct });
     if (capId !== "" && capDeduct > 0) deltas.push({ kind: "cap", key: capId, amount: -capDeduct });
     if (wireCageDeduct > 0) deltas.push({ kind: "wire_cage", amount: -wireCageDeduct });
     if (reusableCapDeduct > 0) deltas.push({ kind: "reusable_cap", size, amount: -reusableCapDeduct });
@@ -751,6 +757,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
     const parts = [`Villisin ${t} × ${flavorName(flavorId as number)} ${size} ml`];
     if (ret) parts.push(`${ret} tagasi tulnud pudelit`);
     if (fromCust) parts.push(`${fromCust} kohandatud sildiga pudelit`);
+    if (fromBlankUsed > 0) parts.push(`${fromBlankUsed} vabalt kirjutatava sildiga pudelit`);
     if (reusableCapDeduct > 0) parts.push(`${reusableCapDeduct} korduvkasutatavat punnkorki`);
     if (cap) parts.push(`kork: ${capLabel(cap)}`);
     if (wireCageDeduct > 0) parts.push(`${wireCageDeduct} traatkorki`);
@@ -760,7 +767,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
       {
         onSuccess: () => {
           flash("Villimine kirja pandud");
-          setTotal(""); setReturned(""); setFromCustom(""); setOldCaps("");
+          setTotal(""); setReturned(""); setFromCustom(""); setFromBlank("0"); setOldCaps("");
         },
       }
     );
@@ -808,6 +815,20 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
           <p className="text-xs text-stone-400 mt-1">Uued pudelid kohandatud sildiga — arvatakse vastavast varust</p>
         </div>
 
+        <div>
+          <label className="block text-sm text-stone-600 mb-1">Vabalt kirjutatavad sildid</label>
+          <Num value={fromBlank} onChange={setFromBlank} />
+          {fromBlankRaw > blankLabelStock && (
+            <p className="text-xs text-amber-700 mt-1 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              Laos on ainult {blankLabelStock} tk ({size} ml)
+            </p>
+          )}
+          <p className="text-xs text-stone-400 mt-1">
+            Arvatakse vabalt kirjutatavate siltide varust maha. Tagasi tulnud pudel märgi "Tagasi tulnud pudelid" alla — sildi varu ei muutu.
+          </p>
+        </div>
+
         <div className={isPunnkork ? "grid grid-cols-2 gap-3" : ""}>
           <div>
             <label className="block text-sm text-stone-600 mb-1">Kork</label>
@@ -838,6 +859,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
           <li>Tühjad pudelid {size} ml: <b>{bottleDeduct}</b></li>
           <li>Kohandatud sildiga pudelid {size} ml: <b>{customLabelBottleDeduct}</b></li>
           <li>Sildid {flavorId ? flavorName(flavorId as number) : "—"} {size} ml: <b>{labelDeduct}</b></li>
+          <li>Vabalt kirjutatavad sildid {size} ml: <b>{blankLabelDeduct}</b></li>
           <li>
             Korgid: <b>{capId !== "" ? capDeduct : 0}</b>
             {capId !== "" && <span className="text-stone-500"> ({capLabel(selectedCap)})</span>}
