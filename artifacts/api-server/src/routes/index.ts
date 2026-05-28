@@ -12,6 +12,7 @@ import laduRouter from "./ladu";
 import brewsRouter from "./brews";
 import fermentationsRouter from "./fermentations";
 import flavoringRouter from "./flavoring";
+import backupsRouter from "./backups";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(laduRouter);
 router.use(brewsRouter);
 router.use(fermentationsRouter);
 router.use(flavoringRouter);
+router.use(backupsRouter);
 
 export default router;
