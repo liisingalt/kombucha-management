@@ -201,6 +201,9 @@ export async function runMigrations(): Promise<void> {
         qty       INTEGER NOT NULL DEFAULT 0
       );
     `);
+    await client.query(`
+      ALTER TABLE flavoring_event ADD COLUMN IF NOT EXISTS saved_starter_g INTEGER;
+    `);
     logger.info("Migrations complete");
   } finally {
     client.release();

@@ -32,7 +32,7 @@ type BrewInfo = {
   id: number; date: string; teaSort: string | null; teaG: number; sugarG: number;
   boiledL: number; coldWaterL: number; starterPct: number; starterG: number; steepMin: number | null;
 };
-type FlavInfo = { id: number; date: string; bottlingDate: string | null; blocks: EventBlock[]; notes: string };
+type FlavInfo = { id: number; date: string; bottlingDate: string | null; savedStarterG: number | null; blocks: EventBlock[]; notes: string };
 type StarterRef = { id: number; teaSort: string | null; startDate: string };
 
 type LifecycleItem = {
@@ -438,9 +438,13 @@ function LifecycleCard({
                     {item.totalBottles > 0 && (
                       <div className="font-medium text-stone-800">{item.totalBottles} pudelit</div>
                     )}
-                    {/* Outgoing starter — derived from the next batch's brew */}
-                    {item.outgoingStarterG != null && item.outgoingStarterG > 0 ? (
+                    {/* Saved starter — recorded directly at bottling time */}
+                    {item.flavoringEvent.savedStarterG != null && item.flavoringEvent.savedStarterG > 0 ? (
                       <div className="text-amber-700 font-medium mt-0.5 pt-0.5 border-t border-stone-100">
+                        Juuretis säästetud: {item.flavoringEvent.savedStarterG} g
+                      </div>
+                    ) : item.outgoingStarterG != null && item.outgoingStarterG > 0 ? (
+                      <div className="text-amber-600 mt-0.5 pt-0.5 border-t border-stone-100">
                         Juuretis edasi: {item.outgoingStarterG} g ({item.outgoingStarterPct ?? "?"}%)
                       </div>
                     ) : (

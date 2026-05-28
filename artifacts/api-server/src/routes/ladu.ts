@@ -15,6 +15,7 @@ import {
   laduFinishedGoodsTable,
   laduMaterialsTable,
   laduReturnedBottlesTable,
+  flavoringEventTable,
 } from "@workspace/db";
 import { eq, and, gt, ne } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
@@ -94,6 +95,7 @@ const commitSchema = z.object({
       size: z.number().int(),
       amount: z.number().int().min(1),
       flavoringEventId: z.number().int().optional(),
+      savedStarterG: z.number().int().min(0).optional(),
     })
     .optional(),
 });
@@ -544,6 +546,12 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
         storedDeltas.push({ kind: "finished_goods", flavorId: vFlavorId, size: vSize, amount: vAmount });
         if (villimineGoods.flavoringEventId != null) {
           storedDeltas.push({ kind: "trace", flavoringEventId: villimineGoods.flavoringEventId });
+          if (villimineGoods.savedStarterG != null) {
+            await tx
+              .update(flavoringEventTable)
+              .set({ savedStarterG: villimineGoods.savedStarterG })
+              .where(eq(flavoringEventTable.id, villimineGoods.flavoringEventId));
+          }
         }
       }
 

@@ -768,6 +768,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
   const [flavorId, setFlavorId] = useState<number | "">(data.flavors[0]?.id ?? "");
   const [size, setSize] = useState<number>(330);
   const [linkedEventId, setLinkedEventId] = useState<number | "">("");
+  const [savedStarterG, setSavedStarterG] = useState("");
   const [total, setTotal] = useState("");
   const [returned, setReturned] = useState("");
   const [fromCustom, setFromCustom] = useState("");
@@ -844,6 +845,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
     if (cap) parts.push(`kork: ${capLabel(cap)}`);
     if (wireCageDeduct > 0) parts.push(`${wireCageDeduct} traatkorki`);
 
+    const savedG = parseInt(savedStarterG) || 0;
     commitMutation.mutate(
       {
         deltas,
@@ -854,12 +856,13 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
           size,
           amount: t,
           ...(linkedEventId !== "" ? { flavoringEventId: linkedEventId as number } : {}),
+          ...(linkedEventId !== "" && savedG > 0 ? { savedStarterG: savedG } : {}),
         },
       },
       {
         onSuccess: () => {
           flash("Villimine kirja pandud");
-          setTotal(""); setReturned(""); setFromCustom(""); setFromBlank("0"); setOldCaps(""); setLinkedEventId("");
+          setTotal(""); setReturned(""); setFromCustom(""); setFromBlank("0"); setOldCaps(""); setLinkedEventId(""); setSavedStarterG("");
         },
       }
     );
@@ -925,6 +928,16 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
             </div>
           );
         })()}
+
+        {linkedEventId !== "" && (
+          <div>
+            <label className="block text-sm text-stone-600 mb-1">
+              Juuretis järgmisele (g) <span className="text-stone-400">(valikuline)</span>
+            </label>
+            <Num value={savedStarterG} onChange={setSavedStarterG} />
+            <p className="text-xs text-stone-400 mt-1">Kui jätsid osa kombuchast järgmise partii juuretiseks, sisesta kogus grammides.</p>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm text-stone-600 mb-1">Suurus</label>

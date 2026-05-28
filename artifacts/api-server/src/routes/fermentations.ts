@@ -145,6 +145,7 @@ router.get("/fermentations/lifecycle", requireAuth, async (req, res) => {
               id: flavEv.id,
               date: flavEv.date,
               bottlingDate: flavEv.bottlingDate,
+              savedStarterG: flavEv.savedStarterG ?? null,
               blocks: flavEv.blocks,
               notes: flavEv.notes,
             }

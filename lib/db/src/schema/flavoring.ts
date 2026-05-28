@@ -23,6 +23,7 @@ export const flavoringEventTable = pgTable("flavoring_event", {
   date: text("date").notNull(),
   fermentationBatchId: integer("fermentation_batch_id"),
   bottlingDate: text("bottling_date"),
+  savedStarterG: integer("saved_starter_g"),
   bottleFermentNote: text("bottle_ferment_note").default(""),
   notes: text("notes").default(""),
   blocks: jsonb("blocks").notNull(),
