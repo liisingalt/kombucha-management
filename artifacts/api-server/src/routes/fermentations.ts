@@ -48,8 +48,11 @@ router.patch("/fermentations/:id", requireAuth, async (req, res) => {
   const b = req.body;
   try {
     const set: Record<string, unknown> = {};
+    if (b.teaSort !== undefined) set.teaSort = b.teaSort ?? "";
+    if (b.startDate !== undefined) set.startDate = b.startDate;
     if (b.flavoringDate !== undefined) set.flavoringDate = b.flavoringDate || null;
     if (b.notes !== undefined) set.notes = b.notes ?? "";
+    if (b.vessels !== undefined) set.vessels = Array.isArray(b.vessels) ? b.vessels : [];
     if (Object.keys(set).length) {
       await db
         .update(fermentationBatchTable)

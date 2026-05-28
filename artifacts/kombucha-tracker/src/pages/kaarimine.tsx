@@ -133,6 +133,7 @@ export default function KaariminePage() {
         {tab === "ajalugu" && (
           <Ajalugu
             batches={batchQ.data ?? []}
+            teas={teas}
             authFetch={authFetch}
             onChange={() => {
               qc.invalidateQueries({ queryKey: ["fermentations"] });
@@ -387,11 +388,13 @@ function UusKaarimine({
 
 function Ajalugu({
   batches,
+  teas,
   authFetch,
   onChange,
   flash,
 }: {
   batches: Batch[];
+  teas: Tea[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
   flash: (msg: string) => void;
@@ -403,7 +406,7 @@ function Ajalugu({
   return (
     <div className="space-y-3">
       {batches.map((b) => (
-        <BatchCard key={b.id} batch={b} authFetch={authFetch} onChange={onChange} flash={flash} />
+        <BatchCard key={b.id} batch={b} teas={teas} authFetch={authFetch} onChange={onChange} flash={flash} />
       ))}
     </div>
   );
@@ -411,17 +414,55 @@ function Ajalugu({
 
 function BatchCard({
   batch,
+  teas,
   authFetch,
   onChange,
   flash,
 }: {
   batch: Batch;
+  teas: Tea[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
   flash: (msg: string) => void;
 }) {
-  const [flavoringDate, setFlavoringDate] = useState(batch.flavoringDate ?? "");
-  const d = days(batch.startDate, flavoringDate || batch.flavoringDate);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTeaSort, setEditTeaSort] = useState(batch.teaSort);
+  const [editStartDate, setEditStartDate] = useState(batch.startDate);
+  const [editFlavoringDate, setEditFlavoringDate] = useState(batch.flavoringDate ?? "");
+  const [editNotes, setEditNotes] = useState(batch.notes);
+  const [editVessels, setEditVessels] = useState<VesselForm[]>([emptyVessel()]);
+
+  const openEdit = () => {
+    setEditTeaSort(batch.teaSort);
+    setEditStartDate(batch.startDate);
+    setEditFlavoringDate(batch.flavoringDate ?? "");
+    setEditNotes(batch.notes);
+    setEditVessels(
+      batch.vessels.length > 0
+        ? batch.vessels.map((v) => ({
+            volumeL: String(v.volumeL),
+            vesselL: String(v.vesselL),
+            count: String(v.count),
+            place: v.place,
+            temp: v.temp != null ? String(v.temp) : "",
+          }))
+        : [emptyVessel()]
+    );
+    setEditOpen(true);
+  };
+
+  const setEditVessel = (i: number, key: keyof VesselForm, val: string) =>
+    setEditVessels((v) => v.map((x, idx) => (idx === i ? { ...x, [key]: val } : x)));
+  const addEditVessel = () => setEditVessels((v) => [...v, emptyVessel()]);
+  const removeEditVessel = (i: number) =>
+    setEditVessels((v) => v.filter((_, idx) => idx !== i));
+
+  const editTotalLiquid = editVessels.reduce(
+    (s, v) => s + (parseFloat(v.volumeL) || 0) * (parseInt(v.count) || 0),
+    0
+  );
+  const editD = days(editStartDate, editFlavoringDate);
+  const d = days(batch.startDate, batch.flavoringDate);
 
   const patch = useMutation({
     mutationFn: async (body: unknown) => {
@@ -433,7 +474,8 @@ function BatchCard({
     },
     onSuccess: () => {
       onChange();
-      flash("Maitsestamise kuupäev salvestatud");
+      setEditOpen(false);
+      flash("Käärimine salvestatud");
     },
   });
 
@@ -448,8 +490,181 @@ function BatchCard({
     },
   });
 
-  const inputCls =
-    "w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600";
+  const save = () => {
+    if (!editStartDate) return;
+    const cleaned: Vessel[] = editVessels
+      .filter((v) => v.volumeL || v.vesselL)
+      .map((v) => ({
+        volumeL: parseFloat(v.volumeL) || 0,
+        vesselL: parseFloat(v.vesselL) || 0,
+        count: parseInt(v.count) || 1,
+        place: v.place,
+        temp: v.temp === "" ? null : Number(v.temp),
+      }));
+    patch.mutate({
+      teaSort: editTeaSort,
+      startDate: editStartDate,
+      flavoringDate: editFlavoringDate || null,
+      notes: editNotes,
+      vessels: cleaned,
+    });
+  };
+
+  if (editOpen) {
+    return (
+      <div className="rounded-xl border border-amber-300 bg-white p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-serif text-base text-stone-900">Muuda käärimist</h3>
+          <button
+            onClick={() => setEditOpen(false)}
+            className="text-xs text-stone-400 hover:text-stone-700"
+          >
+            tühista
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-stone-500 mb-1">Tee sort</label>
+            <select
+              value={editTeaSort}
+              onChange={(e) => setEditTeaSort(e.target.value)}
+              className={inputCls}
+            >
+              <option value="">— vali tee —</option>
+              {teas.map((t) => (
+                <option key={t.id} value={t.name}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-stone-500 mb-1">Käärima pandi</label>
+            <input
+              type="date"
+              value={editStartDate}
+              onChange={(e) => setEditStartDate(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-stone-500 mb-1">Maitsestamise kuupäev</label>
+            <input
+              type="date"
+              value={editFlavoringDate}
+              onChange={(e) => setEditFlavoringDate(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-stone-500 mb-1">Käärimise aeg</label>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 font-medium">
+              {editD != null ? `${editD} päeva` : "—"}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-stone-600">Nõud</span>
+            <button
+              type="button"
+              onClick={addEditVessel}
+              className="text-xs text-amber-700 hover:text-amber-900"
+            >
+              + lisa nõu
+            </button>
+          </div>
+          {editVessels.map((v, i) => (
+            <div key={i} className="rounded-lg border border-stone-200 p-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-stone-500 mb-1">Kogus nõus, L</label>
+                  <input
+                    type="number"
+                    value={v.volumeL}
+                    onChange={(e) => setEditVessel(i, "volumeL", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-stone-500 mb-1">Nõu maht, L</label>
+                  <input
+                    type="number"
+                    value={v.vesselL}
+                    onChange={(e) => setEditVessel(i, "vesselL", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-stone-500 mb-1">Mitu sellist nõud</label>
+                  <input
+                    type="number"
+                    value={v.count}
+                    onChange={(e) => setEditVessel(i, "count", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-stone-500 mb-1">Temp, °C</label>
+                  <input
+                    type="number"
+                    value={v.temp}
+                    onChange={(e) => setEditVessel(i, "temp", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs text-stone-500 mb-1">Käärimiskoht</label>
+                  <input
+                    value={v.place}
+                    onChange={(e) => setEditVessel(i, "place", e.target.value)}
+                    list="edit-ferm-places"
+                    className={inputCls}
+                    placeholder="nt köögis kapi peal"
+                  />
+                  <datalist id="edit-ferm-places">
+                    <option value="köögis kapi peal" />
+                    <option value="sahver" />
+                    <option value="kelder" />
+                  </datalist>
+                </div>
+              </div>
+              {editVessels.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeEditVessel(i)}
+                  className="mt-2 text-xs text-stone-400 hover:text-red-600"
+                >
+                  eemalda nõu
+                </button>
+              )}
+            </div>
+          ))}
+          <p className="text-xs text-stone-400">
+            Kokku vedelikku nõudes: {editTotalLiquid.toFixed(1)} L
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Märkmed</label>
+          <textarea
+            value={editNotes}
+            onChange={(e) => setEditNotes(e.target.value)}
+            rows={2}
+            className={inputCls}
+          />
+        </div>
+
+        <button
+          onClick={save}
+          disabled={patch.isPending}
+          className="w-full rounded-lg bg-amber-700 py-2.5 text-white text-sm font-medium hover:bg-amber-800 disabled:opacity-50"
+        >
+          {patch.isPending ? "Salvestan…" : "Salvesta muudatused"}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-4">
@@ -462,39 +677,39 @@ function BatchCard({
             {batch.vessels.map((v, i) => (
               <span key={i}>
                 {i > 0 ? " · " : ""}
-                {v.count} × {v.vesselL} L ({v.volumeL} L, {v.temp ?? "?"} °C{v.place ? ", " + v.place : ""})
+                {v.count} × {v.vesselL} L ({v.volumeL} L, {v.temp ?? "?"} °C
+                {v.place ? ", " + v.place : ""})
               </span>
             ))}
           </div>
         </div>
-        <button
-          onClick={() => del.mutate()}
-          disabled={del.isPending}
-          className="text-xs text-stone-400 hover:text-red-600 shrink-0 disabled:opacity-50"
-        >
-          kustuta
-        </button>
-      </div>
-      <div className="mt-3 flex items-end gap-2 border-t border-stone-100 pt-3">
-        <div className="flex-1">
-          <label className="block text-xs text-stone-500 mb-1">Maitsestamise kuupäev</label>
-          <input
-            type="date"
-            value={flavoringDate}
-            onChange={(e) => setFlavoringDate(e.target.value)}
-            className={inputCls}
-          />
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={openEdit}
+            className="text-xs text-stone-500 hover:text-amber-700"
+          >
+            muuda
+          </button>
+          <button
+            onClick={() => del.mutate()}
+            disabled={del.isPending}
+            className="text-xs text-stone-400 hover:text-red-600 disabled:opacity-50"
+          >
+            kustuta
+          </button>
         </div>
-        <div className="text-sm text-stone-600 pb-2">{d != null ? `${d} päeva` : "—"}</div>
-        <button
-          onClick={() => patch.mutate({ flavoringDate })}
-          disabled={patch.isPending}
-          className="rounded-lg bg-amber-700 px-3 py-2 text-white text-sm shrink-0 disabled:opacity-50"
-        >
-          Salvesta
-        </button>
       </div>
-      {batch.notes && <p className="mt-2 text-sm text-stone-600">{batch.notes}</p>}
+      {(batch.flavoringDate || batch.notes) && (
+        <div className="mt-2 pt-2 border-t border-stone-100 space-y-1">
+          {batch.flavoringDate && (
+            <p className="text-xs text-stone-500">
+              Maitsestamine: {new Date(batch.flavoringDate).toLocaleDateString("et-EE")}
+              {d != null ? ` · ${d} päeva` : ""}
+            </p>
+          )}
+          {batch.notes && <p className="text-sm text-stone-600">{batch.notes}</p>}
+        </div>
+      )}
     </div>
   );
 }
