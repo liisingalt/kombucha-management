@@ -25,6 +25,7 @@ type Bottle = { id: number; size: number; qty: number };
 type Label = { id: number; flavorId: number; size: number; qty: number };
 type Cap = { id: number; size: number; type: string; color: string; qty: number };
 type LabeledBottle = { id: number; flavorId: number; size: number; qty: number };
+type CustomLabelBottle = { id: number; size: number; qty: number };
 type Movement = { id: number; type: string; summary: string; deltas: unknown[]; createdAt: string };
 
 type LaduData = {
@@ -33,10 +34,11 @@ type LaduData = {
   labels: Label[];
   caps: Cap[];
   labeledBottles: LabeledBottle[];
+  customLabelBottles: CustomLabelBottle[];
   movements: Movement[];
 };
 
-const EMPTY: LaduData = { flavors: [], bottles: [], labels: [], caps: [], labeledBottles: [], movements: [] };
+const EMPTY: LaduData = { flavors: [], bottles: [], labels: [], caps: [], labeledBottles: [], customLabelBottles: [], movements: [] };
 
 const capLabel = (c: Cap | undefined) =>
   c ? `${c.size} ml · ${c.type || "kork"}${c.color ? " · " + c.color : ""}` : "";
@@ -305,6 +307,9 @@ function LaduTab({ data, flavorName, bottleQty }: { data: LaduData; flavorName: 
       </span>
     ) : null;
 
+  const customLabelQty = (size: number) =>
+    data.customLabelBottles.find((b) => b.size === size)?.qty ?? 0;
+
   return (
     <div className="space-y-7">
       <section>
@@ -321,6 +326,25 @@ function LaduTab({ data, flavorName, bottleQty }: { data: LaduData; flavorName: 
             );
           })}
         </div>
+      </section>
+
+      <section>
+        <h2 className="font-serif text-lg text-stone-900 mb-3">Kohandatud sildiga pudelid</h2>
+        <div className="grid grid-cols-3 gap-3">
+          {SIZES.map((s) => {
+            const n = customLabelQty(s);
+            return (
+              <div key={s} className="rounded-xl border border-stone-200 bg-white p-4 text-center">
+                <div className="text-xs text-stone-500">{s} ml</div>
+                <div className={`text-2xl font-semibold ${n <= 0 ? "text-red-600" : "text-stone-900"}`}>{n}</div>
+                <Low show={n <= 0} />
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-stone-400 mt-2">
+          Tühi kohandatud silt peal — maitsekleeps lisatakse villimise ajal.
+        </p>
       </section>
 
       <section>
@@ -429,6 +453,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
   const [total, setTotal] = useState("");
   const [returned, setReturned] = useState("");
   const [fromLabeled, setFromLabeled] = useState("");
+  const [fromCustom, setFromCustom] = useState("");
   const [labeled, setLabeled] = useState("");
   const [capId, setCapId] = useState<number | "">("");
   const [oldCaps, setOldCaps] = useState("");
@@ -438,11 +463,14 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
   const t = Math.max(0, parseInt(total) || 0);
   const ret = Math.min(t, Math.max(0, parseInt(returned) || 0));
   const fromLab = Math.min(ret, Math.max(0, parseInt(fromLabeled) || 0));
-  const lab = Math.min(t - ret, Math.max(0, parseInt(labeled) || 0));
+  const newCount = t - ret;
+  const fromCust = Math.min(newCount, Math.max(0, parseInt(fromCustom) || 0));
+  const lab = Math.min(newCount - fromCust, Math.max(0, parseInt(labeled) || 0));
   const old = Math.min(t, Math.max(0, parseInt(oldCaps) || 0));
 
-  const bottleDeduct = t - ret;
-  const labelDeduct = t - ret - lab;
+  const bottleDeduct = newCount - fromCust;
+  const customLabelBottleDeduct = fromCust;
+  const labelDeduct = newCount - fromCust - lab;
   const labeledBottleDeduct = fromLab;
   const capDeduct = capId !== "" ? t - old : 0;
 
@@ -452,6 +480,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
 
     const deltas: unknown[] = [];
     if (bottleDeduct > 0) deltas.push({ kind: "bottle", key: size, amount: -bottleDeduct });
+    if (customLabelBottleDeduct > 0) deltas.push({ kind: "custom_label_bottle", size, amount: -customLabelBottleDeduct });
     if (labelDeduct > 0) deltas.push({ kind: "label", flavorId, size, amount: -labelDeduct });
     if (labeledBottleDeduct > 0) deltas.push({ kind: "labeled_bottle", flavorId, size, amount: -labeledBottleDeduct });
     if (capId !== "" && capDeduct > 0) deltas.push({ kind: "cap", key: capId, amount: -capDeduct });
@@ -460,6 +489,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
     const parts = [`Villisin ${t} × ${flavorName(flavorId as number)} ${size} ml`];
     if (ret) parts.push(`${ret} tagasi tulnud pudelit`);
     if (fromLab) parts.push(`sh ${fromLab} sildistatud varust`);
+    if (fromCust) parts.push(`${fromCust} kohandatud sildiga pudelit`);
     if (lab) parts.push(`${lab} juba sildiga`);
     if (old) parts.push(`${old} vana korki`);
     if (cap) parts.push(`kork: ${capLabel(cap)}`);
@@ -469,7 +499,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
       {
         onSuccess: () => {
           flash("Villimine kirja pandud");
-          setTotal(""); setReturned(""); setFromLabeled(""); setLabeled(""); setOldCaps("");
+          setTotal(""); setReturned(""); setFromLabeled(""); setFromCustom(""); setLabeled(""); setOldCaps("");
         },
       }
     );
@@ -519,6 +549,12 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
         </div>
 
         <div>
+          <label className="block text-sm text-stone-600 mb-1">Kohandatud sildiga pudelid</label>
+          <Num value={fromCustom} onChange={setFromCustom} />
+          <p className="text-xs text-stone-400 mt-1">Uued pudelid kohandatud sildiga — arvatakse vastavast varust</p>
+        </div>
+
+        <div>
           <label className="block text-sm text-stone-600 mb-1">Lisaks juba sildiga (ainult silt)</label>
           <Num value={labeled} onChange={setLabeled} />
           <p className="text-xs text-stone-400 mt-1">Ainult silt oli olemas, pudel uus</p>
@@ -550,6 +586,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
         <p className="font-medium text-amber-900 mb-2">Laost arvatakse maha:</p>
         <ul className="space-y-1">
           <li>Tühjad pudelid {size} ml: <b>{bottleDeduct}</b></li>
+          <li>Kohandatud sildiga pudelid {size} ml: <b>{customLabelBottleDeduct}</b></li>
           <li>Sildid {flavorId ? flavorName(flavorId as number) : "—"} {size} ml: <b>{labelDeduct}</b></li>
           <li>Sildistatud pudelid: <b>{labeledBottleDeduct}</b></li>
           <li>
@@ -573,6 +610,8 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
 function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMutation: CommitMutation; flash: (msg: string) => void }) {
   const [bSize, setBSize] = useState<number>(330);
   const [bQty, setBQty] = useState("");
+  const [clbSize, setClbSize] = useState<number>(330);
+  const [clbQty, setClbQty] = useState("");
   const [lFlavor, setLFlavor] = useState<number | "">(data.flavors[0]?.id ?? "");
   const [lSize, setLSize] = useState<number>(330);
   const [lQty, setLQty] = useState("");
@@ -594,6 +633,19 @@ function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMu
     commitMutation.mutate(
       { deltas: [{ kind: "bottle", key: bSize, amount: q }], type: "ost", summary: `Ostsin ${q} × pudel ${bSize} ml` },
       { onSuccess: () => { flash("Pudelid lisatud"); setBQty(""); } }
+    );
+  };
+
+  const addCustomLabelBottles = () => {
+    const q = parseInt(clbQty) || 0;
+    if (q <= 0) return flash("Sisesta kogus");
+    commitMutation.mutate(
+      {
+        deltas: [{ kind: "custom_label_bottle", size: clbSize, amount: q }],
+        type: "ost",
+        summary: `Lisasin ${q} × kohandatud sildiga pudel ${clbSize} ml`,
+      },
+      { onSuccess: () => { flash("Kohandatud sildiga pudelid lisatud"); setClbQty(""); } }
     );
   };
 
@@ -651,6 +703,16 @@ function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMu
         <div className="mt-3 flex gap-2">
           <Num value={bQty} onChange={setBQty} className="flex-1" />
           <button type="button" onClick={addBottles} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
+        </div>
+      </Card>
+
+      <Card title="Kohandatud sildiga pudelid">
+        <p className="text-xs text-stone-400 mb-3">Tühi kohandatud silt peal — maitsekleeps lisatakse villimise ajal.</p>
+        <label className="block text-sm text-stone-600 mb-1">Suurus</label>
+        <Seg options={SIZES.map((s) => ({ value: s, label: `${s} ml` }))} value={clbSize} onChange={(v) => setClbSize(v as number)} />
+        <div className="mt-3 flex gap-2">
+          <Num value={clbQty} onChange={setClbQty} className="flex-1" />
+          <button type="button" onClick={addCustomLabelBottles} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
       </Card>
 

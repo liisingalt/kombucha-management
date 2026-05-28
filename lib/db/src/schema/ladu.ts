@@ -39,6 +39,13 @@ export const laduLabeledBottlesTable = pgTable("ladu_labeled_bottles", {
   qty: integer("qty").notNull().default(0),
 });
 
+export const laduCustomLabelBottlesTable = pgTable("ladu_custom_label_bottles", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  size: integer("size").notNull(),
+  qty: integer("qty").notNull().default(0),
+});
+
 export const laduMovementsTable = pgTable("ladu_movements", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
@@ -53,4 +60,5 @@ export type LaduBottle = typeof laduBottlesTable.$inferSelect;
 export type LaduLabel = typeof laduLabelsTable.$inferSelect;
 export type LaduCap = typeof laduCapsTable.$inferSelect;
 export type LaduLabeledBottle = typeof laduLabeledBottlesTable.$inferSelect;
+export type LaduCustomLabelBottle = typeof laduCustomLabelBottlesTable.$inferSelect;
 export type LaduMovement = typeof laduMovementsTable.$inferSelect;
