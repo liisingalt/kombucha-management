@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 type Phase = "brew" | "fermentation" | "flavoring";
-type ActiveBatch = { id: number; label: string; date: string };
 type Photo = {
   id: number;
   userId: string;
@@ -46,9 +45,6 @@ export default function PhotosPage() {
 
   const [showUpload, setShowUpload] = useState(false);
   const [selectedPhase, setSelectedPhase] = useState<Phase | null>(null);
-  const [activeBatches, setActiveBatches] = useState<ActiveBatch[]>([]);
-  const [batchesLoading, setBatchesLoading] = useState(false);
-  const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
   const [useCustomDate, setUseCustomDate] = useState(false);
   const [photoDate, setPhotoDate] = useState(new Date().toISOString().slice(0, 10));
   const [caption, setCaption] = useState("");
@@ -77,28 +73,8 @@ export default function PhotosPage() {
     fetchPhotos();
   }, [fetchPhotos]);
 
-  async function fetchActiveBatches(phase: Phase) {
-    setBatchesLoading(true);
-    setActiveBatches([]);
-    setSelectedBatchId(null);
-    try {
-      const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/photos/active-batches?phase=${phase}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setActiveBatches(data);
-      }
-    } catch {
-    } finally {
-      setBatchesLoading(false);
-    }
-  }
-
   function pickPhase(phase: Phase) {
     setSelectedPhase(phase);
-    fetchActiveBatches(phase);
   }
 
   async function handleUpload(file: File) {
@@ -129,7 +105,7 @@ export default function PhotosPage() {
         body: JSON.stringify({
           objectPath,
           phase: selectedPhase ?? null,
-          stageRefId: selectedBatchId ?? null,
+          stageRefId: null,
           photoDate: useCustomDate ? photoDate : new Date().toISOString().slice(0, 10),
           caption: caption.trim() || null,
         }),
@@ -138,7 +114,6 @@ export default function PhotosPage() {
 
       setShowUpload(false);
       setSelectedPhase(null);
-      setSelectedBatchId(null);
       setCaption("");
       setUseCustomDate(false);
       setPhotoDate(new Date().toISOString().slice(0, 10));
@@ -322,37 +297,6 @@ export default function PhotosPage() {
                   })}
                 </div>
               </div>
-
-              {/* Batch picker */}
-              {selectedPhase && (
-                <div>
-                  <label className="block text-sm font-medium mb-1.5">
-                    {phaseInfo[selectedPhase].label} sündmus{" "}
-                    <span className="text-muted-foreground font-normal text-xs">(valikuline)</span>
-                  </label>
-                  {batchesLoading ? (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-                      <Loader2 size={12} className="animate-spin" />
-                      Laadin...
-                    </div>
-                  ) : activeBatches.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-1">
-                      Aktiivseid sündmusi selles etapis ei leitud.
-                    </p>
-                  ) : (
-                    <select
-                      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                      value={selectedBatchId ?? ""}
-                      onChange={(e) => setSelectedBatchId(e.target.value ? Number(e.target.value) : null)}
-                    >
-                      <option value="">— Vali (valikuline) —</option>
-                      {activeBatches.map((b) => (
-                        <option key={b.id} value={b.id}>{b.label}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              )}
 
               {/* Date */}
               <div>
