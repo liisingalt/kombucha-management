@@ -14,6 +14,7 @@ import {
   laduBlankLabelsTable,
   laduFinishedGoodsTable,
   laduMaterialsTable,
+  laduReturnedBottlesTable,
 } from "@workspace/db";
 import { eq, and, gt, ne } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
@@ -75,6 +76,12 @@ const deltaSchema = z.discriminatedUnion("kind", [
     materialId: z.number().int(),
     amount: z.number(),
   }),
+  z.object({
+    kind: z.literal("returned_bottle"),
+    flavorId: z.number().int(),
+    size: z.number().int(),
+    amount: z.number().int(),
+  }),
 ]);
 
 const commitSchema = z.object({
@@ -124,6 +131,7 @@ type StoredDelta =
   | { kind: "blank_label"; blankLabelTypeId: number; size: number; amount: number }
   | { kind: "finished_goods"; flavorId: number; size: number; amount: number }
   | { kind: "material"; materialId: number; amount: number }
+  | { kind: "returned_bottle"; flavorId: number; size: number; amount: number }
   | { kind: "trace"; flavoringEventId: number };
 
 type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -210,6 +218,7 @@ async function fetchAll(userId: string) {
     blankLabels,
     finishedGoods,
     materials,
+    returnedBottles,
   ] = await Promise.all([
     db.select().from(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId)),
     db.select().from(laduBottlesTable).where(eq(laduBottlesTable.userId, userId)),
@@ -227,6 +236,7 @@ async function fetchAll(userId: string) {
     db.select().from(laduBlankLabelsTable).where(eq(laduBlankLabelsTable.userId, userId)),
     db.select().from(laduFinishedGoodsTable).where(eq(laduFinishedGoodsTable.userId, userId)),
     db.select().from(laduMaterialsTable).where(eq(laduMaterialsTable.userId, userId)),
+    db.select().from(laduReturnedBottlesTable).where(eq(laduReturnedBottlesTable.userId, userId)),
   ]);
   return {
     flavors,
@@ -241,6 +251,7 @@ async function fetchAll(userId: string) {
     blankLabels,
     finishedGoods,
     materials,
+    returnedBottles,
   };
 }
 
@@ -476,6 +487,37 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
               .where(eq(laduMaterialsTable.id, existing.id));
             storedDeltas.push({ kind: "material", materialId: delta.materialId, amount: delta.amount });
           }
+        } else if (delta.kind === "returned_bottle") {
+          const [existing] = await tx
+            .select()
+            .from(laduReturnedBottlesTable)
+            .where(
+              and(
+                eq(laduReturnedBottlesTable.userId, userId),
+                eq(laduReturnedBottlesTable.flavorId, delta.flavorId),
+                eq(laduReturnedBottlesTable.size, delta.size)
+              )
+            );
+          const currentQty = existing?.qty ?? 0;
+          if (currentQty + delta.amount < 0) {
+            const insufficientErr = new Error(`Tagastatud pudeleid pole piisavalt — laos ${currentQty}, sooviti ${-delta.amount}`);
+            (insufficientErr as any).code = "INSUFFICIENT_STOCK";
+            throw insufficientErr;
+          }
+          if (existing) {
+            await tx
+              .update(laduReturnedBottlesTable)
+              .set({ qty: currentQty + delta.amount })
+              .where(eq(laduReturnedBottlesTable.id, existing.id));
+          } else {
+            await tx.insert(laduReturnedBottlesTable).values({
+              userId,
+              flavorId: delta.flavorId,
+              size: delta.size,
+              qty: delta.amount,
+            });
+          }
+          storedDeltas.push({ kind: "returned_bottle", flavorId: delta.flavorId, size: delta.size, amount: delta.amount });
         }
       }
 
@@ -694,6 +736,23 @@ router.delete("/ladu/movements/:id", requireAuth, async (req, res) => {
               .update(laduMaterialsTable)
               .set({ qty: existing.qty - delta.amount })
               .where(eq(laduMaterialsTable.id, existing.id));
+          }
+        } else if (delta.kind === "returned_bottle") {
+          const [existing] = await tx
+            .select()
+            .from(laduReturnedBottlesTable)
+            .where(
+              and(
+                eq(laduReturnedBottlesTable.userId, userId),
+                eq(laduReturnedBottlesTable.flavorId, delta.flavorId),
+                eq(laduReturnedBottlesTable.size, delta.size)
+              )
+            );
+          if (existing) {
+            await tx
+              .update(laduReturnedBottlesTable)
+              .set({ qty: existing.qty - delta.amount })
+              .where(eq(laduReturnedBottlesTable.id, existing.id));
           }
         }
       }
@@ -1071,6 +1130,7 @@ router.delete("/ladu/reset", requireAuth, async (req, res) => {
       await tx.delete(laduBlankLabelTypesTable).where(eq(laduBlankLabelTypesTable.userId, userId));
       await tx.delete(laduFinishedGoodsTable).where(eq(laduFinishedGoodsTable.userId, userId));
       await tx.delete(laduMaterialsTable).where(eq(laduMaterialsTable.userId, userId));
+      await tx.delete(laduReturnedBottlesTable).where(eq(laduReturnedBottlesTable.userId, userId));
     });
     res.status(204).end();
   } catch (err) {

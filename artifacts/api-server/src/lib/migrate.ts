@@ -192,6 +192,15 @@ export async function runMigrations(): Promise<void> {
       ALTER TABLE photos ADD COLUMN IF NOT EXISTS stage_ref_id INTEGER;
       ALTER TABLE photos ADD COLUMN IF NOT EXISTS photo_date TEXT;
     `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ladu_returned_bottles (
+        id        SERIAL PRIMARY KEY,
+        user_id   TEXT NOT NULL,
+        flavor_id INTEGER NOT NULL,
+        size      INTEGER NOT NULL,
+        qty       INTEGER NOT NULL DEFAULT 0
+      );
+    `);
     logger.info("Migrations complete");
   } finally {
     client.release();

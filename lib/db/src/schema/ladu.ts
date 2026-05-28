@@ -90,6 +90,14 @@ export const laduMaterialsTable = pgTable("ladu_materials", {
   qty: real("qty").notNull().default(0),
 });
 
+export const laduReturnedBottlesTable = pgTable("ladu_returned_bottles", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  flavorId: integer("flavor_id").notNull(),
+  size: integer("size").notNull(),
+  qty: integer("qty").notNull().default(0),
+});
+
 export type LaduFlavor = typeof laduFlavorsTable.$inferSelect;
 export type LaduBottle = typeof laduBottlesTable.$inferSelect;
 export type LaduLabel = typeof laduLabelsTable.$inferSelect;
@@ -102,3 +110,4 @@ export type LaduBlankLabelType = typeof laduBlankLabelTypesTable.$inferSelect;
 export type LaduBlankLabel = typeof laduBlankLabelsTable.$inferSelect;
 export type LaduFinishedGoods = typeof laduFinishedGoodsTable.$inferSelect;
 export type LaduMaterial = typeof laduMaterialsTable.$inferSelect;
+export type LaduReturnedBottle = typeof laduReturnedBottlesTable.$inferSelect;
