@@ -6,3 +6,9 @@ id = "g2XVyw7nwQOoO3PGShY2S"
 uri = "file://db_export.sql.gz"
 type = "unspecified"
 title = "Andmebaasi eksport (db_export.sql.gz)"
+
+[[outputs]]
+id = "6oyXIzmvWbb0HTCkNSz8t"
+uri = "file://db_export_clean.sql.gz"
+type = "unspecified"
+title = "Puhas andmebaasi eksport (db_export_clean.sql.gz)"
