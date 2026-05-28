@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "g2XVyw7nwQOoO3PGShY2S"
+uri = "file://db_export.sql.gz"
+type = "unspecified"
+title = "Andmebaasi eksport (db_export.sql.gz)"
