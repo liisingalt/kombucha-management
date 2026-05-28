@@ -353,13 +353,6 @@ function UusPruulimine({
       <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-serif text-lg text-stone-900">Keetmine</h3>
-          <button
-            type="button"
-            onClick={addPortion}
-            className="text-sm text-amber-700 hover:text-amber-900 font-medium"
-          >
-            + lisa uus ports teed
-          </button>
         </div>
         <Field label="Kuupäev">
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
@@ -539,12 +532,13 @@ function UusPruulimine({
         </Field>
       </div>
 
-      <a
-        href={`${BASE_URL}/maitsestamine`}
+      <button
+        type="button"
+        onClick={addPortion}
         className="w-full rounded-lg border-2 border-dashed border-amber-400 py-3 text-amber-700 font-medium hover:bg-amber-50 flex items-center justify-center gap-2"
       >
-        <span className="text-lg leading-none">+</span> lisa maitsestus
-      </a>
+        <span className="text-lg leading-none">+</span> lisa uus ports teed
+      </button>
 
       <button
         onClick={save}
