@@ -12,9 +12,23 @@ type Brew = {
   id: number;
   date: string;
   boiledL: number;
+  startBoilTime: string;
+  tempReachedMin: number | null;
+  temp: number | null;
+  teaStockId: number | null;
   teaSort: string;
   teaG: number;
+  steepMin: number;
+  steepHeat: number;
+  sugarStockId: number | null;
   sugarG: number;
+  coldWaterL: number;
+  coolStartTime: string;
+  coolPlace: string;
+  coolTemp: number | null;
+  continuedTime: string;
+  notes: string;
+  starterPct: number;
   starterG: number;
   electricityKwh: number | null;
 };
@@ -163,13 +177,15 @@ export default function ValmistaminePage() {
         {tab === "ajalugu" && (
           <Ajalugu
             brews={brewsQ.data ?? []}
+            teas={teas}
+            sugars={sugars}
             authFetch={authFetch}
             onChange={() => {
               qc.invalidateQueries({ queryKey: ["brews"] });
               qc.invalidateQueries({ queryKey: ["brews-tea-stock"] });
               qc.invalidateQueries({ queryKey: ["brews-sugar-stock"] });
-              flash("Pruulimine kustutatud");
             }}
+            flash={flash}
           />
         )}
       </div>
@@ -845,20 +861,20 @@ function SuhkruVaru({
 
 function Ajalugu({
   brews,
+  teas,
+  sugars,
   authFetch,
   onChange,
+  flash,
 }: {
   brews: Brew[];
+  teas: Tea[];
+  sugars: Sugar[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
+  flash: (msg: string) => void;
 }) {
-  const del = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await authFetch(`/brews/${id}`, { method: "DELETE" });
-      return res.json();
-    },
-    onSuccess: onChange,
-  });
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   if (brews.length === 0) {
     return <p className="text-sm text-stone-400">Veel ühtegi pruulimist pole.</p>;
@@ -867,25 +883,292 @@ function Ajalugu({
   return (
     <div className="space-y-2">
       {brews.map((b) => (
-        <div key={b.id} className="flex items-start justify-between rounded-xl border border-stone-200 bg-white px-4 py-3">
-          <div>
-            <div className="text-sm font-medium">
-              {new Date(b.date).toLocaleDateString("et-EE")} · {b.boiledL} L · {b.teaSort || "tee märkimata"}
-            </div>
-            <div className="text-xs text-stone-500 mt-0.5">
-              Tee {b.teaG} g · suhkur {b.sugarG} g · juuretis {b.starterG} g
-              {b.electricityKwh != null ? ` · ${b.electricityKwh} kW/h` : ""}
-            </div>
+        <BrewCard
+          key={b.id}
+          brew={b}
+          teas={teas}
+          sugars={sugars}
+          authFetch={authFetch}
+          editOpen={editingId === b.id}
+          onOpenEdit={() => setEditingId(b.id)}
+          onCloseEdit={() => setEditingId(null)}
+          onChange={onChange}
+          flash={flash}
+        />
+      ))}
+    </div>
+  );
+}
+
+function BrewCard({
+  brew,
+  teas,
+  sugars,
+  authFetch,
+  editOpen,
+  onOpenEdit,
+  onCloseEdit,
+  onChange,
+  flash,
+}: {
+  brew: Brew;
+  teas: Tea[];
+  sugars: Sugar[];
+  authFetch: ReturnType<typeof useAuthFetch>;
+  editOpen: boolean;
+  onOpenEdit: () => void;
+  onCloseEdit: () => void;
+  onChange: () => void;
+  flash: (msg: string) => void;
+}) {
+  const [date, setDate] = useState(brew.date);
+  const [boiledL, setBoiledL] = useState(String(brew.boiledL));
+  const [startBoilTime, setStartBoilTime] = useState(brew.startBoilTime ?? "");
+  const [tempReachedMin, setTempReachedMin] = useState(brew.tempReachedMin != null ? String(brew.tempReachedMin) : "");
+  const [temp, setTemp] = useState(brew.temp != null ? String(brew.temp) : "");
+  const [teaStockId, setTeaStockId] = useState<number | "">(brew.teaStockId ?? "");
+  const [steepMin, setSteepMin] = useState(String(brew.steepMin ?? 10));
+  const [steepHeat, setSteepHeat] = useState(String(brew.steepHeat ?? 0));
+  const [coldWaterL, setColdWaterL] = useState(String(brew.coldWaterL));
+  const [coolStartTime, setCoolStartTime] = useState(brew.coolStartTime ?? "");
+  const [coolPlace, setCoolPlace] = useState(brew.coolPlace ?? "");
+  const [coolTemp, setCoolTemp] = useState(brew.coolTemp != null ? String(brew.coolTemp) : "");
+  const [continuedTime, setContinuedTime] = useState(brew.continuedTime ?? "");
+  const [notes, setNotes] = useState(brew.notes ?? "");
+  const [starterPct, setStarterPct] = useState(String(brew.starterPct ?? 20));
+  const [electricityKwh, setElectricityKwh] = useState(brew.electricityKwh != null ? String(brew.electricityKwh) : "");
+
+  const openEdit = () => {
+    setDate(brew.date);
+    setBoiledL(String(brew.boiledL));
+    setStartBoilTime(brew.startBoilTime ?? "");
+    setTempReachedMin(brew.tempReachedMin != null ? String(brew.tempReachedMin) : "");
+    setTemp(brew.temp != null ? String(brew.temp) : "");
+    setTeaStockId(brew.teaStockId ?? "");
+    setSteepMin(String(brew.steepMin ?? 10));
+    setSteepHeat(String(brew.steepHeat ?? 0));
+    setColdWaterL(String(brew.coldWaterL));
+    setCoolStartTime(brew.coolStartTime ?? "");
+    setCoolPlace(brew.coolPlace ?? "");
+    setCoolTemp(brew.coolTemp != null ? String(brew.coolTemp) : "");
+    setContinuedTime(brew.continuedTime ?? "");
+    setNotes(brew.notes ?? "");
+    setStarterPct(String(brew.starterPct ?? 20));
+    setElectricityKwh(brew.electricityKwh != null ? String(brew.electricityKwh) : "");
+    onOpenEdit();
+  };
+
+  const boiled = parseFloat(boiledL) || 0;
+  const cold = parseFloat(coldWaterL) || 0;
+  const totalL = boiled + cold;
+  const teaG = boiled > 0 ? Math.round(boiled * 5 + 5) : 0;
+  const sugarG = Math.round(totalL * 80);
+  const pct = parseInt(starterPct) || 0;
+  const starterG = Math.round(totalL * 10 * pct);
+
+  const delMut = useMutation({
+    mutationFn: async () => {
+      const res = await authFetch(`/brews/${brew.id}`, { method: "DELETE" });
+      return res.json();
+    },
+    onSuccess: () => {
+      onChange();
+      flash("Pruulimine kustutatud");
+    },
+  });
+
+  const patchMut = useMutation({
+    mutationFn: async (body: unknown) => {
+      const res = await authFetch(`/brews/${brew.id}`, { method: "PATCH", body: JSON.stringify(body) });
+      return res.json();
+    },
+    onSuccess: () => {
+      onChange();
+      flash("Pruulimine salvestatud");
+      onCloseEdit();
+    },
+  });
+
+  const save = () => {
+    if (boiled <= 0) return;
+    const tea = teas.find((t) => t.id === teaStockId);
+    patchMut.mutate({
+      date,
+      boiledL: boiled,
+      startBoilTime,
+      tempReachedMin,
+      temp,
+      teaStockId: teaStockId || null,
+      teaSort: tea?.name ?? brew.teaSort ?? "",
+      teaG,
+      steepMin,
+      steepHeat,
+      sugarG,
+      coldWaterL: cold,
+      coolStartTime,
+      coolPlace,
+      coolTemp,
+      continuedTime,
+      notes,
+      starterPct: pct,
+      starterG,
+      electricityKwh,
+    });
+  };
+
+  return (
+    <div className={`rounded-xl border bg-white ${editOpen ? "border-amber-300" : "border-stone-200"}`}>
+      <div className="flex items-start justify-between px-4 py-3">
+        <div>
+          <div className="text-sm font-medium">
+            {new Date(brew.date).toLocaleDateString("et-EE")} · {brew.boiledL} L · {brew.teaSort || "tee märkimata"}
           </div>
+          <div className="text-xs text-stone-500 mt-0.5">
+            Tee {brew.teaG} g · suhkur {brew.sugarG} g · juuretis {brew.starterG} g
+            {brew.electricityKwh != null ? ` · ${brew.electricityKwh} kW/h` : ""}
+          </div>
+        </div>
+        <div className="flex gap-3 shrink-0">
+          {!editOpen && (
+            <button
+              onClick={openEdit}
+              className="text-stone-400 hover:text-amber-700 text-xs"
+            >
+              muuda
+            </button>
+          )}
           <button
-            onClick={() => del.mutate(b.id)}
-            disabled={del.isPending}
-            className="text-stone-400 hover:text-red-600 text-xs shrink-0 disabled:opacity-50"
+            onClick={() => delMut.mutate()}
+            disabled={delMut.isPending}
+            className="text-stone-400 hover:text-red-600 text-xs disabled:opacity-50"
           >
             kustuta
           </button>
         </div>
-      ))}
+      </div>
+
+      {editOpen && (
+        <div className="border-t border-amber-200 px-4 pb-5 pt-4 space-y-5">
+          <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 space-y-4">
+            <h3 className="font-serif text-base text-stone-900">Keetmine</h3>
+            <Field label="Kuupäev">
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Vesi keema, L" hint="Sellest arvutatakse tee, suhkur ja juuretis.">
+              <input type="number" value={boiledL} onChange={(e) => setBoiledL(e.target.value)} className={inputCls} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Alustasin keetmist kl">
+                <input type="time" value={startBoilTime} onChange={(e) => setStartBoilTime(e.target.value)} className={inputCls} />
+              </Field>
+              <Field label="Temp saavutas, min">
+                <input type="number" value={tempReachedMin} onChange={(e) => setTempReachedMin(e.target.value)} className={inputCls} />
+              </Field>
+            </div>
+            <Field label="Temp, °C">
+              <input type="number" value={temp} onChange={(e) => setTemp(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Tee sort">
+              <select
+                value={teaStockId}
+                onChange={(e) => setTeaStockId(e.target.value ? Number(e.target.value) : "")}
+                className={inputCls}
+              >
+                <option value="">— vali tee —</option>
+                {teas.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.qtyG} g laos)
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Tee, g" hint="Arvutatud: L × 5 + 5">
+              <input value={teaG} readOnly className={calcCls} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Min tõmbab">
+                <input type="number" value={steepMin} onChange={(e) => setSteepMin(e.target.value)} className={inputCls} />
+              </Field>
+              <Field label="Tõmbamise kuumus">
+                <input type="number" value={steepHeat} onChange={(e) => setSteepHeat(e.target.value)} className={inputCls} />
+              </Field>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 space-y-4">
+            <h3 className="font-serif text-base text-stone-900">Suhkur ja vesi</h3>
+            <Field label="Suhkur, g" hint="Arvutatud: kogu vedelik × 80">
+              <input value={sugarG} readOnly className={calcCls} />
+            </Field>
+            <Field label="Külm vesi, L">
+              <input type="number" value={coldWaterL} onChange={(e) => setColdWaterL(e.target.value)} className={inputCls} />
+            </Field>
+          </div>
+
+          <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 space-y-4">
+            <h3 className="font-serif text-base text-stone-900">Jahtumine</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Jahtuma kl">
+                <input type="time" value={coolStartTime} onChange={(e) => setCoolStartTime(e.target.value)} className={inputCls} />
+              </Field>
+              <Field label="Jahtumiskoha temp, °C">
+                <input type="number" value={coolTemp} onChange={(e) => setCoolTemp(e.target.value)} className={inputCls} />
+              </Field>
+            </div>
+            <Field label="Jahtumiskoht">
+              <input
+                value={coolPlace}
+                onChange={(e) => setCoolPlace(e.target.value)}
+                list="edit-cool-places"
+                className={inputCls}
+                placeholder="nt sahver"
+              />
+              <datalist id="edit-cool-places">
+                <option value="sahver" />
+                <option value="kelder" />
+                <option value="köök" />
+              </datalist>
+            </Field>
+            <Field label="Tegutsesin edasi kl">
+              <input type="time" value={continuedTime} onChange={(e) => setContinuedTime(e.target.value)} className={inputCls} />
+            </Field>
+          </div>
+
+          <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 space-y-4">
+            <h3 className="font-serif text-base text-stone-900">Juuretis ja kulu</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Juuretise %">
+                <input type="number" value={starterPct} onChange={(e) => setStarterPct(e.target.value)} className={inputCls} />
+              </Field>
+              <Field label="Juuretis, g" hint="Arvutatud">
+                <input value={starterG} readOnly className={calcCls} />
+              </Field>
+            </div>
+            <Field label="Elektrikulu, kW/h">
+              <input type="number" value={electricityKwh} onChange={(e) => setElectricityKwh(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="Soovitused">
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className={inputCls} />
+            </Field>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={save}
+              disabled={patchMut.isPending || boiled <= 0}
+              className="flex-1 rounded-lg bg-amber-700 py-2.5 text-white text-sm font-medium hover:bg-amber-800 disabled:opacity-50"
+            >
+              {patchMut.isPending ? "Salvestan…" : "Salvesta muutused"}
+            </button>
+            <button
+              onClick={onCloseEdit}
+              className="rounded-lg border border-stone-300 px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-50"
+            >
+              Tühista
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

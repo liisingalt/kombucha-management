@@ -249,6 +249,79 @@ router.patch("/brews/tea-stock/:id", requireAuth, async (req, res) => {
   }
 });
 
+router.patch("/brews/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = Number(req.params.id);
+  const b = req.body;
+  try {
+    await db.transaction(async (tx) => {
+      const [old] = await tx
+        .select()
+        .from(brewsTable)
+        .where(and(eq(brewsTable.id, id), eq(brewsTable.userId, userId)));
+      if (!old) {
+        res.status(404).json({ error: "ei leitud" });
+        return;
+      }
+      const newTeaStockId = b.teaStockId ? Number(b.teaStockId) : null;
+      const newTeaG = Number(b.teaG) || 0;
+      if (old.teaStockId && old.teaG > 0) {
+        const [oldTs] = await tx
+          .select()
+          .from(teaStockTable)
+          .where(and(eq(teaStockTable.id, old.teaStockId), eq(teaStockTable.userId, userId)));
+        if (oldTs) {
+          await tx
+            .update(teaStockTable)
+            .set({ qtyG: oldTs.qtyG + old.teaG })
+            .where(eq(teaStockTable.id, old.teaStockId));
+        }
+      }
+      if (newTeaStockId && newTeaG > 0) {
+        const [newTs] = await tx
+          .select()
+          .from(teaStockTable)
+          .where(and(eq(teaStockTable.id, newTeaStockId), eq(teaStockTable.userId, userId)));
+        if (newTs) {
+          await tx
+            .update(teaStockTable)
+            .set({ qtyG: newTs.qtyG - newTeaG })
+            .where(eq(teaStockTable.id, newTeaStockId));
+        }
+      }
+      await tx
+        .update(brewsTable)
+        .set({
+          date: b.date,
+          boiledL: Number(b.boiledL) || 0,
+          startBoilTime: b.startBoilTime ?? "",
+          tempReachedMin: b.tempReachedMin != null && b.tempReachedMin !== "" ? Number(b.tempReachedMin) : null,
+          temp: b.temp != null && b.temp !== "" ? Number(b.temp) : null,
+          teaStockId: newTeaStockId,
+          teaSort: b.teaSort ?? "",
+          teaG: newTeaG,
+          steepMin: Number(b.steepMin) || 0,
+          steepHeat: Number(b.steepHeat) || 0,
+          sugarG: Number(b.sugarG) || 0,
+          coldWaterL: Number(b.coldWaterL) || 0,
+          coolStartTime: b.coolStartTime ?? "",
+          coolPlace: b.coolPlace ?? "",
+          coolTemp: b.coolTemp != null && b.coolTemp !== "" ? Number(b.coolTemp) : null,
+          continuedTime: b.continuedTime ?? "",
+          notes: b.notes ?? "",
+          starterPct: Number(b.starterPct) || 0,
+          starterG: Number(b.starterG) || 0,
+          electricityKwh: b.electricityKwh != null && b.electricityKwh !== "" ? Number(b.electricityKwh) : null,
+        })
+        .where(and(eq(brewsTable.id, id), eq(brewsTable.userId, userId)));
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to patch brew");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.delete("/brews/:id", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const id = Number(req.params.id);
