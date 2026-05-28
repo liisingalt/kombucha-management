@@ -58,11 +58,16 @@ export default function MaitsestaminePage() {
   const authFetch = useAuthFetch();
   const qc = useQueryClient();
   const [tab, setTab] = useState("uus");
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null);
 
   const flash = (msg: string) => {
-    setToast(msg);
+    setToast({ msg, isError: false });
     setTimeout(() => setToast(null), 2600);
+  };
+
+  const flashError = (msg: string) => {
+    setToast({ msg, isError: true });
+    setTimeout(() => setToast(null), 3500);
   };
 
   const stockQ = useQuery<Variant[]>({
@@ -151,6 +156,7 @@ export default function MaitsestaminePage() {
               qc.invalidateQueries({ queryKey: ["fermentations"] });
               flash("Maitsestamine salvestatud");
             }}
+            onError={flashError}
           />
         )}
         {tab === "ladu" && (
@@ -161,6 +167,7 @@ export default function MaitsestaminePage() {
               qc.invalidateQueries({ queryKey: ["flavoring-stock"] });
             }}
             flash={flash}
+            flashError={flashError}
           />
         )}
         {tab === "viisid" && (
@@ -171,6 +178,7 @@ export default function MaitsestaminePage() {
               qc.invalidateQueries({ queryKey: ["flavoring-methods"] });
             }}
             flash={flash}
+            flashError={flashError}
           />
         )}
         {tab === "ajalugu" && (
@@ -184,13 +192,14 @@ export default function MaitsestaminePage() {
               qc.invalidateQueries({ queryKey: ["flavoring-stock"] });
               flash("Maitsestamine kustutatud");
             }}
+            flashError={flashError}
           />
         )}
       </div>
 
       {toast && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-stone-900 text-white text-sm px-4 py-2 rounded-full shadow-lg z-50">
-          {toast}
+        <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 text-white text-sm px-4 py-2 rounded-full shadow-lg z-50 ${toast.isError ? "bg-red-600" : "bg-stone-900"}`}>
+          {toast.msg}
         </div>
       )}
     </Layout>
@@ -211,12 +220,14 @@ function UusMaitsestamine({
   ferms,
   authFetch,
   onSaved,
+  onError,
 }: {
   stock: Variant[];
   methods: Method[];
   ferms: Ferm[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onSaved: () => void;
+  onError: (msg: string) => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
@@ -259,6 +270,7 @@ function UusMaitsestamine({
       setNotes("");
       setFermId("");
     },
+    onError: (err: Error) => onError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const save = () => {
@@ -503,11 +515,13 @@ function MaitsestuseLadu({
   authFetch,
   onChange,
   flash,
+  flashError,
 }: {
   stock: Variant[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
   flash: (msg: string) => void;
+  flashError: (msg: string) => void;
 }) {
   const [name, setName] = useState("");
   const [olek, setOlek] = useState("kuivatatud");
@@ -527,6 +541,7 @@ function MaitsestuseLadu({
       setQtyG("");
       flash("Maitsestus lisatud");
     },
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   return (
@@ -587,7 +602,7 @@ function MaitsestuseLadu({
           <p className="text-sm text-stone-400">Ühtegi maitsestust pole veel lisatud.</p>
         ) : (
           stock.map((v) => (
-            <StockRow key={v.id} v={v} authFetch={authFetch} onChange={onChange} flash={flash} />
+            <StockRow key={v.id} v={v} authFetch={authFetch} onChange={onChange} flash={flash} flashError={flashError} />
           ))
         )}
       </div>
@@ -600,11 +615,13 @@ function StockRow({
   authFetch,
   onChange,
   flash,
+  flashError,
 }: {
   v: Variant;
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
   flash: (msg: string) => void;
+  flashError: (msg: string) => void;
 }) {
   const [coef, setCoef] = useState(String(v.coefficient));
   const [add, setAdd] = useState("");
@@ -618,6 +635,7 @@ function StockRow({
       onChange();
       flash("Koefitsient uuendatud");
     },
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const topup = useMutation({
@@ -630,6 +648,7 @@ function StockRow({
       setAdd("");
       flash("Grammid lisatud");
     },
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const del = useMutation({
@@ -641,6 +660,7 @@ function StockRow({
       onChange();
       flash("Maitsestus eemaldatud");
     },
+    onError: (err: Error) => flashError(err.message || "Kustutamine ebaõnnestus"),
   });
 
   return (
@@ -711,11 +731,13 @@ function Tootlusviisid({
   authFetch,
   onChange,
   flash,
+  flashError,
 }: {
   methods: Method[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
   flash: (msg: string) => void;
+  flashError: (msg: string) => void;
 }) {
   const [name, setName] = useState("");
 
@@ -729,6 +751,7 @@ function Tootlusviisid({
       setName("");
       flash("Töötlusviis lisatud");
     },
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const del = useMutation({
@@ -740,6 +763,7 @@ function Tootlusviisid({
       onChange();
       flash("Töötlusviis eemaldatud");
     },
+    onError: (err: Error) => flashError(err.message || "Kustutamine ebaõnnestus"),
   });
 
   return (
@@ -795,12 +819,14 @@ function Ajalugu({
   brews,
   authFetch,
   onChange,
+  flashError,
 }: {
   events: FlavEvent[];
   ferms: Ferm[];
   brews: BrewMin[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
+  flashError: (msg: string) => void;
 }) {
   const del = useMutation({
     mutationFn: async (id: number) => {
@@ -808,6 +834,7 @@ function Ajalugu({
       return res.json();
     },
     onSuccess: onChange,
+    onError: (err: Error) => flashError(err.message || "Kustutamine ebaõnnestus"),
   });
 
   if (events.length === 0) {

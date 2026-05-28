@@ -82,11 +82,16 @@ export default function ValmistaminePage() {
   const authFetch = useAuthFetch();
   const qc = useQueryClient();
   const [tab, setTab] = useState("uus");
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null);
 
   const flash = (msg: string) => {
-    setToast(msg);
+    setToast({ msg, isError: false });
     setTimeout(() => setToast(null), 2600);
+  };
+
+  const flashError = (msg: string) => {
+    setToast({ msg, isError: true });
+    setTimeout(() => setToast(null), 3500);
   };
 
   const teaQ = useQuery<Tea[]>({
@@ -162,6 +167,7 @@ export default function ValmistaminePage() {
               qc.invalidateQueries({ queryKey: ["brews-sugar-stock"] });
               flash("Pruulimine salvestatud");
             }}
+            onError={flashError}
           />
         )}
         {tab === "tee" && (
@@ -172,6 +178,7 @@ export default function ValmistaminePage() {
               qc.invalidateQueries({ queryKey: ["brews-tea-stock"] });
               flash("Tee varu uuendatud");
             }}
+            onError={flashError}
           />
         )}
         {tab === "suhkur" && (
@@ -182,6 +189,7 @@ export default function ValmistaminePage() {
               qc.invalidateQueries({ queryKey: ["brews-sugar-stock"] });
               flash("Suhkru varu uuendatud");
             }}
+            onError={flashError}
           />
         )}
         {tab === "ajalugu" && (
@@ -196,13 +204,14 @@ export default function ValmistaminePage() {
               qc.invalidateQueries({ queryKey: ["brews-sugar-stock"] });
             }}
             flash={flash}
+            flashError={flashError}
           />
         )}
       </div>
 
       {toast && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-stone-900 text-white text-sm px-4 py-2 rounded-full shadow-lg z-50">
-          {toast}
+        <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 text-white text-sm px-4 py-2 rounded-full shadow-lg z-50 ${toast.isError ? "bg-red-600" : "bg-stone-900"}`}>
+          {toast.msg}
         </div>
       )}
     </Layout>
@@ -232,11 +241,13 @@ function UusPruulimine({
   sugars,
   authFetch,
   onSaved,
+  onError,
 }: {
   teas: Tea[];
   sugars: Sugar[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onSaved: () => void;
+  onError: (msg: string) => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
@@ -308,6 +319,7 @@ function UusPruulimine({
       setNotes("");
       setElectricityKwh("");
     },
+    onError: (err: Error) => onError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const save = () => {
@@ -559,10 +571,12 @@ function TeeVaru({
   teas,
   authFetch,
   onChange,
+  onError,
 }: {
   teas: Tea[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
+  onError: (msg: string) => void;
 }) {
   const [name, setName] = useState("");
   const [existing, setExisting] = useState<number | "">("");
@@ -579,6 +593,7 @@ function TeeVaru({
       setQty("");
       setName("");
     },
+    onError: (err: Error) => onError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -595,6 +610,7 @@ function TeeVaru({
       onChange();
       setConfirmDeleteId(null);
     },
+    onError: (err: Error) => onError(err.message || "Kustutamine ebaõnnestus"),
   });
 
   const renameMut = useMutation({
@@ -612,6 +628,7 @@ function TeeVaru({
     },
     onError: (err: Error) => {
       setRenameError(err.message);
+      onError(err.message || "Salvestamine ebaõnnestus");
     },
   });
 
@@ -825,10 +842,12 @@ function SuhkruVaru({
   sugars,
   authFetch,
   onChange,
+  onError,
 }: {
   sugars: Sugar[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
+  onError: (msg: string) => void;
 }) {
   const [name, setName] = useState("");
   const [existing, setExisting] = useState<number | "">("");
@@ -857,6 +876,7 @@ function SuhkruVaru({
       setQty("");
       setName("");
     },
+    onError: (err: Error) => onError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const renameMut = useMutation({
@@ -872,6 +892,7 @@ function SuhkruVaru({
       setRenamingId(null);
       setRenameVal("");
     },
+    onError: (err: Error) => onError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const deleteMut = useMutation({
@@ -880,6 +901,7 @@ function SuhkruVaru({
       return res.json();
     },
     onSuccess: onChange,
+    onError: (err: Error) => onError(err.message || "Kustutamine ebaõnnestus"),
   });
 
   const add = () => {
@@ -1087,6 +1109,7 @@ function Ajalugu({
   authFetch,
   onChange,
   flash,
+  flashError,
 }: {
   brews: Brew[];
   teas: Tea[];
@@ -1094,6 +1117,7 @@ function Ajalugu({
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
   flash: (msg: string) => void;
+  flashError: (msg: string) => void;
 }) {
   const [editingId, setEditingId] = useState<number | null>(null);
 
@@ -1122,6 +1146,7 @@ function Ajalugu({
           onCloseEdit={() => setEditingId(null)}
           onChange={onChange}
           flash={flash}
+          flashError={flashError}
           sessionCount={b.sessionId != null ? (sessionCounts.get(b.sessionId) ?? 1) : 1}
         />
       ))}
@@ -1139,6 +1164,7 @@ function BrewCard({
   onCloseEdit,
   onChange,
   flash,
+  flashError,
   sessionCount,
 }: {
   brew: Brew;
@@ -1150,6 +1176,7 @@ function BrewCard({
   onCloseEdit: () => void;
   onChange: () => void;
   flash: (msg: string) => void;
+  flashError: (msg: string) => void;
   sessionCount: number;
 }) {
   const [date, setDate] = useState(brew.date);
@@ -1208,6 +1235,7 @@ function BrewCard({
       onChange();
       flash("Pruulimine kustutatud");
     },
+    onError: (err: Error) => flashError(err.message || "Kustutamine ebaõnnestus"),
   });
 
   const patchMut = useMutation({
@@ -1220,6 +1248,7 @@ function BrewCard({
       flash("Pruulimine salvestatud");
       onCloseEdit();
     },
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const save = () => {

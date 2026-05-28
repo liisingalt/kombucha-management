@@ -151,11 +151,16 @@ export default function LaduPage() {
   const authFetch = useAuthFetch();
   const qc = useQueryClient();
   const [tab, setTab] = useState("valmistoodang");
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null);
 
   const flash = (msg: string) => {
-    setToast(msg);
+    setToast({ msg, isError: false });
     setTimeout(() => setToast(null), 2600);
+  };
+
+  const flashError = (msg: string) => {
+    setToast({ msg, isError: true });
+    setTimeout(() => setToast(null), 3500);
   };
 
   const { data = EMPTY, isLoading, isError } = useQuery<LaduData>({
@@ -199,7 +204,7 @@ export default function LaduPage() {
     onSuccess: (updated) => {
       qc.setQueryData(LADU_QUERY_KEY, updated);
     },
-    onError: (err: Error) => flash(err.message),
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const undoMutation = useMutation({
@@ -210,7 +215,7 @@ export default function LaduPage() {
       qc.invalidateQueries({ queryKey: LADU_QUERY_KEY });
       flash("Kanne võetud tagasi");
     },
-    onError: (err: Error) => flash(err.message),
+    onError: (err: Error) => flashError(err.message || "Kustutamine ebaõnnestus"),
   });
 
   const addFlavorMutation = useMutation({
@@ -228,7 +233,7 @@ export default function LaduPage() {
       }));
       flash("Maitse lisatud");
     },
-    onError: (err: Error) => flash(err.message),
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const removeFlavorMutation = useMutation({
@@ -243,7 +248,7 @@ export default function LaduPage() {
       }));
       flash("Maitse eemaldatud");
     },
-    onError: (err: Error) => flash(err.message),
+    onError: (err: Error) => flashError(err.message || "Kustutamine ebaõnnestus"),
   });
 
   const updateFlavorMutation = useMutation({
@@ -261,7 +266,7 @@ export default function LaduPage() {
       }));
       flash("Maitse uuendatud");
     },
-    onError: (err: Error) => flash(err.message),
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const updateCapMutation = useMutation({
@@ -279,7 +284,7 @@ export default function LaduPage() {
       }));
       flash("Kork uuendatud");
     },
-    onError: (err: Error) => flash(err.message),
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const finishedGoodsCommitMutation = useMutation({
@@ -293,7 +298,7 @@ export default function LaduPage() {
     onSuccess: (updated) => {
       qc.setQueryData(LADU_QUERY_KEY, updated);
     },
-    onError: (err: Error) => flash(err.message),
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const addMaterialMutation = useMutation<Material, Error, { name: string; unit: string; minStock?: number }>({
@@ -311,7 +316,7 @@ export default function LaduPage() {
       }));
       flash("Tooraine lisatud");
     },
-    onError: (err: Error) => flash(err.message),
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const updateMaterialMutation = useMutation<Material, Error, { id: number; name: string; unit: string; minStock?: number | null }>({
@@ -329,7 +334,7 @@ export default function LaduPage() {
       }));
       flash("Tooraine uuendatud");
     },
-    onError: (err: Error) => flash(err.message),
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const deleteMaterialMutation = useMutation({
@@ -344,7 +349,7 @@ export default function LaduPage() {
       }));
       flash("Tooraine eemaldatud");
     },
-    onError: (err: Error) => flash(err.message),
+    onError: (err: Error) => flashError(err.message || "Kustutamine ebaõnnestus"),
   });
 
   const resetMutation = useMutation({
@@ -355,7 +360,7 @@ export default function LaduPage() {
       qc.setQueryData(LADU_QUERY_KEY, EMPTY);
       flash("Andmed lähtestatud");
     },
-    onError: (err: Error) => flash(err.message),
+    onError: (err: Error) => flashError(err.message || "Lähtestamine ebaõnnestus"),
   });
 
   const resetAll = () => {
@@ -473,8 +478,8 @@ export default function LaduPage() {
       </div>
 
       {toast && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-stone-900 text-white text-sm px-4 py-2 rounded-full shadow-lg z-50">
-          {toast}
+        <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 text-white text-sm px-4 py-2 rounded-full shadow-lg z-50 ${toast.isError ? "bg-red-600" : "bg-stone-900"}`}>
+          {toast.msg}
         </div>
       )}
     </Layout>

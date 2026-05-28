@@ -22,6 +22,10 @@ function useAuthFetch() {
         ...(options?.headers ?? {}),
       },
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `HTTP ${res.status}`);
+    }
     return res;
   };
 }
@@ -120,12 +124,14 @@ function StarterLinkDropdown({
   allBatches,
   authFetch,
   onClose,
+  onError,
 }: {
   batchId: number;
   currentSourceId: number | null;
   allBatches: LifecycleItem[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onClose: () => void;
+  onError: (msg: string) => void;
 }) {
   const qc = useQueryClient();
   const mut = useMutation({
@@ -140,6 +146,7 @@ function StarterLinkDropdown({
       qc.invalidateQueries({ queryKey: ["lifecycle"] });
       onClose();
     },
+    onError: (err: Error) => onError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   const candidates = allBatches.filter((b) => b.id !== batchId);
@@ -187,6 +194,7 @@ function LifecycleCard({
   expanded,
   onToggle,
   onNavigateTo,
+  onError,
 }: {
   item: LifecycleItem;
   allBatches: LifecycleItem[];
@@ -194,6 +202,7 @@ function LifecycleCard({
   expanded: boolean;
   onToggle: () => void;
   onNavigateTo: (id: number) => void;
+  onError: (msg: string) => void;
 }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [aiRec, setAiRec] = useState<string | null>(null);
@@ -375,6 +384,7 @@ function LifecycleCard({
                         allBatches={allBatches}
                         authFetch={authFetch}
                         onClose={() => setLinkOpen(false)}
+                        onError={onError}
                       />
                     </>
                   )}
@@ -721,6 +731,12 @@ export default function EluigaPage() {
   const authFetch = useAuthFetch();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [toast, setToast] = useState<{ msg: string; isError: boolean } | null>(null);
+
+  const flashError = (msg: string) => {
+    setToast({ msg, isError: true });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   const { data, isLoading } = useQuery<LifecycleItem[]>({
     queryKey: ["lifecycle"],
@@ -790,9 +806,16 @@ export default function EluigaPage() {
             expanded={expandedId === item.id}
             onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
             onNavigateTo={navigateTo}
+            onError={flashError}
           />
         ))}
       </div>
+
+      {toast && (
+        <div className={`fixed bottom-5 left-1/2 -translate-x-1/2 text-white text-sm px-4 py-2 rounded-full shadow-lg z-50 ${toast.isError ? "bg-red-600" : "bg-stone-900"}`}>
+          {toast.msg}
+        </div>
+      )}
     </Layout>
   );
 }
