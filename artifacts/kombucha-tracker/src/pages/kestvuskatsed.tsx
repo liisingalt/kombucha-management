@@ -105,6 +105,55 @@ function fmtD(d: string | Date | null | undefined) {
   return format(new Date(d), "d. MMM yyyy");
 }
 
+function StatBarChart({ groups, title }: { groups: StatsGroup[]; title: string }) {
+  const maxVal = Math.max(...groups.map((g) => g.avgAllDays), 1);
+  const sorted = [...groups].sort((a, b) => a.label.localeCompare(b.label));
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-foreground mb-2">{title}</h3>
+      <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+        {sorted.map((g) => {
+          const barPct = Math.max(6, Math.round((g.avgAllDays / maxVal) * 100));
+          const heaPct = g.count > 0 ? Math.round((g.heaCount / g.count) * 100) : 0;
+          const barColor =
+            heaPct >= 50
+              ? "bg-green-400 dark:bg-green-500"
+              : heaPct > 0
+              ? "bg-amber-400 dark:bg-amber-500"
+              : "bg-stone-300 dark:bg-stone-600";
+          return (
+            <div key={g.label}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold text-foreground">{g.label}</span>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>{g.count} katset</span>
+                  {g.heaCount > 0 && (
+                    <span className="text-green-600 dark:text-green-400 font-medium">{g.heaCount} &ldquo;hea&rdquo;</span>
+                  )}
+                </div>
+              </div>
+              <div className="relative h-9 bg-muted/30 rounded-xl overflow-hidden">
+                <div
+                  className={cn("absolute inset-y-0 left-0 rounded-xl transition-all", barColor)}
+                  style={{ width: `${barPct}%` }}
+                />
+                <div className="absolute inset-0 flex items-center px-3">
+                  <span className="text-xs font-bold text-foreground/90">
+                    {Math.round(g.avgAllDays / 30.5)}k &middot; {g.avgAllDays}p
+                    {g.heaCount > 0 && heaPct < 100 && (
+                      <span className="font-normal text-muted-foreground ml-1">({heaPct}% &ldquo;hea&rdquo;)</span>
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function KestvuskatsedPage() {
   const { getToken } = useAuth();
   const [items, setItems] = useState<BottleTest[]>([]);
@@ -735,115 +784,15 @@ export default function KestvuskatsedPage() {
                   </div>
                 </div>
 
-                {/* By steep time */}
+                {/* Bar charts — by brewing params */}
                 {analytics.bySteepping.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
-                      Tõmbeaja järgi
-                    </h3>
-                    <div className="rounded-2xl border border-border overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-border bg-muted/40">
-                            <th className="text-left px-4 py-2 text-xs font-semibold text-muted-foreground">Tõmbeaeg</th>
-                            <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Katseid</th>
-                            <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">"Hea"</th>
-                            <th className="text-right px-4 py-2 text-xs font-semibold text-muted-foreground">Kesk. säilivus</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {analytics.bySteepping
-                            .sort((a, b) => a.label.localeCompare(b.label))
-                            .map((g, i) => (
-                              <tr key={g.label} className={i % 2 === 0 ? "" : "bg-muted/20"}>
-                                <td className="px-4 py-2.5 font-medium">{g.label}</td>
-                                <td className="px-3 py-2.5 text-center text-muted-foreground">{g.count}</td>
-                                <td className="px-3 py-2.5 text-center">
-                                  <span className="text-green-700 dark:text-green-400 font-medium">{g.heaCount}</span>
-                                </td>
-                                <td className="px-4 py-2.5 text-right font-semibold">
-                                  {Math.round(g.avgDays / 30.5)}k ({g.avgDays}p)
-                                </td>
-                              </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                  <StatBarChart groups={analytics.bySteepping} title="Tõmbeaja järgi" />
                 )}
-
-                {/* By temperature */}
                 {analytics.byTemp.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground mb-2">
-                      Temperatuuri järgi
-                    </h3>
-                    <div className="rounded-2xl border border-border overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-border bg-muted/40">
-                            <th className="text-left px-4 py-2 text-xs font-semibold text-muted-foreground">Temperatuur</th>
-                            <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Katseid</th>
-                            <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">"Hea"</th>
-                            <th className="text-right px-4 py-2 text-xs font-semibold text-muted-foreground">Kesk. säilivus</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {analytics.byTemp
-                            .sort((a, b) => a.label.localeCompare(b.label))
-                            .map((g, i) => (
-                              <tr key={g.label} className={i % 2 === 0 ? "" : "bg-muted/20"}>
-                                <td className="px-4 py-2.5 font-medium">{g.label}</td>
-                                <td className="px-3 py-2.5 text-center text-muted-foreground">{g.count}</td>
-                                <td className="px-3 py-2.5 text-center">
-                                  <span className="text-green-700 dark:text-green-400 font-medium">{g.heaCount}</span>
-                                </td>
-                                <td className="px-4 py-2.5 text-right font-semibold">
-                                  {Math.round(g.avgDays / 30.5)}k ({g.avgDays}p)
-                                </td>
-                              </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                  <StatBarChart groups={analytics.byTemp} title="Temperatuuri järgi" />
                 )}
-
-                {/* By flavoring coefficient */}
                 {analytics.byCoeff.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground mb-2">
-                      Maitsestuskoefitsiendi järgi
-                    </h3>
-                    <div className="rounded-2xl border border-border overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-border bg-muted/40">
-                            <th className="text-left px-4 py-2 text-xs font-semibold text-muted-foreground">Koefitsient</th>
-                            <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Katseid</th>
-                            <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">"Hea"</th>
-                            <th className="text-right px-4 py-2 text-xs font-semibold text-muted-foreground">Kesk. säilivus</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {analytics.byCoeff
-                            .sort((a, b) => a.label.localeCompare(b.label))
-                            .map((g, i) => (
-                              <tr key={g.label} className={i % 2 === 0 ? "" : "bg-muted/20"}>
-                                <td className="px-4 py-2.5 font-medium">{g.label}</td>
-                                <td className="px-3 py-2.5 text-center text-muted-foreground">{g.count}</td>
-                                <td className="px-3 py-2.5 text-center">
-                                  <span className="text-green-700 dark:text-green-400 font-medium">{g.heaCount}</span>
-                                </td>
-                                <td className="px-4 py-2.5 text-right font-semibold">
-                                  {Math.round(g.avgDays / 30.5)}k ({g.avgDays}p)
-                                </td>
-                              </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                  <StatBarChart groups={analytics.byCoeff} title="Maitsestuskoefitsiendi järgi" />
                 )}
 
                 {analytics.bySteepping.length === 0 && analytics.byTemp.length === 0 && analytics.byCoeff.length === 0 && analytics.totalCompleted > 0 && (
