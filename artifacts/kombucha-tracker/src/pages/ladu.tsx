@@ -1004,9 +1004,15 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
                 ? <option value="">— korki pole —</option>
                 : <>
                     {capId === "" && <option value="" disabled>— vali kork —</option>}
-                    {sizeCaps.map((c) => (
-                      <option key={c.id} value={c.id}>{capLabel(c)}</option>
-                    ))}
+                    {sizeCaps.map((c) => {
+                      const flavor = flavorId !== "" ? data.flavors.find((f) => f.id === flavorId) : null;
+                      const isDefault = flavor?.defaultCapId === c.id;
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {capLabel(c)}{isDefault ? " (vaikimisi)" : ""}
+                        </option>
+                      );
+                    })}
                   </>
               }
             </select>
