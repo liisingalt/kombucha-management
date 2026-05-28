@@ -13,6 +13,7 @@ import brewsRouter from "./brews";
 import fermentationsRouter from "./fermentations";
 import flavoringRouter from "./flavoring";
 import backupsRouter from "./backups";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(brewsRouter);
 router.use(fermentationsRouter);
 router.use(flavoringRouter);
 router.use(backupsRouter);
+router.use(adminRouter);
 
 export default router;
