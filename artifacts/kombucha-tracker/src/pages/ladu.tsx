@@ -454,7 +454,6 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
   const [returned, setReturned] = useState("");
   const [fromLabeled, setFromLabeled] = useState("");
   const [fromCustom, setFromCustom] = useState("");
-  const [labeled, setLabeled] = useState("");
   const [capId, setCapId] = useState<number | "">("");
   const [oldCaps, setOldCaps] = useState("");
 
@@ -465,12 +464,11 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
   const fromLab = Math.min(ret, Math.max(0, parseInt(fromLabeled) || 0));
   const newCount = t - ret;
   const fromCust = Math.min(newCount, Math.max(0, parseInt(fromCustom) || 0));
-  const lab = Math.min(newCount - fromCust, Math.max(0, parseInt(labeled) || 0));
   const old = Math.min(t, Math.max(0, parseInt(oldCaps) || 0));
 
   const bottleDeduct = newCount - fromCust;
   const customLabelBottleDeduct = fromCust;
-  const labelDeduct = newCount - fromCust - lab;
+  const labelDeduct = newCount - fromCust;
   const labeledBottleDeduct = fromLab;
   const capDeduct = capId !== "" ? t - old : 0;
 
@@ -490,7 +488,6 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
     if (ret) parts.push(`${ret} tagasi tulnud pudelit`);
     if (fromLab) parts.push(`sh ${fromLab} sildistatud varust`);
     if (fromCust) parts.push(`${fromCust} kohandatud sildiga pudelit`);
-    if (lab) parts.push(`${lab} juba sildiga`);
     if (old) parts.push(`${old} vana korki`);
     if (cap) parts.push(`kork: ${capLabel(cap)}`);
 
@@ -499,7 +496,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
       {
         onSuccess: () => {
           flash("Villimine kirja pandud");
-          setTotal(""); setReturned(""); setFromLabeled(""); setFromCustom(""); setLabeled(""); setOldCaps("");
+          setTotal(""); setReturned(""); setFromLabeled(""); setFromCustom(""); setOldCaps("");
         },
       }
     );
@@ -552,12 +549,6 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
           <label className="block text-sm text-stone-600 mb-1">Kohandatud sildiga pudelid</label>
           <Num value={fromCustom} onChange={setFromCustom} />
           <p className="text-xs text-stone-400 mt-1">Uued pudelid kohandatud sildiga — arvatakse vastavast varust</p>
-        </div>
-
-        <div>
-          <label className="block text-sm text-stone-600 mb-1">Lisaks juba sildiga (ainult silt)</label>
-          <Num value={labeled} onChange={setLabeled} />
-          <p className="text-xs text-stone-400 mt-1">Ainult silt oli olemas, pudel uus</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
