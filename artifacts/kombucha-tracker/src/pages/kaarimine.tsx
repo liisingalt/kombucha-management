@@ -17,6 +17,7 @@ type Batch = {
   notes: string;
   vessels: Vessel[];
 };
+type FlavEvent = { id: number; date: string; fermentationBatchId: number | null };
 
 const inputCls =
   "w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600";
@@ -85,6 +86,14 @@ export default function KaariminePage() {
     },
   });
 
+  const flavEventsQ = useQuery<FlavEvent[]>({
+    queryKey: ["flavoring-events"],
+    queryFn: async () => {
+      const res = await authFetch("/flavoring/events");
+      return res.json();
+    },
+  });
+
   const teas = teaQ.data ?? [];
   const brews = brewsQ.data ?? [];
 
@@ -134,6 +143,7 @@ export default function KaariminePage() {
           <Ajalugu
             batches={batchQ.data ?? []}
             teas={teas}
+            flavEvents={flavEventsQ.data ?? []}
             authFetch={authFetch}
             onChange={() => {
               qc.invalidateQueries({ queryKey: ["fermentations"] });
@@ -414,12 +424,14 @@ function UusKaarimine({
 function Ajalugu({
   batches,
   teas,
+  flavEvents,
   authFetch,
   onChange,
   flash,
 }: {
   batches: Batch[];
   teas: Tea[];
+  flavEvents: FlavEvent[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
   flash: (msg: string) => void;
@@ -431,7 +443,7 @@ function Ajalugu({
   return (
     <div className="space-y-3">
       {batches.map((b) => (
-        <BatchCard key={b.id} batch={b} teas={teas} authFetch={authFetch} onChange={onChange} flash={flash} />
+        <BatchCard key={b.id} batch={b} teas={teas} flavEvents={flavEvents} authFetch={authFetch} onChange={onChange} flash={flash} />
       ))}
     </div>
   );
@@ -440,16 +452,21 @@ function Ajalugu({
 function BatchCard({
   batch,
   teas,
+  flavEvents,
   authFetch,
   onChange,
   flash,
 }: {
   batch: Batch;
   teas: Tea[];
+  flavEvents: FlavEvent[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
   flash: (msg: string) => void;
 }) {
+  const linkedEvent = flavEvents.find((e) => e.fermentationBatchId === batch.id) ?? null;
+  const linkedFlavoringDate = linkedEvent?.date ?? null;
+
   const [editOpen, setEditOpen] = useState(false);
   const [editTeaSort, setEditTeaSort] = useState(batch.teaSort);
   const [editStartDate, setEditStartDate] = useState(batch.startDate);
@@ -486,7 +503,8 @@ function BatchCard({
     (s, v) => s + (parseFloat(v.volumeL) || 0) * (parseInt(v.count) || 0),
     0
   );
-  const editD = days(editStartDate, editFlavoringDate);
+  const effectiveFlavoringDate = linkedFlavoringDate ?? (editFlavoringDate || null);
+  const editD = days(editStartDate, effectiveFlavoringDate);
   const d = days(batch.startDate, batch.flavoringDate);
 
   const patch = useMutation({
@@ -529,7 +547,7 @@ function BatchCard({
     patch.mutate({
       teaSort: editTeaSort,
       startDate: editStartDate,
-      flavoringDate: editFlavoringDate || null,
+      flavoringDate: effectiveFlavoringDate || null,
       notes: editNotes,
       vessels: cleaned,
     });
@@ -573,12 +591,19 @@ function BatchCard({
           </div>
           <div>
             <label className="block text-xs text-stone-500 mb-1">Maitsestamise kuupäev</label>
-            <input
-              type="date"
-              value={editFlavoringDate}
-              onChange={(e) => setEditFlavoringDate(e.target.value)}
-              className={inputCls}
-            />
+            {linkedFlavoringDate ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 font-medium text-sm">
+                {new Date(linkedFlavoringDate).toLocaleDateString("et-EE")}
+                <span className="ml-2 text-xs text-amber-600 font-normal">automaatne maitsestamisest</span>
+              </div>
+            ) : (
+              <input
+                type="date"
+                value={editFlavoringDate}
+                onChange={(e) => setEditFlavoringDate(e.target.value)}
+                className={inputCls}
+              />
+            )}
           </div>
           <div>
             <label className="block text-xs text-stone-500 mb-1">Käärimise aeg</label>
@@ -730,6 +755,9 @@ function BatchCard({
             <p className="text-xs text-stone-500">
               Maitsestamine: {new Date(batch.flavoringDate).toLocaleDateString("et-EE")}
               {d != null ? ` · ${d} päeva` : ""}
+              {linkedFlavoringDate && (
+                <span className="ml-1 text-amber-600">· automaatne</span>
+              )}
             </p>
           )}
           {batch.notes && <p className="text-sm text-stone-600">{batch.notes}</p>}
