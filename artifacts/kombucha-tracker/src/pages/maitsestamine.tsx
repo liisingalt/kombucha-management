@@ -480,6 +480,14 @@ function UusMaitsestamine({
       </div>
 
       <button
+        type="button"
+        onClick={addBlock}
+        className="w-full rounded-lg border-2 border-dashed border-amber-400 py-3 text-amber-700 font-medium hover:bg-amber-50 flex items-center justify-center gap-2"
+      >
+        <span className="text-lg leading-none">+</span> lisa maitsestus
+      </button>
+
+      <button
         onClick={save}
         disabled={m.isPending}
         className="w-full rounded-lg bg-amber-700 py-3 text-white font-medium hover:bg-amber-800 disabled:opacity-50"

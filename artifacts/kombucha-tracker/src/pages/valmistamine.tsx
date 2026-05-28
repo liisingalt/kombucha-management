@@ -520,6 +520,13 @@ function UusPruulimine({
         </Field>
       </div>
 
+      <a
+        href={`${BASE_URL}/maitsestamine`}
+        className="w-full rounded-lg border-2 border-dashed border-amber-400 py-3 text-amber-700 font-medium hover:bg-amber-50 flex items-center justify-center gap-2"
+      >
+        <span className="text-lg leading-none">+</span> lisa maitsestus
+      </a>
+
       <button
         onClick={save}
         disabled={m.isPending || !portionCalcs.some((c) => c.boiled > 0) || !sugarStockId}
