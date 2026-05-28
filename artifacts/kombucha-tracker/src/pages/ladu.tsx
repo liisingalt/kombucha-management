@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useAuth } from "@clerk/react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle } from "lucide-react";
 import { Layout } from "@/components/Layout";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 const SIZES = [330, 500, 750];
 const CAP_TYPES = ["kroonkork", "punnkork"];
+const LADU_QUERY_KEY = ["ladu"] as const;
 
 const COLOR_HEX: Record<string, string> = {
   sinine: "#2563eb",
@@ -91,10 +93,29 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-export default function LaduPage() {
+function useAuthFetch() {
   const { getToken } = useAuth();
-  const [data, setData] = useState<LaduData>(EMPTY);
-  const [loading, setLoading] = useState(true);
+  return async (path: string, options?: RequestInit) => {
+    const token = await getToken();
+    const res = await fetch(`${BASE_URL}/api${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        ...(options?.headers ?? {}),
+      },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `HTTP ${res.status}`);
+    }
+    return res;
+  };
+}
+
+export default function LaduPage() {
+  const authFetch = useAuthFetch();
+  const qc = useQueryClient();
   const [tab, setTab] = useState("ladu");
   const [toast, setToast] = useState<string | null>(null);
 
@@ -103,86 +124,89 @@ export default function LaduPage() {
     setTimeout(() => setToast(null), 2600);
   };
 
-  const authFetch = async (path: string, options?: RequestInit) => {
-    const token = await getToken();
-    return fetch(`${BASE_URL}/api${path}`, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        ...(options?.headers ?? {}),
-      },
-    });
-  };
-
-  const load = async () => {
-    try {
+  const { data = EMPTY, isLoading, isError } = useQuery<LaduData>({
+    queryKey: LADU_QUERY_KEY,
+    queryFn: async () => {
       const res = await authFetch("/ladu");
-      if (res.ok) setData(await res.json());
-    } finally {
-      setLoading(false);
-    }
-  };
+      return res.json();
+    },
+  });
 
-  useEffect(() => { load(); }, []);
+  const commitMutation = useMutation({
+    mutationFn: async ({ deltas, type, summary }: { deltas: unknown[]; type: string; summary: string }) => {
+      const res = await authFetch("/ladu/commit", {
+        method: "POST",
+        body: JSON.stringify({ type, summary, deltas }),
+      });
+      return res.json() as Promise<LaduData>;
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData(LADU_QUERY_KEY, updated);
+    },
+    onError: (err: Error) => flash(err.message),
+  });
 
-  const commit = async (deltas: unknown[], type: string, summary: string) => {
-    const res = await authFetch("/ladu/commit", {
-      method: "POST",
-      body: JSON.stringify({ type, summary, deltas }),
-    });
-    if (res.ok) {
-      setData(await res.json());
-    } else {
-      const d = await res.json().catch(() => ({}));
-      flash(d.error ?? "Viga");
-    }
-  };
-
-  const undo = async (movId: number) => {
-    const res = await authFetch(`/ladu/movements/${movId}`, { method: "DELETE" });
-    if (res.ok) {
-      await load();
+  const undoMutation = useMutation({
+    mutationFn: async (movId: number) => {
+      await authFetch(`/ladu/movements/${movId}`, { method: "DELETE" });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: LADU_QUERY_KEY });
       flash("Kanne võetud tagasi");
-    } else {
-      flash("Tagasivõtmine ebaõnnestus");
-    }
-  };
+    },
+    onError: (err: Error) => flash(err.message),
+  });
 
-  const addFlavor = async (name: string, defaultCapId: number | null) => {
-    const res = await authFetch("/ladu/flavors", {
-      method: "POST",
-      body: JSON.stringify({ name, defaultCapId }),
-    });
-    if (res.ok) {
-      const flavor = await res.json();
-      setData((d) => ({ ...d, flavors: [...d.flavors, flavor] }));
+  const addFlavorMutation = useMutation({
+    mutationFn: async ({ name, defaultCapId }: { name: string; defaultCapId: number | null }) => {
+      const res = await authFetch("/ladu/flavors", {
+        method: "POST",
+        body: JSON.stringify({ name, defaultCapId }),
+      });
+      return res.json() as Promise<Flavor>;
+    },
+    onSuccess: (flavor) => {
+      qc.setQueryData<LaduData>(LADU_QUERY_KEY, (old = EMPTY) => ({
+        ...old,
+        flavors: [...old.flavors, flavor],
+      }));
       flash("Maitse lisatud");
-    }
-  };
+    },
+    onError: (err: Error) => flash(err.message),
+  });
 
-  const removeFlavor = async (id: number) => {
-    const res = await authFetch(`/ladu/flavors/${id}`, { method: "DELETE" });
-    if (res.ok) {
-      setData((d) => ({ ...d, flavors: d.flavors.filter((f) => f.id !== id) }));
+  const removeFlavorMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await authFetch(`/ladu/flavors/${id}`, { method: "DELETE" });
+      return id;
+    },
+    onSuccess: (id) => {
+      qc.setQueryData<LaduData>(LADU_QUERY_KEY, (old = EMPTY) => ({
+        ...old,
+        flavors: old.flavors.filter((f) => f.id !== id),
+      }));
       flash("Maitse eemaldatud");
-    } else {
-      const d = await res.json().catch(() => ({}));
-      flash(d.error ?? "Kustutamine ebaõnnestus");
-    }
-  };
+    },
+    onError: (err: Error) => flash(err.message),
+  });
 
-  const resetAll = async () => {
-    if (!confirm("Kustutan kõik andmed?")) return;
-    const res = await authFetch("/ladu/reset", { method: "DELETE" });
-    if (res.ok) {
-      setData(EMPTY);
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      await authFetch("/ladu/reset", { method: "DELETE" });
+    },
+    onSuccess: () => {
+      qc.setQueryData(LADU_QUERY_KEY, EMPTY);
       flash("Andmed lähtestatud");
-    }
+    },
+    onError: (err: Error) => flash(err.message),
+  });
+
+  const resetAll = () => {
+    if (!confirm("Kustutan kõik andmed?")) return;
+    resetMutation.mutate();
   };
 
   const flavorName = (id: number) => data.flavors.find((f) => f.id === id)?.name ?? "?";
-
   const bottleQty = (size: number) => data.bottles.find((b) => b.size === size)?.qty ?? 0;
 
   const tabs = [
@@ -193,10 +217,18 @@ export default function LaduPage() {
     { id: "ajalugu", label: "Ajalugu", icon: History },
   ];
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-[50vh] text-stone-500">Laen ladu…</div>
+      </Layout>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-[50vh] text-red-500">Lao laadimine ebaõnnestus.</div>
       </Layout>
     );
   }
@@ -234,16 +266,21 @@ export default function LaduPage() {
 
         {tab === "ladu" && <LaduTab data={data} flavorName={flavorName} bottleQty={bottleQty} />}
         {tab === "villimine" && (
-          <VillimineTab data={data} flavorName={flavorName} commit={commit} flash={flash} />
+          <VillimineTab data={data} flavorName={flavorName} commitMutation={commitMutation} flash={flash} />
         )}
         {tab === "varu" && (
-          <LisaVaruTab data={data} commit={commit} flash={flash} />
+          <LisaVaruTab data={data} commitMutation={commitMutation} flash={flash} />
         )}
         {tab === "maitsed" && (
-          <MaitsedTab data={data} addFlavor={addFlavor} removeFlavor={removeFlavor} resetAll={resetAll} />
+          <MaitsedTab
+            data={data}
+            addFlavorMutation={addFlavorMutation}
+            removeFlavorMutation={removeFlavorMutation}
+            resetAll={resetAll}
+          />
         )}
         {tab === "ajalugu" && (
-          <AjaluguTab data={data} undo={undo} />
+          <AjaluguTab data={data} undoMutation={undoMutation} />
         )}
       </div>
 
@@ -255,6 +292,8 @@ export default function LaduPage() {
     </Layout>
   );
 }
+
+type CommitMutation = ReturnType<typeof useMutation<LaduData, Error, { deltas: unknown[]; type: string; summary: string }>>;
 
 function LaduTab({ data, flavorName, bottleQty }: { data: LaduData; flavorName: (id: number) => string; bottleQty: (size: number) => number }) {
   const Low = ({ show }: { show: boolean }) =>
@@ -348,7 +387,7 @@ function LaduTab({ data, flavorName, bottleQty }: { data: LaduData; flavorName: 
   );
 }
 
-function VillimineTab({ data, flavorName, commit, flash }: { data: LaduData; flavorName: (id: number) => string; commit: (deltas: unknown[], type: string, summary: string) => Promise<void>; flash: (msg: string) => void }) {
+function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduData; flavorName: (id: number) => string; commitMutation: CommitMutation; flash: (msg: string) => void }) {
   const [flavorId, setFlavorId] = useState<number | "">(data.flavors[0]?.id ?? "");
   const [size, setSize] = useState<number>(330);
   const [total, setTotal] = useState("");
@@ -356,16 +395,8 @@ function VillimineTab({ data, flavorName, commit, flash }: { data: LaduData; fla
   const [labeled, setLabeled] = useState("");
   const [capId, setCapId] = useState<number | "">("");
   const [oldCaps, setOldCaps] = useState("");
-  const [saving, setSaving] = useState(false);
 
   const sizeCaps = data.caps.filter((c) => c.size === size);
-
-  useEffect(() => {
-    if (flavorId === "") return;
-    const f = data.flavors.find((x) => x.id === flavorId);
-    const def = data.caps.find((c) => c.id === f?.defaultCapId && c.size === size);
-    setCapId(def ? def.id : sizeCaps[0]?.id ?? "");
-  }, [flavorId, size, data.caps, data.flavors]);
 
   const t = Math.max(0, parseInt(total) || 0);
   const ret = Math.min(t, Math.max(0, parseInt(returned) || 0));
@@ -376,7 +407,7 @@ function VillimineTab({ data, flavorName, commit, flash }: { data: LaduData; fla
   const labelDeduct = t - ret - lab;
   const capDeduct = capId !== "" ? t - old : 0;
 
-  const villi = async () => {
+  const villi = () => {
     if (!flavorId) return flash("Vali maitse");
     if (t <= 0) return flash("Sisesta pudelite arv");
 
@@ -392,11 +423,15 @@ function VillimineTab({ data, flavorName, commit, flash }: { data: LaduData; fla
     if (old) parts.push(`${old} vana korki`);
     if (cap) parts.push(`kork: ${capLabel(cap)}`);
 
-    setSaving(true);
-    await commit(deltas, "villimine", parts.join(" · "));
-    setSaving(false);
-    flash("Villimine kirja pandud");
-    setTotal(""); setReturned(""); setLabeled(""); setOldCaps("");
+    commitMutation.mutate(
+      { deltas, type: "villimine", summary: parts.join(" · ") },
+      {
+        onSuccess: () => {
+          flash("Villimine kirja pandud");
+          setTotal(""); setReturned(""); setLabeled(""); setOldCaps("");
+        },
+      }
+    );
   };
 
   return (
@@ -478,16 +513,16 @@ function VillimineTab({ data, flavorName, commit, flash }: { data: LaduData; fla
 
       <button
         onClick={villi}
-        disabled={saving}
+        disabled={commitMutation.isPending}
         className="w-full rounded-lg bg-amber-700 py-3 text-white font-medium hover:bg-amber-800 transition disabled:opacity-60"
       >
-        {saving ? "Salvestan…" : "Pane villimine kirja"}
+        {commitMutation.isPending ? "Salvestan…" : "Pane villimine kirja"}
       </button>
     </div>
   );
 }
 
-function LisaVaruTab({ data, commit, flash }: { data: LaduData; commit: (deltas: unknown[], type: string, summary: string) => Promise<void>; flash: (msg: string) => void }) {
+function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMutation: CommitMutation; flash: (msg: string) => void }) {
   const [bSize, setBSize] = useState<number>(330);
   const [bQty, setBQty] = useState("");
   const [lFlavor, setLFlavor] = useState<number | "">(data.flavors[0]?.id ?? "");
@@ -502,39 +537,45 @@ function LisaVaruTab({ data, commit, flash }: { data: LaduData; commit: (deltas:
 
   const flavorN = (id: number | "") => (id !== "" ? (data.flavors.find((f) => f.id === id)?.name ?? "?") : "—");
 
-  const addBottles = async () => {
+  const addBottles = () => {
     const q = parseInt(bQty) || 0;
     if (q <= 0) return flash("Sisesta kogus");
-    await commit([{ kind: "bottle", key: bSize, amount: q }], "ost", `Ostsin ${q} × pudel ${bSize} ml`);
-    flash("Pudelid lisatud");
-    setBQty("");
+    commitMutation.mutate(
+      { deltas: [{ kind: "bottle", key: bSize, amount: q }], type: "ost", summary: `Ostsin ${q} × pudel ${bSize} ml` },
+      { onSuccess: () => { flash("Pudelid lisatud"); setBQty(""); } }
+    );
   };
 
-  const addLabels = async () => {
+  const addLabels = () => {
     const q = parseInt(lQty) || 0;
     if (!lFlavor) return flash("Vali maitse");
     if (q <= 0) return flash("Sisesta kogus");
-    await commit([{ kind: "label", flavorId: lFlavor, size: lSize, amount: q }], "ost", `Ostsin ${q} × silt ${flavorN(lFlavor)} ${lSize} ml`);
-    flash("Sildid lisatud");
-    setLQty("");
+    commitMutation.mutate(
+      { deltas: [{ kind: "label", flavorId: lFlavor, size: lSize, amount: q }], type: "ost", summary: `Ostsin ${q} × silt ${flavorN(lFlavor)} ${lSize} ml` },
+      { onSuccess: () => { flash("Sildid lisatud"); setLQty(""); } }
+    );
   };
 
-  const addCaps = async () => {
+  const addCaps = () => {
     const q = parseInt(cQty) || 0;
     if (q <= 0) return flash("Sisesta kogus");
     if (cMode === "olemasolev") {
       if (!cExisting) return flash("Vali kork");
       const cap = data.caps.find((c) => c.id === cExisting);
-      await commit([{ kind: "cap", key: cExisting, amount: q }], "ost", `Ostsin ${q} × ${capLabel(cap)}`);
+      commitMutation.mutate(
+        { deltas: [{ kind: "cap", key: cExisting, amount: q }], type: "ost", summary: `Ostsin ${q} × ${capLabel(cap)}` },
+        { onSuccess: () => { flash("Korgid lisatud"); setCQty(""); } }
+      );
     } else {
-      await commit(
-        [{ kind: "cap", key: 0, amount: q, create: { size: cSize, type: cType, color: cColor.trim() } }],
-        "ost",
-        `Ostsin ${q} × ${cSize} ml ${cType}${cColor ? " " + cColor : ""}`
+      commitMutation.mutate(
+        {
+          deltas: [{ kind: "cap", key: 0, amount: q, create: { size: cSize, type: cType, color: cColor.trim() } }],
+          type: "ost",
+          summary: `Ostsin ${q} × ${cSize} ml ${cType}${cColor ? " " + cColor : ""}`,
+        },
+        { onSuccess: () => { flash("Korgid lisatud"); setCQty(""); } }
       );
     }
-    flash("Korgid lisatud");
-    setCQty("");
   };
 
   return (
@@ -544,7 +585,7 @@ function LisaVaruTab({ data, commit, flash }: { data: LaduData; commit: (deltas:
         <Seg options={SIZES.map((s) => ({ value: s, label: `${s} ml` }))} value={bSize} onChange={(v) => setBSize(v as number)} />
         <div className="mt-3 flex gap-2">
           <Num value={bQty} onChange={setBQty} className="flex-1" />
-          <button type="button" onClick={addBottles} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800">Lisa</button>
+          <button type="button" onClick={addBottles} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
       </Card>
 
@@ -567,7 +608,7 @@ function LisaVaruTab({ data, commit, flash }: { data: LaduData; commit: (deltas:
         </div>
         <div className="mt-3 flex gap-2">
           <Num value={lQty} onChange={setLQty} className="flex-1" />
-          <button type="button" onClick={addLabels} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800">Lisa</button>
+          <button type="button" onClick={addLabels} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
       </Card>
 
@@ -608,21 +649,33 @@ function LisaVaruTab({ data, commit, flash }: { data: LaduData; commit: (deltas:
         )}
         <div className="mt-3 flex gap-2">
           <Num value={cQty} onChange={setCQty} className="flex-1" />
-          <button type="button" onClick={addCaps} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800">Lisa</button>
+          <button type="button" onClick={addCaps} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
       </Card>
     </div>
   );
 }
 
-function MaitsedTab({ data, addFlavor, removeFlavor, resetAll }: { data: LaduData; addFlavor: (name: string, defaultCapId: number | null) => Promise<void>; removeFlavor: (id: number) => Promise<void>; resetAll: () => Promise<void> }) {
+function MaitsedTab({
+  data,
+  addFlavorMutation,
+  removeFlavorMutation,
+  resetAll,
+}: {
+  data: LaduData;
+  addFlavorMutation: ReturnType<typeof useMutation<Flavor, Error, { name: string; defaultCapId: number | null }>>;
+  removeFlavorMutation: ReturnType<typeof useMutation<number, Error, number>>;
+  resetAll: () => void;
+}) {
   const [name, setName] = useState("");
   const [capId, setCapId] = useState<number | "">("");
 
-  const add = async () => {
+  const add = () => {
     if (!name.trim()) return;
-    await addFlavor(name.trim(), capId !== "" ? (capId as number) : null);
-    setName(""); setCapId("");
+    addFlavorMutation.mutate(
+      { name: name.trim(), defaultCapId: capId !== "" ? (capId as number) : null },
+      { onSuccess: () => { setName(""); setCapId(""); } }
+    );
   };
 
   return (
@@ -644,7 +697,14 @@ function MaitsedTab({ data, addFlavor, removeFlavor, resetAll }: { data: LaduDat
             </select>
             <p className="text-xs text-stone-400 mt-1">Villimisel pakutakse seda korki automaatselt.</p>
           </div>
-          <button type="button" onClick={add} className="rounded-lg bg-amber-700 px-4 py-2 text-white hover:bg-amber-800">Lisa maitse</button>
+          <button
+            type="button"
+            onClick={add}
+            disabled={addFlavorMutation.isPending}
+            className="rounded-lg bg-amber-700 px-4 py-2 text-white hover:bg-amber-800 disabled:opacity-60"
+          >
+            Lisa maitse
+          </button>
         </div>
       </Card>
 
@@ -660,7 +720,12 @@ function MaitsedTab({ data, addFlavor, removeFlavor, resetAll }: { data: LaduDat
                     {defCap ? capLabel(defCap) : "vaikekork määramata"}
                   </div>
                 </div>
-                <button type="button" onClick={() => removeFlavor(f.id)} className="text-stone-400 hover:text-red-600">
+                <button
+                  type="button"
+                  onClick={() => removeFlavorMutation.mutate(f.id)}
+                  disabled={removeFlavorMutation.isPending}
+                  className="text-stone-400 hover:text-red-600 disabled:opacity-40"
+                >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -676,7 +741,13 @@ function MaitsedTab({ data, addFlavor, removeFlavor, resetAll }: { data: LaduDat
   );
 }
 
-function AjaluguTab({ data, undo }: { data: LaduData; undo: (id: number) => Promise<void> }) {
+function AjaluguTab({
+  data,
+  undoMutation,
+}: {
+  data: LaduData;
+  undoMutation: ReturnType<typeof useMutation<void, Error, number>>;
+}) {
   if (data.movements.length === 0)
     return <p className="text-sm text-stone-400">Veel ühtegi kannet pole.</p>;
   return (
@@ -696,8 +767,9 @@ function AjaluguTab({ data, undo }: { data: LaduData; undo: (id: number) => Prom
           </div>
           <button
             type="button"
-            onClick={() => undo(m.id)}
-            className="text-stone-400 hover:text-amber-700 flex items-center gap-1 text-xs shrink-0"
+            onClick={() => undoMutation.mutate(m.id)}
+            disabled={undoMutation.isPending}
+            className="text-stone-400 hover:text-amber-700 flex items-center gap-1 text-xs shrink-0 disabled:opacity-40"
           >
             <RotateCcw className="w-3.5 h-3.5" /> tagasi
           </button>

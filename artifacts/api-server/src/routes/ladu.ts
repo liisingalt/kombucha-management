@@ -50,27 +50,36 @@ const flavorSchema = z.object({
   defaultCapId: z.number().int().nullable().optional(),
 });
 
+type StoredDelta =
+  | { kind: "bottle"; key: number; amount: number }
+  | { kind: "label"; flavorId: number; size: number; amount: number }
+  | { kind: "cap"; key: number; amount: number };
+
+async function fetchAll(userId: string) {
+  const [flavors, bottles, labels, caps, movements] = await Promise.all([
+    db.select().from(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId)),
+    db.select().from(laduBottlesTable).where(eq(laduBottlesTable.userId, userId)),
+    db.select().from(laduLabelsTable).where(eq(laduLabelsTable.userId, userId)),
+    db.select().from(laduCapsTable).where(eq(laduCapsTable.userId, userId)),
+    db
+      .select()
+      .from(laduMovementsTable)
+      .where(eq(laduMovementsTable.userId, userId))
+      .orderBy(laduMovementsTable.createdAt),
+  ]);
+  return {
+    flavors,
+    bottles,
+    labels,
+    caps,
+    movements: movements.reverse().slice(0, 200),
+  };
+}
+
 router.get("/ladu", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   try {
-    const [flavors, bottles, labels, caps, movements] = await Promise.all([
-      db.select().from(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId)),
-      db.select().from(laduBottlesTable).where(eq(laduBottlesTable.userId, userId)),
-      db.select().from(laduLabelsTable).where(eq(laduLabelsTable.userId, userId)),
-      db.select().from(laduCapsTable).where(eq(laduCapsTable.userId, userId)),
-      db
-        .select()
-        .from(laduMovementsTable)
-        .where(eq(laduMovementsTable.userId, userId))
-        .orderBy(laduMovementsTable.createdAt),
-    ]);
-    res.json({
-      flavors,
-      bottles,
-      labels,
-      caps,
-      movements: movements.reverse().slice(0, 200),
-    });
+    res.json(await fetchAll(userId));
   } catch (err) {
     req.log.error({ err }, "Failed to fetch ladu");
     res.status(500).json({ error: "Internal server error" });
@@ -88,6 +97,8 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
 
   try {
     await db.transaction(async (tx) => {
+      const storedDeltas: StoredDelta[] = [];
+
       for (const delta of deltas) {
         if (delta.kind === "bottle") {
           const [existing] = await tx
@@ -102,6 +113,7 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
           } else {
             await tx.insert(laduBottlesTable).values({ userId, size: delta.key, qty: delta.amount });
           }
+          storedDeltas.push({ kind: "bottle", key: delta.key, amount: delta.amount });
         } else if (delta.kind === "label") {
           const [existing] = await tx
             .select()
@@ -123,50 +135,42 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
               .insert(laduLabelsTable)
               .values({ userId, flavorId: delta.flavorId, size: delta.size, qty: delta.amount });
           }
+          storedDeltas.push({ kind: "label", flavorId: delta.flavorId, size: delta.size, amount: delta.amount });
         } else if (delta.kind === "cap") {
-          const [existing] = await tx
-            .select()
-            .from(laduCapsTable)
-            .where(and(eq(laduCapsTable.userId, userId), eq(laduCapsTable.id, delta.key)));
-          if (existing) {
-            await tx
-              .update(laduCapsTable)
-              .set({ qty: existing.qty + delta.amount })
-              .where(eq(laduCapsTable.id, existing.id));
+          if (delta.key !== 0) {
+            const [existing] = await tx
+              .select()
+              .from(laduCapsTable)
+              .where(and(eq(laduCapsTable.userId, userId), eq(laduCapsTable.id, delta.key)));
+            if (existing) {
+              await tx
+                .update(laduCapsTable)
+                .set({ qty: existing.qty + delta.amount })
+                .where(eq(laduCapsTable.id, existing.id));
+            }
+            storedDeltas.push({ kind: "cap", key: delta.key, amount: delta.amount });
           } else if (delta.create) {
-            await tx.insert(laduCapsTable).values({
-              userId,
-              size: delta.create.size,
-              type: delta.create.type,
-              color: delta.create.color,
-              qty: delta.amount,
-            });
+            const [inserted] = await tx
+              .insert(laduCapsTable)
+              .values({
+                userId,
+                size: delta.create.size,
+                type: delta.create.type,
+                color: delta.create.color,
+                qty: delta.amount,
+              })
+              .returning();
+            storedDeltas.push({ kind: "cap", key: inserted.id, amount: delta.amount });
           }
         }
       }
+
       await tx
         .insert(laduMovementsTable)
-        .values({ userId, type, summary, deltas: deltas as unknown[] });
+        .values({ userId, type, summary, deltas: storedDeltas as unknown[] });
     });
 
-    const [flavors, bottles, labels, caps, movements] = await Promise.all([
-      db.select().from(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId)),
-      db.select().from(laduBottlesTable).where(eq(laduBottlesTable.userId, userId)),
-      db.select().from(laduLabelsTable).where(eq(laduLabelsTable.userId, userId)),
-      db.select().from(laduCapsTable).where(eq(laduCapsTable.userId, userId)),
-      db
-        .select()
-        .from(laduMovementsTable)
-        .where(eq(laduMovementsTable.userId, userId))
-        .orderBy(laduMovementsTable.createdAt),
-    ]);
-    res.json({
-      flavors,
-      bottles,
-      labels,
-      caps,
-      movements: movements.reverse().slice(0, 200),
-    });
+    res.json(await fetchAll(userId));
   } catch (err) {
     req.log.error({ err }, "Failed to commit ladu transaction");
     res.status(500).json({ error: "Internal server error" });
@@ -189,10 +193,10 @@ router.delete("/ladu/movements/:id", requireAuth, async (req, res) => {
       res.status(404).json({ error: "Not found" });
       return;
     }
-    const deltas = movement.deltas as Array<{ kind: string; key?: number; flavorId?: number; size?: number; amount: number }>;
+    const deltas = movement.deltas as StoredDelta[];
     await db.transaction(async (tx) => {
       for (const delta of deltas) {
-        if (delta.kind === "bottle" && delta.key != null) {
+        if (delta.kind === "bottle") {
           const [existing] = await tx
             .select()
             .from(laduBottlesTable)
@@ -203,7 +207,7 @@ router.delete("/ladu/movements/:id", requireAuth, async (req, res) => {
               .set({ qty: existing.qty - delta.amount })
               .where(eq(laduBottlesTable.id, existing.id));
           }
-        } else if (delta.kind === "label" && delta.flavorId != null && delta.size != null) {
+        } else if (delta.kind === "label") {
           const [existing] = await tx
             .select()
             .from(laduLabelsTable)
@@ -220,7 +224,7 @@ router.delete("/ladu/movements/:id", requireAuth, async (req, res) => {
               .set({ qty: existing.qty - delta.amount })
               .where(eq(laduLabelsTable.id, existing.id));
           }
-        } else if (delta.kind === "cap" && delta.key != null) {
+        } else if (delta.kind === "cap") {
           const [existing] = await tx
             .select()
             .from(laduCapsTable)
@@ -277,8 +281,8 @@ router.delete("/ladu/flavors/:id", requireAuth, async (req, res) => {
       .select()
       .from(laduLabelsTable)
       .where(and(eq(laduLabelsTable.userId, userId), eq(laduLabelsTable.flavorId, id)));
-    if (labels.some((l) => l.qty > 0)) {
-      res.status(409).json({ error: "Flavor has labels in stock" });
+    if (labels.length > 0) {
+      res.status(409).json({ error: "Flavor has label records — delete them first or reset inventory" });
       return;
     }
     await db
