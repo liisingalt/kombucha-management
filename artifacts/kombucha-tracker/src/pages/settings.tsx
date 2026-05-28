@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -197,6 +198,8 @@ export default function SettingsPage() {
   const [adminKeyInput, setAdminKeyInput] = useState(() => localStorage.getItem("teadmusbaas_admin_key") ?? "");
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useUnsavedChanges(adminKeyInput !== adminKey);
 
   const isAdminQuery = useQuery<{ isAdmin: boolean }>({
     queryKey: ["admin-me"],

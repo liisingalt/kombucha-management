@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { Droplets } from "lucide-react";
 import { Layout } from "@/components/Layout";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -202,6 +203,22 @@ function UusKaarimine({
   const [flavoringDate, setFlavoringDate] = useState("");
   const [notes, setNotes] = useState("");
   const [vessels, setVessels] = useState<VesselForm[]>([emptyVessel()]);
+
+  const isDirty =
+    startDate !== today ||
+    brewId !== "" ||
+    teaSort !== "" ||
+    flavoringDate !== "" ||
+    notes !== "" ||
+    vessels.some(
+      (v) =>
+        v.volumeL !== "" ||
+        v.vesselL !== "" ||
+        v.count !== "1" ||
+        v.place !== "" ||
+        v.temp !== ""
+    );
+  useUnsavedChanges(isDirty);
 
   const onPickBrew = (id: number | "") => {
     setBrewId(id);

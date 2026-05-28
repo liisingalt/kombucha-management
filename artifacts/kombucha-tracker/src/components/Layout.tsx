@@ -1,4 +1,5 @@
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
+import { GuardedLink as Link } from "@/components/GuardedLink";
 import { useClerk, useUser } from "@clerk/react";
 import { Home, BookOpen, MessageSquare, Settings, Beaker, Image, Sparkles, LogOut, ChevronRight, FlaskConical, Package, Droplets, Leaf, GitBranch, Database, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";

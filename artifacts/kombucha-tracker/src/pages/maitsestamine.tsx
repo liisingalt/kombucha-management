@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { Leaf } from "lucide-react";
 import { Layout } from "@/components/Layout";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -236,6 +237,25 @@ function UusMaitsestamine({
   const [bottleNote, setBottleNote] = useState("");
   const [notes, setNotes] = useState("");
   const [blocks, setBlocks] = useState<BlockForm[]>([emptyBlock()]);
+
+  const isDirty =
+    date !== today ||
+    fermId !== "" ||
+    bottlingDate !== "" ||
+    bottleNote !== "" ||
+    notes !== "" ||
+    blocks.some(
+      (b) =>
+        b.stockId !== "" ||
+        b.koguseL !== "" ||
+        b.vesselL !== "" ||
+        b.method !== "" ||
+        b.coefficient !== "1.3" ||
+        b.grams !== "" ||
+        b.place !== "" ||
+        b.temp !== ""
+    );
+  useUnsavedChanges(isDirty);
 
   const recompute = (b: BlockForm): BlockForm => {
     if (b.gEdited) return b;

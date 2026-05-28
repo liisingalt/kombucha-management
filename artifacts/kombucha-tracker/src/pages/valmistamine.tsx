@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { FlaskConical, Pencil, Check, X } from "lucide-react";
 import { Layout } from "@/components/Layout";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -287,6 +288,29 @@ function UusPruulimine({
 
   const addPortion = () => setPortions((prev) => [...prev, emptyPortion()]);
   const removePortion = (i: number) => setPortions((prev) => prev.filter((_, idx) => idx !== i));
+
+  const isDirty =
+    date !== today ||
+    startBoilTime !== "" ||
+    tempReachedMin !== "" ||
+    temp !== "" ||
+    sugarStockId !== "" ||
+    coolStartTime !== "" ||
+    coolPlace !== "" ||
+    coolTemp !== "" ||
+    continuedTime !== "" ||
+    notes !== "" ||
+    electricityKwh !== "" ||
+    starterPct !== "20" ||
+    portions.some(
+      (p) =>
+        p.boiledL !== "" ||
+        p.teaStockId !== "" ||
+        p.steepMin !== "10" ||
+        p.steepHeat !== "0" ||
+        p.coldEdited
+    );
+  useUnsavedChanges(isDirty);
 
   const formRef = useRef<HTMLDivElement>(null);
   const onKey = (e: React.KeyboardEvent) => {

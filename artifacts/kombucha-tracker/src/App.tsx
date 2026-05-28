@@ -5,6 +5,7 @@ import { ClerkProvider, SignIn, SignUp, Show, useClerk, useAuth, useUser } from 
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { NavigationGuardProvider } from "@/contexts/NavigationGuardContext";
 import { queryClient } from "@/lib/queryClient";
 import LandingPage from "@/pages/landing";
 import DashboardPage from "@/pages/dashboard";
@@ -141,6 +142,7 @@ function ClerkProviderWithRoutes() {
         <ClerkAuthTokenWirer />
         <ClerkQueryClientCacheInvalidator />
         <TooltipProvider>
+          <NavigationGuardProvider>
           <Switch>
             <Route path="/" component={HomeRoute} />
             <Route path="/sign-in/*?" component={SignInPage} />
@@ -196,6 +198,7 @@ function ClerkProviderWithRoutes() {
             <Route component={NotFound} />
           </Switch>
           <Toaster />
+          </NavigationGuardProvider>
         </TooltipProvider>
       </QueryClientProvider>
     </ClerkProvider>

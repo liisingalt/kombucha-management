@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle, Pencil, Check, X, PenLine, ShoppingBag, Leaf, Minus, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
@@ -801,6 +802,16 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
     }
   }, [flavorId, size]);
 
+  const isDirtyVillimine =
+    total !== "" ||
+    returned !== "" ||
+    fromCustom !== "" ||
+    fromBlank !== "0" ||
+    savedStarterG !== "" ||
+    linkedEventId !== "" ||
+    oldCaps !== "";
+  useUnsavedChanges(isDirtyVillimine);
+
   const sizeCaps = data.caps.filter((c) => c.size === size);
 
   const t = Math.max(0, parseInt(total) || 0);
@@ -1077,6 +1088,9 @@ function ValmistoodangTab({ data, flavorName, finishedGoodsCommitMutation, flash
   const [given, setGiven] = useState("");
   const [note, setNote] = useState("");
 
+  const isDirtyValmistoodang = sold !== "" || given !== "" || note !== "";
+  useUnsavedChanges(isDirtyValmistoodang);
+
   const fgQty = (flavorId: number, size: number) =>
     data.finishedGoods.find((g) => g.flavorId === flavorId && g.size === size)?.qty ?? 0;
 
@@ -1332,6 +1346,9 @@ function LisaVaruTab({
   const [cColor, setCColor] = useState("");
   const [cPunnkorkKat, setCPunnkorkKat] = useState<"uus" | "taaskasutus">("uus");
   const [cQty, setCQty] = useState("");
+
+  const isDirtyLisaVaru = bQty !== "" || clbQty !== "" || lQty !== "" || wcQty !== "" || rcQty !== "" || cQty !== "";
+  useUnsavedChanges(isDirtyLisaVaru);
 
   const flavorN = (id: number | "") => (id !== "" ? (data.flavors.find((f) => f.id === id)?.name ?? "?") : "—");
 
@@ -1775,6 +1792,15 @@ function TooraineTab({
   const [showHistory, setShowHistory] = useState(false);
   const resolvedAddUnit = addUnit === "__custom__" ? addCustomUnit.trim() : addUnit;
   const resolvedEditUnit = editUnit === "__custom__" ? editCustomUnit.trim() : editUnit;
+
+  const isDirtyTooraine =
+    addName !== "" ||
+    addUnit !== "kg" ||
+    addCustomUnit !== "" ||
+    addMinStock !== "" ||
+    editingId !== null ||
+    (adjustingId !== null && adjustQty !== "");
+  useUnsavedChanges(isDirtyTooraine);
 
   const handleAdd = () => {
     const name = addName.trim();
