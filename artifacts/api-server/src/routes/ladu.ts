@@ -12,6 +12,7 @@ import {
   laduMovementsTable,
   laduBlankLabelTypesTable,
   laduBlankLabelsTable,
+  laduFinishedGoodsTable,
 } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
@@ -62,6 +63,12 @@ const deltaSchema = z.discriminatedUnion("kind", [
     size: z.number().int(),
     amount: z.number().int(),
   }),
+  z.object({
+    kind: z.literal("finished_goods"),
+    flavorId: z.number().int(),
+    size: z.number().int(),
+    amount: z.number().int(),
+  }),
 ]);
 
 const commitSchema = z.object({
@@ -92,7 +99,8 @@ type StoredDelta =
   | { kind: "custom_label_bottle"; size: number; amount: number }
   | { kind: "wire_cage"; amount: number }
   | { kind: "reusable_cap"; size: number; amount: number }
-  | { kind: "blank_label"; blankLabelTypeId: number; size: number; amount: number };
+  | { kind: "blank_label"; blankLabelTypeId: number; size: number; amount: number }
+  | { kind: "finished_goods"; flavorId: number; size: number; amount: number };
 
 async function fetchAll(userId: string) {
   const [
@@ -106,6 +114,7 @@ async function fetchAll(userId: string) {
     movements,
     blankLabelTypes,
     blankLabels,
+    finishedGoods,
   ] = await Promise.all([
     db.select().from(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId)),
     db.select().from(laduBottlesTable).where(eq(laduBottlesTable.userId, userId)),
@@ -121,6 +130,7 @@ async function fetchAll(userId: string) {
       .orderBy(laduMovementsTable.createdAt),
     db.select().from(laduBlankLabelTypesTable).where(eq(laduBlankLabelTypesTable.userId, userId)),
     db.select().from(laduBlankLabelsTable).where(eq(laduBlankLabelsTable.userId, userId)),
+    db.select().from(laduFinishedGoodsTable).where(eq(laduFinishedGoodsTable.userId, userId)),
   ]);
   return {
     flavors,
@@ -133,6 +143,7 @@ async function fetchAll(userId: string) {
     movements: movements.reverse().slice(0, 200),
     blankLabelTypes,
     blankLabels,
+    finishedGoods,
   };
 }
 
@@ -317,6 +328,42 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
             size: delta.size,
             amount: delta.amount,
           });
+        } else if (delta.kind === "finished_goods") {
+          const [existing] = await tx
+            .select()
+            .from(laduFinishedGoodsTable)
+            .where(
+              and(
+                eq(laduFinishedGoodsTable.userId, userId),
+                eq(laduFinishedGoodsTable.flavorId, delta.flavorId),
+                eq(laduFinishedGoodsTable.size, delta.size)
+              )
+            );
+          const currentQty = existing?.qty ?? 0;
+          if (currentQty + delta.amount < 0) {
+            const insufficientErr = new Error(`Laos pole piisavalt valmistoodangut — laos ${currentQty}, sooviti ${-delta.amount}`);
+            (insufficientErr as any).code = "INSUFFICIENT_STOCK";
+            throw insufficientErr;
+          }
+          if (existing) {
+            await tx
+              .update(laduFinishedGoodsTable)
+              .set({ qty: currentQty + delta.amount })
+              .where(eq(laduFinishedGoodsTable.id, existing.id));
+          } else {
+            await tx.insert(laduFinishedGoodsTable).values({
+              userId,
+              flavorId: delta.flavorId,
+              size: delta.size,
+              qty: delta.amount,
+            });
+          }
+          storedDeltas.push({
+            kind: "finished_goods",
+            flavorId: delta.flavorId,
+            size: delta.size,
+            amount: delta.amount,
+          });
         }
       }
 
@@ -327,6 +374,10 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
 
     res.json(await fetchAll(userId));
   } catch (err) {
+    if ((err as any).code === "INSUFFICIENT_STOCK") {
+      res.status(409).json({ error: (err as Error).message });
+      return;
+    }
     req.log.error({ err }, "Failed to commit ladu transaction");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -444,6 +495,23 @@ router.delete("/ladu/movements/:id", requireAuth, async (req, res) => {
               .update(laduBlankLabelsTable)
               .set({ qty: existing.qty - delta.amount })
               .where(eq(laduBlankLabelsTable.id, existing.id));
+          }
+        } else if (delta.kind === "finished_goods") {
+          const [existing] = await tx
+            .select()
+            .from(laduFinishedGoodsTable)
+            .where(
+              and(
+                eq(laduFinishedGoodsTable.userId, userId),
+                eq(laduFinishedGoodsTable.flavorId, delta.flavorId),
+                eq(laduFinishedGoodsTable.size, delta.size)
+              )
+            );
+          if (existing) {
+            await tx
+              .update(laduFinishedGoodsTable)
+              .set({ qty: existing.qty - delta.amount })
+              .where(eq(laduFinishedGoodsTable.id, existing.id));
           }
         }
       }
@@ -648,6 +716,7 @@ router.delete("/ladu/reset", requireAuth, async (req, res) => {
       await tx.delete(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId));
       await tx.delete(laduBlankLabelsTable).where(eq(laduBlankLabelsTable.userId, userId));
       await tx.delete(laduBlankLabelTypesTable).where(eq(laduBlankLabelTypesTable.userId, userId));
+      await tx.delete(laduFinishedGoodsTable).where(eq(laduFinishedGoodsTable.userId, userId));
     });
     res.status(204).end();
   } catch (err) {

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle, Pencil, Check, X, PenLine } from "lucide-react";
+import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle, Pencil, Check, X, PenLine, ShoppingBag } from "lucide-react";
 import { Layout } from "@/components/Layout";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -28,6 +28,7 @@ type CustomLabelBottle = { id: number; size: number; qty: number };
 type Movement = { id: number; type: string; summary: string; deltas: unknown[]; createdAt: string };
 type BlankLabelType = { id: number; userId: string; name: string };
 type BlankLabel = { id: number; userId: string; blankLabelTypeId: number; size: number; qty: number };
+type FinishedGoods = { id: number; flavorId: number; size: number; qty: number };
 
 type ReusableCap = { size: number; qty: number };
 
@@ -42,6 +43,7 @@ type LaduData = {
   movements: Movement[];
   blankLabelTypes: BlankLabelType[];
   blankLabels: BlankLabel[];
+  finishedGoods: FinishedGoods[];
 };
 
 const EMPTY: LaduData = {
@@ -55,6 +57,7 @@ const EMPTY: LaduData = {
   movements: [],
   blankLabelTypes: [],
   blankLabels: [],
+  finishedGoods: [],
 };
 
 const capLabel = (c: Cap | undefined) =>
@@ -137,7 +140,7 @@ function useAuthFetch() {
 export default function LaduPage() {
   const authFetch = useAuthFetch();
   const qc = useQueryClient();
-  const [tab, setTab] = useState("ladu");
+  const [tab, setTab] = useState("valmistoodang");
   const [toast, setToast] = useState<string | null>(null);
 
   const flash = (msg: string) => {
@@ -301,6 +304,7 @@ export default function LaduPage() {
   const bottleQty = (size: number) => data.bottles.find((b) => b.size === size)?.qty ?? 0;
 
   const tabs = [
+    { id: "valmistoodang", label: "Valmistoodang", icon: ShoppingBag },
     { id: "ladu", label: "Ladu", icon: Boxes },
     { id: "villimine", label: "Villimine", icon: FlaskConical },
     { id: "varu", label: "Lisa varu", icon: Plus },
@@ -355,6 +359,9 @@ export default function LaduPage() {
           })}
         </nav>
 
+        {tab === "valmistoodang" && (
+          <ValmistoodangTab data={data} flavorName={flavorName} commitMutation={commitMutation} flash={flash} />
+        )}
         {tab === "ladu" && <LaduTab data={data} flavorName={flavorName} bottleQty={bottleQty} updateCapMutation={updateCapMutation} flash={flash} />}
         {tab === "villimine" && (
           <VillimineTab data={data} flavorName={flavorName} commitMutation={commitMutation} flash={flash} />
@@ -690,6 +697,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
     if (capId !== "" && capDeduct > 0) deltas.push({ kind: "cap", key: capId, amount: -capDeduct });
     if (wireCageDeduct > 0) deltas.push({ kind: "wire_cage", amount: -wireCageDeduct });
     if (reusableCapDeduct > 0) deltas.push({ kind: "reusable_cap", size, amount: -reusableCapDeduct });
+    if (t > 0) deltas.push({ kind: "finished_goods", flavorId, size, amount: t });
 
     const cap = selectedCap;
     const parts = [`Villisin ${t} × ${flavorName(flavorId as number)} ${size} ml`];
@@ -788,6 +796,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
           </li>
           {wireCageDeduct > 0 && <li>Traatkorgi: <b>{wireCageDeduct}</b></li>}
           {reusableCapDeduct > 0 && <li>Korduvkasutatavad punnkorgid {size} ml: <b>{reusableCapDeduct}</b></li>}
+          <li className="text-amber-800 font-medium">Valmistoodang + <b>{t}</b></li>
         </ul>
       </div>
 
@@ -798,6 +807,168 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
       >
         {commitMutation.isPending ? "Salvestan…" : "Pane villimine kirja"}
       </button>
+    </div>
+  );
+}
+
+function ValmistoodangTab({ data, flavorName, commitMutation, flash }: { data: LaduData; flavorName: (id: number) => string; commitMutation: CommitMutation; flash: (msg: string) => void }) {
+  const [fgFlavorId, setFgFlavorId] = useState<number | "">(data.flavors[0]?.id ?? "");
+  const [fgSize, setFgSize] = useState<number>(330);
+  const [sold, setSold] = useState("");
+  const [given, setGiven] = useState("");
+  const [note, setNote] = useState("");
+
+  const fgQty = (flavorId: number, size: number) =>
+    data.finishedGoods.find((g) => g.flavorId === flavorId && g.size === size)?.qty ?? 0;
+
+  const available = fgFlavorId !== "" ? fgQty(fgFlavorId as number, fgSize) : 0;
+  const soldAmt = Math.max(0, parseInt(sold) || 0);
+  const givenAmt = Math.max(0, parseInt(given) || 0);
+  const totalOut = soldAmt + givenAmt;
+  const overStock = totalOut > available;
+
+  const submit = () => {
+    if (!fgFlavorId) return flash("Vali maitse");
+    if (totalOut <= 0) return flash("Sisesta müüdud või ära antud kogus");
+    if (overStock) return flash(`Laos on ainult ${available} pudelit`);
+
+    const parts = [`${flavorName(fgFlavorId as number)} ${fgSize} ml`];
+    if (soldAmt > 0) parts.push(`müüdud: ${soldAmt}`);
+    if (givenAmt > 0) parts.push(`ära antud: ${givenAmt}`);
+    if (note.trim()) parts.push(note.trim());
+
+    const type = soldAmt > 0 && givenAmt > 0 ? "väljastamine" : soldAmt > 0 ? "müük" : "kinkimine";
+
+    commitMutation.mutate(
+      {
+        deltas: [{ kind: "finished_goods", flavorId: fgFlavorId, size: fgSize, amount: -totalOut }],
+        type,
+        summary: parts.join(" · "),
+      },
+      {
+        onSuccess: () => {
+          flash("Väljastamine kirja pandud");
+          setSold(""); setGiven(""); setNote("");
+        },
+      }
+    );
+  };
+
+  const hasFlavors = data.flavors.length > 0;
+  const totalFinished = data.finishedGoods.reduce((s, g) => s + Math.max(0, g.qty), 0);
+
+  return (
+    <div className="space-y-7">
+      <section>
+        {!hasFlavors ? (
+          <p className="text-sm text-stone-400">Lisa esmalt maitsed "Maitsed" vahekaardil.</p>
+        ) : data.finishedGoods.filter((g) => g.qty > 0).length === 0 ? (
+          <div className="rounded-xl border border-stone-200 bg-white p-8 text-center">
+            <ShoppingBag className="w-10 h-10 text-stone-300 mx-auto mb-3" />
+            <p className="text-stone-500 text-sm">Valmistoodangut pole veel laos.</p>
+            <p className="text-stone-400 text-xs mt-1">Villimine lisab pudelid automaatselt siia.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {data.flavors.map((flavor) => {
+              const sizes = SIZES.map((s) => ({ size: s, qty: fgQty(flavor.id, s) }));
+              const totalForFlavor = sizes.reduce((s, x) => s + Math.max(0, x.qty), 0);
+              const isEmpty = totalForFlavor === 0;
+              return (
+                <div
+                  key={flavor.id}
+                  className={`rounded-xl border bg-white overflow-hidden transition ${isEmpty ? "border-stone-100 opacity-50" : "border-stone-200"}`}
+                >
+                  <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+                    <span className="font-serif text-stone-900 font-medium">{flavor.name}</span>
+                    <span className="text-xs text-stone-400">{totalForFlavor} tk kokku</span>
+                  </div>
+                  <div className="grid grid-cols-3 divide-x divide-stone-100">
+                    {sizes.map(({ size, qty }) => (
+                      <div key={size} className="p-4 text-center">
+                        <div className="text-xs text-stone-500 mb-1">{size} ml</div>
+                        <div className={`text-3xl font-semibold ${qty <= 0 ? "text-stone-300" : "text-stone-900"}`}>{qty}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {totalFinished > 0 && (
+          <p className="text-xs text-stone-400 mt-2 text-right">{totalFinished} pudelit kokku laos</p>
+        )}
+      </section>
+
+      {hasFlavors && (
+        <section>
+          <h2 className="font-serif text-lg text-stone-900 mb-3">Väljasta pudeleid</h2>
+          <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-stone-600 mb-1">Maitse</label>
+                <select
+                  value={fgFlavorId}
+                  onChange={(e) => setFgFlavorId(Number(e.target.value))}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 focus:border-amber-600 focus:outline-none"
+                >
+                  {data.flavors.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-stone-600 mb-1">Suurus</label>
+                <Seg options={SIZES.map((s) => ({ value: s, label: `${s}` }))} value={fgSize} onChange={(v) => setFgSize(v as number)} />
+              </div>
+            </div>
+
+            {fgFlavorId !== "" && (
+              <p className="text-xs text-stone-500">
+                Saadaval: <span className={`font-semibold ${available <= 0 ? "text-red-600" : "text-amber-800"}`}>{available} tk</span>
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-stone-600 mb-1">Müüdud</label>
+                <Num value={sold} onChange={setSold} />
+              </div>
+              <div>
+                <label className="block text-sm text-stone-600 mb-1">Ära antud</label>
+                <Num value={given} onChange={setGiven} />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm text-stone-600 mb-1">Märkus (valikuline)</label>
+              <input
+                type="text"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="nt Turu laupäev"
+                className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 focus:border-amber-600 focus:outline-none"
+              />
+            </div>
+
+            {overStock && (
+              <p className="text-xs text-red-600 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" /> Kogus ({totalOut}) ületab laovaru ({available}).
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={submit}
+              disabled={commitMutation.isPending || available <= 0}
+              className="w-full rounded-lg bg-amber-700 py-3 text-white font-medium hover:bg-amber-800 transition disabled:opacity-60"
+            >
+              {commitMutation.isPending ? "Salvestan…" : "Pane kirja"}
+            </button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
