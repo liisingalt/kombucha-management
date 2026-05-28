@@ -86,6 +86,14 @@ export async function runMigrations(): Promise<void> {
         size      INTEGER NOT NULL,
         qty       INTEGER NOT NULL DEFAULT 0
       );
+
+      CREATE TABLE IF NOT EXISTS ladu_materials (
+        id      SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name    TEXT NOT NULL,
+        unit    TEXT NOT NULL,
+        qty     REAL NOT NULL DEFAULT 0
+      );
     `);
     await client.query(`DROP TABLE IF EXISTS ladu_labeled_bottles`);
     logger.info("Migrations complete");

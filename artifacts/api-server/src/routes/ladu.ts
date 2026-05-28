@@ -13,6 +13,7 @@ import {
   laduBlankLabelTypesTable,
   laduBlankLabelsTable,
   laduFinishedGoodsTable,
+  laduMaterialsTable,
 } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
@@ -69,6 +70,11 @@ const deltaSchema = z.discriminatedUnion("kind", [
     size: z.number().int(),
     amount: z.number().int(),
   }),
+  z.object({
+    kind: z.literal("material"),
+    materialId: z.number().int(),
+    amount: z.number(),
+  }),
 ]);
 
 const commitSchema = z.object({
@@ -111,7 +117,8 @@ type StoredDelta =
   | { kind: "wire_cage"; amount: number }
   | { kind: "reusable_cap"; size: number; amount: number }
   | { kind: "blank_label"; blankLabelTypeId: number; size: number; amount: number }
-  | { kind: "finished_goods"; flavorId: number; size: number; amount: number };
+  | { kind: "finished_goods"; flavorId: number; size: number; amount: number }
+  | { kind: "material"; materialId: number; amount: number };
 
 async function fetchAll(userId: string) {
   const [
@@ -126,6 +133,7 @@ async function fetchAll(userId: string) {
     blankLabelTypes,
     blankLabels,
     finishedGoods,
+    materials,
   ] = await Promise.all([
     db.select().from(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId)),
     db.select().from(laduBottlesTable).where(eq(laduBottlesTable.userId, userId)),
@@ -142,6 +150,7 @@ async function fetchAll(userId: string) {
     db.select().from(laduBlankLabelTypesTable).where(eq(laduBlankLabelTypesTable.userId, userId)),
     db.select().from(laduBlankLabelsTable).where(eq(laduBlankLabelsTable.userId, userId)),
     db.select().from(laduFinishedGoodsTable).where(eq(laduFinishedGoodsTable.userId, userId)),
+    db.select().from(laduMaterialsTable).where(eq(laduMaterialsTable.userId, userId)),
   ]);
   return {
     flavors,
@@ -155,6 +164,7 @@ async function fetchAll(userId: string) {
     blankLabelTypes,
     blankLabels,
     finishedGoods,
+    materials,
   };
 }
 
@@ -375,6 +385,18 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
             size: delta.size,
             amount: delta.amount,
           });
+        } else if (delta.kind === "material") {
+          const [existing] = await tx
+            .select()
+            .from(laduMaterialsTable)
+            .where(and(eq(laduMaterialsTable.userId, userId), eq(laduMaterialsTable.id, delta.materialId)));
+          if (existing) {
+            await tx
+              .update(laduMaterialsTable)
+              .set({ qty: existing.qty + delta.amount })
+              .where(eq(laduMaterialsTable.id, existing.id));
+            storedDeltas.push({ kind: "material", materialId: delta.materialId, amount: delta.amount });
+          }
         }
       }
 
@@ -546,6 +568,17 @@ router.delete("/ladu/movements/:id", requireAuth, async (req, res) => {
               .update(laduFinishedGoodsTable)
               .set({ qty: existing.qty - delta.amount })
               .where(eq(laduFinishedGoodsTable.id, existing.id));
+          }
+        } else if (delta.kind === "material") {
+          const [existing] = await tx
+            .select()
+            .from(laduMaterialsTable)
+            .where(and(eq(laduMaterialsTable.userId, userId), eq(laduMaterialsTable.id, delta.materialId)));
+          if (existing) {
+            await tx
+              .update(laduMaterialsTable)
+              .set({ qty: existing.qty - delta.amount })
+              .where(eq(laduMaterialsTable.id, existing.id));
           }
         }
       }
@@ -825,6 +858,89 @@ router.delete("/ladu/blank-label-types/:id", requireAuth, async (req, res) => {
   }
 });
 
+const materialSchema = z.object({
+  name: z.string().min(1),
+  unit: z.string().min(1),
+});
+
+router.post("/ladu/materials", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const parsed = materialSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const [material] = await db
+      .insert(laduMaterialsTable)
+      .values({ userId, name: parsed.data.name.trim(), unit: parsed.data.unit.trim(), qty: 0 })
+      .returning();
+    res.status(201).json(material);
+  } catch (err) {
+    req.log.error({ err }, "Failed to create material");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/ladu/materials/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const parsed = materialSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const [existing] = await db
+      .select()
+      .from(laduMaterialsTable)
+      .where(and(eq(laduMaterialsTable.id, id), eq(laduMaterialsTable.userId, userId)));
+    if (!existing) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    const [updated] = await db
+      .update(laduMaterialsTable)
+      .set({ name: parsed.data.name.trim(), unit: parsed.data.unit.trim() })
+      .where(eq(laduMaterialsTable.id, id))
+      .returning();
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update material");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/ladu/materials/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  try {
+    const [existing] = await db
+      .select()
+      .from(laduMaterialsTable)
+      .where(and(eq(laduMaterialsTable.id, id), eq(laduMaterialsTable.userId, userId)));
+    if (!existing) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    await db
+      .delete(laduMaterialsTable)
+      .where(and(eq(laduMaterialsTable.id, id), eq(laduMaterialsTable.userId, userId)));
+    res.status(204).end();
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete material");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.delete("/ladu/reset", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   try {
@@ -839,6 +955,7 @@ router.delete("/ladu/reset", requireAuth, async (req, res) => {
       await tx.delete(laduBlankLabelsTable).where(eq(laduBlankLabelsTable.userId, userId));
       await tx.delete(laduBlankLabelTypesTable).where(eq(laduBlankLabelTypesTable.userId, userId));
       await tx.delete(laduFinishedGoodsTable).where(eq(laduFinishedGoodsTable.userId, userId));
+      await tx.delete(laduMaterialsTable).where(eq(laduMaterialsTable.userId, userId));
     });
     res.status(204).end();
   } catch (err) {

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, jsonb, timestamp, real } from "drizzle-orm/pg-core";
 
 export const laduFlavorsTable = pgTable("ladu_flavors", {
   id: serial("id").primaryKey(),
@@ -82,6 +82,14 @@ export const laduFinishedGoodsTable = pgTable("ladu_finished_goods", {
   qty: integer("qty").notNull().default(0),
 });
 
+export const laduMaterialsTable = pgTable("ladu_materials", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  unit: text("unit").notNull(),
+  qty: real("qty").notNull().default(0),
+});
+
 export type LaduFlavor = typeof laduFlavorsTable.$inferSelect;
 export type LaduBottle = typeof laduBottlesTable.$inferSelect;
 export type LaduLabel = typeof laduLabelsTable.$inferSelect;
@@ -93,3 +101,4 @@ export type LaduMovement = typeof laduMovementsTable.$inferSelect;
 export type LaduBlankLabelType = typeof laduBlankLabelTypesTable.$inferSelect;
 export type LaduBlankLabel = typeof laduBlankLabelsTable.$inferSelect;
 export type LaduFinishedGoods = typeof laduFinishedGoodsTable.$inferSelect;
+export type LaduMaterial = typeof laduMaterialsTable.$inferSelect;

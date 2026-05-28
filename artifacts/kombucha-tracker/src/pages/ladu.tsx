@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle, Pencil, Check, X, PenLine, ShoppingBag } from "lucide-react";
+import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle, Pencil, Check, X, PenLine, ShoppingBag, Leaf } from "lucide-react";
 import { Layout } from "@/components/Layout";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -29,6 +29,7 @@ type Movement = { id: number; type: string; summary: string; deltas: unknown[]; 
 type BlankLabelType = { id: number; userId: string; name: string };
 type BlankLabel = { id: number; userId: string; blankLabelTypeId: number; size: number; qty: number };
 type FinishedGoods = { id: number; flavorId: number; size: number; qty: number };
+type Material = { id: number; userId: string; name: string; unit: string; qty: number };
 
 type ReusableCap = { size: number; qty: number };
 
@@ -44,6 +45,7 @@ type LaduData = {
   blankLabelTypes: BlankLabelType[];
   blankLabels: BlankLabel[];
   finishedGoods: FinishedGoods[];
+  materials: Material[];
 };
 
 const EMPTY: LaduData = {
@@ -58,6 +60,7 @@ const EMPTY: LaduData = {
   blankLabelTypes: [],
   blankLabels: [],
   finishedGoods: [],
+  materials: [],
 };
 
 const capLabel = (c: Cap | undefined) =>
@@ -299,6 +302,57 @@ export default function LaduPage() {
     onError: (err: Error) => flash(err.message),
   });
 
+  const addMaterialMutation = useMutation({
+    mutationFn: async ({ name, unit }: { name: string; unit: string }) => {
+      const res = await authFetch("/ladu/materials", {
+        method: "POST",
+        body: JSON.stringify({ name, unit }),
+      });
+      return res.json() as Promise<Material>;
+    },
+    onSuccess: (m) => {
+      qc.setQueryData<LaduData>(LADU_QUERY_KEY, (old = EMPTY) => ({
+        ...old,
+        materials: [...old.materials, m],
+      }));
+      flash("Tooraine lisatud");
+    },
+    onError: (err: Error) => flash(err.message),
+  });
+
+  const updateMaterialMutation = useMutation({
+    mutationFn: async ({ id, name, unit }: { id: number; name: string; unit: string }) => {
+      const res = await authFetch(`/ladu/materials/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name, unit }),
+      });
+      return res.json() as Promise<Material>;
+    },
+    onSuccess: (m) => {
+      qc.setQueryData<LaduData>(LADU_QUERY_KEY, (old = EMPTY) => ({
+        ...old,
+        materials: old.materials.map((x) => (x.id === m.id ? m : x)),
+      }));
+      flash("Tooraine uuendatud");
+    },
+    onError: (err: Error) => flash(err.message),
+  });
+
+  const deleteMaterialMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await authFetch(`/ladu/materials/${id}`, { method: "DELETE" });
+      return id;
+    },
+    onSuccess: (id) => {
+      qc.setQueryData<LaduData>(LADU_QUERY_KEY, (old = EMPTY) => ({
+        ...old,
+        materials: old.materials.filter((m) => m.id !== id),
+      }));
+      flash("Tooraine eemaldatud");
+    },
+    onError: (err: Error) => flash(err.message),
+  });
+
   const resetMutation = useMutation({
     mutationFn: async () => {
       await authFetch("/ladu/reset", { method: "DELETE" });
@@ -323,6 +377,7 @@ export default function LaduPage() {
     { id: "ladu", label: "Ladu", icon: Boxes },
     { id: "villimine", label: "Villimine", icon: FlaskConical },
     { id: "varu", label: "Lisa varu", icon: Plus },
+    { id: "toorained", label: "Toorained", icon: Leaf },
     { id: "maitsed", label: "Maitsed", icon: Tags },
     { id: "ajalugu", label: "Ajalugu", icon: History },
   ];
@@ -383,6 +438,16 @@ export default function LaduPage() {
         )}
         {tab === "varu" && (
           <LisaVaruTab data={data} commitMutation={commitMutation} addBlankLabelTypeMutation={addBlankLabelTypeMutation} removeBlankLabelTypeMutation={removeBlankLabelTypeMutation} flash={flash} />
+        )}
+        {tab === "toorained" && (
+          <TooraineTab
+            data={data}
+            commitMutation={commitMutation}
+            addMaterialMutation={addMaterialMutation}
+            updateMaterialMutation={updateMaterialMutation}
+            deleteMaterialMutation={deleteMaterialMutation}
+            flash={flash}
+          />
         )}
         {tab === "maitsed" && (
           <MaitsedTab
@@ -1511,6 +1576,298 @@ function MaitsedTab({
       </button>
     </div>
   );
+}
+
+const PRESET_UNITS = ["tk", "pakk", "kg", "g", "liiter", "ml"];
+
+function TooraineTab({
+  data,
+  commitMutation,
+  addMaterialMutation,
+  updateMaterialMutation,
+  deleteMaterialMutation,
+  flash,
+}: {
+  data: LaduData;
+  commitMutation: CommitMutation;
+  addMaterialMutation: ReturnType<typeof useMutation<Material, Error, { name: string; unit: string }>>;
+  updateMaterialMutation: ReturnType<typeof useMutation<Material, Error, { id: number; name: string; unit: string }>>;
+  deleteMaterialMutation: ReturnType<typeof useMutation<number, Error, number>>;
+  flash: (msg: string) => void;
+}) {
+  const [addName, setAddName] = useState("");
+  const [addUnit, setAddUnit] = useState("kg");
+  const [addCustomUnit, setAddCustomUnit] = useState("");
+  const [adjustingId, setAdjustingId] = useState<number | null>(null);
+  const [adjustQty, setAdjustQty] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editUnit, setEditUnit] = useState("kg");
+  const [editCustomUnit, setEditCustomUnit] = useState("");
+
+  const resolvedAddUnit = addUnit === "__custom__" ? addCustomUnit.trim() : addUnit;
+  const resolvedEditUnit = editUnit === "__custom__" ? editCustomUnit.trim() : editUnit;
+
+  const handleAdd = () => {
+    const name = addName.trim();
+    const unit = resolvedAddUnit;
+    if (!name) return flash("Sisesta tooraine nimi");
+    if (!unit) return flash("Sisesta ühik");
+    addMaterialMutation.mutate(
+      { name, unit },
+      {
+        onSuccess: () => {
+          setAddName("");
+          setAddUnit("kg");
+          setAddCustomUnit("");
+        },
+      }
+    );
+  };
+
+  const startEdit = (m: Material) => {
+    setEditingId(m.id);
+    setEditName(m.name);
+    if (PRESET_UNITS.includes(m.unit)) {
+      setEditUnit(m.unit);
+      setEditCustomUnit("");
+    } else {
+      setEditUnit("__custom__");
+      setEditCustomUnit(m.unit);
+    }
+  };
+
+  const saveEdit = (m: Material) => {
+    const name = editName.trim();
+    const unit = resolvedEditUnit;
+    if (!name) return flash("Sisesta nimi");
+    if (!unit) return flash("Sisesta ühik");
+    updateMaterialMutation.mutate(
+      { id: m.id, name, unit },
+      { onSuccess: () => setEditingId(null) }
+    );
+  };
+
+  const handleAdjust = (m: Material) => {
+    const newQty = parseFloat(adjustQty.replace(",", "."));
+    if (isNaN(newQty) || newQty < 0) return flash("Sisesta kehtiv kogus");
+    const delta = newQty - (m.qty ?? 0);
+    if (delta === 0) {
+      setAdjustingId(null);
+      setAdjustQty("");
+      return;
+    }
+    commitMutation.mutate(
+      {
+        deltas: [{ kind: "material", materialId: m.id, amount: delta }],
+        type: "korrigeerimine",
+        summary: `${m.name}: ${formatQty(m.qty)} → ${formatQty(newQty)} ${m.unit}`,
+      },
+      {
+        onSuccess: () => {
+          flash("Laoseis uuendatud");
+          setAdjustingId(null);
+          setAdjustQty("");
+        },
+      }
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {data.materials.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-8 text-center">
+          <Leaf className="w-8 h-8 text-stone-300 mx-auto mb-2" />
+          <p className="text-sm text-stone-500 mb-1">Toorained puuduvad</p>
+          <p className="text-xs text-stone-400">Lisa esmalt tooraine allpool</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {data.materials.map((m) => {
+            if (editingId === m.id) {
+              return (
+                <div key={m.id} className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3">
+                  <div>
+                    <label className="block text-xs text-stone-500 mb-1">Nimi</label>
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-stone-500 mb-1">Ühik</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={editUnit}
+                        onChange={(e) => setEditUnit(e.target.value)}
+                        className="rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
+                      >
+                        {PRESET_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                        <option value="__custom__">muu…</option>
+                      </select>
+                      {editUnit === "__custom__" && (
+                        <input
+                          value={editCustomUnit}
+                          onChange={(e) => setEditCustomUnit(e.target.value)}
+                          placeholder="ühik"
+                          className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
+                        />
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(m)}
+                      disabled={updateMaterialMutation.isPending}
+                      className="flex items-center gap-1 rounded-lg bg-amber-700 px-3 py-1.5 text-xs text-white hover:bg-amber-800 disabled:opacity-60"
+                    >
+                      <Check className="w-3 h-3" /> Salvesta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="flex items-center gap-1 rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-100"
+                    >
+                      <X className="w-3 h-3" /> Tühista
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={m.id} className="rounded-xl border border-stone-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="font-medium text-stone-900">{m.name}</div>
+                    <div className="text-2xl font-semibold text-stone-800 mt-1">
+                      {formatQty(m.qty)}{" "}
+                      <span className="text-base font-normal text-stone-500">{m.unit}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(m)}
+                      className="text-stone-400 hover:text-amber-700"
+                      title="Muuda nime/ühikut"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!confirm(`Kustutan "${m.name}"?`)) return;
+                        deleteMaterialMutation.mutate(m.id);
+                      }}
+                      disabled={deleteMaterialMutation.isPending}
+                      className="text-stone-400 hover:text-red-600 disabled:opacity-40"
+                      title="Kustuta"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {adjustingId === m.id ? (
+                  <div className="mt-3 flex gap-2 items-center">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="any"
+                      value={adjustQty}
+                      onChange={(e) => setAdjustQty(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleAdjust(m); }}
+                      placeholder={`uus kogus (${m.unit})`}
+                      className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAdjust(m)}
+                      disabled={commitMutation.isPending}
+                      className="flex items-center gap-1 rounded-lg bg-amber-700 px-3 py-2 text-xs text-white hover:bg-amber-800 disabled:opacity-60"
+                    >
+                      <Check className="w-3 h-3" /> OK
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setAdjustingId(null); setAdjustQty(""); }}
+                      className="rounded-lg border border-stone-300 px-3 py-2 text-xs text-stone-600 hover:bg-stone-100"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setAdjustingId(m.id); setAdjustQty(String(m.qty ?? 0)); }}
+                    className="mt-3 text-xs text-amber-700 hover:underline flex items-center gap-1"
+                  >
+                    <Pencil className="w-3 h-3" /> Muuda laoseisu
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="rounded-xl border border-stone-200 bg-white p-5">
+        <h3 className="font-serif text-base text-stone-900 mb-3">Lisa tooraine</h3>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-stone-500 mb-1">Nimi</label>
+            <input
+              value={addName}
+              onChange={(e) => setAddName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+              placeholder="nt suhkur, ingver, must tee"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-stone-500 mb-1">Ühik</label>
+            <div className="flex gap-2">
+              <select
+                value={addUnit}
+                onChange={(e) => setAddUnit(e.target.value)}
+                className="rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
+              >
+                {PRESET_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                <option value="__custom__">muu…</option>
+              </select>
+              {addUnit === "__custom__" && (
+                <input
+                  value={addCustomUnit}
+                  onChange={(e) => setAddCustomUnit(e.target.value)}
+                  placeholder="ühik"
+                  className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
+                />
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={addMaterialMutation.isPending}
+            className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm text-white hover:bg-amber-800 disabled:opacity-60"
+          >
+            <Plus className="w-4 h-4" /> Lisa tooraine
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatQty(n: number | null | undefined): string {
+  if (n == null) return "0";
+  const rounded = Math.round(n * 1000) / 1000;
+  return rounded % 1 === 0 ? String(rounded) : rounded.toLocaleString("et-EE");
 }
 
 function AjaluguTab({
