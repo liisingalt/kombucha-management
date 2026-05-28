@@ -548,7 +548,7 @@ function UusPruulimine({
         {m.isPending
           ? "Salvestan…"
           : isMulti
-          ? `Salvesta ${portions.filter((_, i) => portionCalcs[i].boiled > 0).length} portsi teed`
+          ? `Salvesta ${portions.filter((_, i) => portionCalcs[i].boiled > 0).length} portsu teed`
           : "Salvesta pruulimine"}
       </button>
     </div>
