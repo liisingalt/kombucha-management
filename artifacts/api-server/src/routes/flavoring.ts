@@ -222,6 +222,22 @@ router.post("/flavoring/events", requireAuth, async (req, res) => {
   }
 });
 
+router.patch("/flavoring/events/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = Number(req.params.id);
+  const { bottlingDate } = req.body as { bottlingDate?: string | null };
+  try {
+    await db
+      .update(flavoringEventTable)
+      .set({ bottlingDate: bottlingDate || null })
+      .where(and(eq(flavoringEventTable.id, id), eq(flavoringEventTable.userId, userId)));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to patch flavoring event");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.delete("/flavoring/events/:id", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const id = Number(req.params.id);
