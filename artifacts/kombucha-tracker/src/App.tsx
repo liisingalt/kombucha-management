@@ -9,10 +9,6 @@ import { queryClient } from "@/lib/queryClient";
 import LandingPage from "@/pages/landing";
 import DashboardPage from "@/pages/dashboard";
 import OnboardingPage from "@/pages/onboarding";
-import BatchesPage from "@/pages/batches";
-import NewBatchPage from "@/pages/batches/new";
-import BatchDetailPage from "@/pages/batches/[batchId]";
-import CreateLogPage from "@/pages/batches/[batchId]/log";
 import PhotosPage from "@/pages/photos";
 import AdvisorPage from "@/pages/advisor";
 import InsightsPage from "@/pages/insights";
@@ -24,6 +20,7 @@ import LaduPage from "@/pages/ladu";
 import ValmistaminePage from "@/pages/valmistamine";
 import KaariminePage from "@/pages/kaarimine";
 import MaitsestaminePage from "@/pages/maitsestamine";
+import EluigaPage from "@/pages/eluiga";
 import NotFound from "@/pages/not-found";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -152,18 +149,6 @@ function ClerkProviderWithRoutes() {
             <Route path="/onboarding">
               {() => <ProtectedRoute component={OnboardingPage} />}
             </Route>
-            <Route path="/batches/new">
-              {() => <ProtectedRoute component={NewBatchPage} />}
-            </Route>
-            <Route path="/batches/:batchId/log">
-              {() => <ProtectedRoute component={CreateLogPage} />}
-            </Route>
-            <Route path="/batches/:batchId">
-              {() => <ProtectedRoute component={BatchDetailPage} />}
-            </Route>
-            <Route path="/batches">
-              {() => <ProtectedRoute component={BatchesPage} />}
-            </Route>
             <Route path="/photos">
               {() => <ProtectedRoute component={PhotosPage} />}
             </Route>
@@ -196,6 +181,9 @@ function ClerkProviderWithRoutes() {
             </Route>
             <Route path="/maitsestamine">
               {() => <ProtectedRoute component={MaitsestaminePage} />}
+            </Route>
+            <Route path="/eluiga">
+              {() => <ProtectedRoute component={EluigaPage} />}
             </Route>
             <Route component={NotFound} />
           </Switch>

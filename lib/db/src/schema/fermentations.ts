@@ -10,6 +10,7 @@ export const fermentationBatchTable = pgTable("fermentation_batch", {
   flavoringDate: text("flavoring_date"),
   notes: text("notes").default(""),
   vessels: jsonb("vessels").notNull(),
+  starterSourceBatchId: integer("starter_source_batch_id"),
 });
 
 export type FermentationBatch = typeof fermentationBatchTable.$inferSelect;

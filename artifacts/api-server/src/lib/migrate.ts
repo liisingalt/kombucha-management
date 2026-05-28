@@ -178,6 +178,20 @@ export async function runMigrations(): Promise<void> {
       ALTER TABLE brews ADD COLUMN IF NOT EXISTS sugar_stock_id INTEGER;
       ALTER TABLE brews ADD COLUMN IF NOT EXISTS session_id INTEGER;
     `);
+    await client.query(`
+      ALTER TABLE fermentation_batch ADD COLUMN IF NOT EXISTS starter_source_batch_id INTEGER;
+    `);
+    await client.query(`
+      ALTER TABLE bottle_tests ADD COLUMN IF NOT EXISTS flavoring_event_id INTEGER;
+    `);
+    await client.query(`
+      ALTER TABLE photos DROP CONSTRAINT IF EXISTS photos_batch_id_fkey;
+      ALTER TABLE photos ALTER COLUMN batch_id DROP NOT NULL;
+      ALTER TABLE photos ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT '';
+      ALTER TABLE photos ADD COLUMN IF NOT EXISTS phase TEXT;
+      ALTER TABLE photos ADD COLUMN IF NOT EXISTS stage_ref_id INTEGER;
+      ALTER TABLE photos ADD COLUMN IF NOT EXISTS photo_date TEXT;
+    `);
     logger.info("Migrations complete");
   } finally {
     client.release();

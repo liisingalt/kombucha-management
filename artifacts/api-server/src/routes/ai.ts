@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { batchesTable, logsTable, chatMessagesTable, photosTable, personaMaterialsTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { chatMessagesTable, photosTable, personaMaterialsTable } from "@workspace/db";
+import { eq, desc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { textToSpeech } from "@workspace/integrations-openai-ai-server/audio";
@@ -45,17 +45,7 @@ router.post("/ai/analyze-photo", requireAuth, async (req, res) => {
       return;
     }
 
-    // Verify the batch belongs to this user
-    const batch = await db.query.batchesTable.findFirst({
-      where: and(eq(batchesTable.id, photo.batchId), eq(batchesTable.userId, userId)),
-    });
-
-    if (!batch) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-
-    // Additionally verify ACL ownership on the stored object
+    // Verify ACL ownership on the stored object
     const objectFile = await storageService.getObjectEntityFile(objectPath);
     const aclPolicy = await getObjectAclPolicy(objectFile);
     if (aclPolicy && aclPolicy.owner !== userId) {
@@ -153,21 +143,6 @@ router.post("/ai/chat", requireAuth, async (req, res) => {
   const { message } = parsed.data;
 
   try {
-    const activeBatches = await db.query.batchesTable.findMany({
-      where: and(eq(batchesTable.userId, userId), eq(batchesTable.status, "active")),
-      orderBy: [desc(batchesTable.createdAt)],
-      limit: 3,
-    });
-
-    const recentBatch = activeBatches[0];
-    const recentLogs = recentBatch
-      ? await db.query.logsTable.findMany({
-          where: eq(logsTable.batchId, recentBatch.id),
-          orderBy: [desc(logsTable.loggedAt)],
-          limit: 5,
-        })
-      : [];
-
     const previousMessages = await db.query.chatMessagesTable.findMany({
       where: eq(chatMessagesTable.userId, userId),
       orderBy: [desc(chatMessagesTable.createdAt)],
@@ -175,15 +150,6 @@ router.post("/ai/chat", requireAuth, async (req, res) => {
     });
 
     const contextParts: string[] = [];
-    if (activeBatches.length > 0) {
-      contextParts.push(`Active batches: ${activeBatches.map(b => `"${b.name}" (started ${b.startedAt.toLocaleDateString()})`).join(", ")}.`);
-    }
-    if (recentLogs.length > 0) {
-      const logSummary = recentLogs.slice(0, 3).map(l =>
-        `Day ${l.dayNumber}: temp ${l.temperature ?? "?"}°C, smell: ${l.smell ?? "?"}`
-      ).join("; ");
-      contextParts.push(`Recent logs: ${logSummary}.`);
-    }
 
     // Find relevant blog articles based on kombucha keywords in the user message
     const kombuchaKeywords = [

@@ -15,6 +15,7 @@ export const bottleTestsTable = pgTable("bottle_tests", {
   conclusion: text("conclusion"),
   tastedDate: timestamp("tasted_date"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  flavoringEventId: integer("flavoring_event_id"),
 });
 
 export const insertBottleTestSchema = createInsertSchema(bottleTestsTable).omit({

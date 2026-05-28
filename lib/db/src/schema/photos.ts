@@ -5,7 +5,11 @@ import { batchesTable } from "./batches";
 
 export const photosTable = pgTable("photos", {
   id: serial("id").primaryKey(),
-  batchId: integer("batch_id").notNull().references(() => batchesTable.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().default(""),
+  batchId: integer("batch_id").references(() => batchesTable.id, { onDelete: "cascade" }),
+  phase: text("phase"),
+  stageRefId: integer("stage_ref_id"),
+  photoDate: text("photo_date"),
   objectPath: text("object_path").notNull(),
   caption: text("caption"),
   dayNumber: integer("day_number"),

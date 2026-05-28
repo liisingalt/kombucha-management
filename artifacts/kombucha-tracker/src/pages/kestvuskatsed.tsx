@@ -4,7 +4,7 @@ import { format, differenceInDays } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Plus, FlaskConical, Trash2, CheckCircle, X, Download, Pencil } from "lucide-react";
+import { Plus, FlaskConical, Trash2, CheckCircle, X, Download, Pencil, ChevronDown, ChevronUp, Sparkles, Loader2, GitBranch } from "lucide-react";
 
 type BottleTest = {
   id: number;
@@ -18,6 +18,21 @@ type BottleTest = {
   conclusion: string | null;
   tastedDate: string | null;
   createdAt: string;
+  flavoringEventId: number | null;
+};
+
+type FlavEvent = {
+  id: number;
+  date: string;
+  bottlingDate: string | null;
+  fermentationBatchId: number | null;
+};
+
+type JourneyData = {
+  flavoringEvent: { id: number; date: string; bottlingDate: string | null; blocks: unknown[]; notes: string } | null;
+  fermentation: { id: number; teaSort: string | null; startDate: string; flavoringDate: string | null; notes: string | null; f1Days: number | null } | null;
+  brew: { id: number; date: string; teaSort: string | null; teaG: number; sugarG: number; boiledL: number; coldWaterL: number; steepMin: number | null; temp: number | null; starterPct: number; starterG: number } | null;
+  f2Days: number | null;
 };
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -43,6 +58,11 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function fmtD(d: string | Date | null | undefined) {
+  if (!d) return "—";
+  return format(new Date(d), "d. MMM yyyy");
+}
+
 export default function KestvuskatsedPage() {
   const { getToken } = useAuth();
   const [items, setItems] = useState<BottleTest[]>([]);
@@ -55,6 +75,7 @@ export default function KestvuskatsedPage() {
     bottleId: "",
     bottledDate: todayISO(),
     intervalMonths: 1,
+    flavoringEventId: null as number | null,
   });
   const [addError, setAddError] = useState<string | null>(null);
   const [addLoading, setAddLoading] = useState(false);
@@ -73,6 +94,7 @@ export default function KestvuskatsedPage() {
     result: "",
     conclusion: "",
     tastedDate: todayISO(),
+    flavoringEventId: null as number | null,
   });
   const [editError, setEditError] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
@@ -82,6 +104,13 @@ export default function KestvuskatsedPage() {
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterBottledFrom, setFilterBottledFrom] = useState("");
   const [filterBottledTo, setFilterBottledTo] = useState("");
+
+  const [flavEvents, setFlavEvents] = useState<FlavEvent[]>([]);
+  const [expandedJourneyId, setExpandedJourneyId] = useState<number | null>(null);
+  const [journeyMap, setJourneyMap] = useState<Record<number, JourneyData | null>>({});
+  const [journeyLoading, setJourneyLoading] = useState<number | null>(null);
+  const [aiInsightMap, setAiInsightMap] = useState<Record<number, string>>({});
+  const [aiLoadingId, setAiLoadingId] = useState<number | null>(null);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -100,9 +129,24 @@ export default function KestvuskatsedPage() {
     }
   }, [getToken]);
 
+  const fetchFlavEvents = useCallback(async () => {
+    try {
+      const token = await getToken();
+      const res = await fetch(`${BASE_URL}/api/flavoring/events`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFlavEvents(data);
+      }
+    } catch {
+    }
+  }, [getToken]);
+
   useEffect(() => {
     fetchItems();
-  }, [fetchItems]);
+    fetchFlavEvents();
+  }, [fetchItems, fetchFlavEvents]);
 
   const waiting = items
     .filter((i) => i.status === "ootab")
@@ -121,6 +165,59 @@ export default function KestvuskatsedPage() {
     if (filterBottledTo && bottledISO > filterBottledTo) return false;
     return true;
   });
+
+  function relevantFlavEvents(bottledDate: string) {
+    if (!bottledDate) return flavEvents;
+    const base = new Date(bottledDate).getTime();
+    return flavEvents.filter((ev) => {
+      const d = new Date(ev.bottlingDate ?? ev.date).getTime();
+      return Math.abs(d - base) <= 7 * 86400000;
+    });
+  }
+
+  async function toggleJourney(item: BottleTest) {
+    if (expandedJourneyId === item.id) {
+      setExpandedJourneyId(null);
+      return;
+    }
+    setExpandedJourneyId(item.id);
+    if (journeyMap[item.id] !== undefined) return;
+    if (!item.flavoringEventId) {
+      setJourneyMap((m) => ({ ...m, [item.id]: null }));
+      return;
+    }
+    setJourneyLoading(item.id);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${BASE_URL}/api/bottle-tests/${item.id}/journey`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setJourneyMap((m) => ({ ...m, [item.id]: data.journey }));
+    } catch {
+      setJourneyMap((m) => ({ ...m, [item.id]: null }));
+    } finally {
+      setJourneyLoading(null);
+    }
+  }
+
+  async function loadAiInsight(item: BottleTest) {
+    if (aiInsightMap[item.id] || aiLoadingId === item.id) return;
+    setAiLoadingId(item.id);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${BASE_URL}/api/bottle-tests/${item.id}/ai-insight`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      setAiInsightMap((m) => ({ ...m, [item.id]: data.insight ?? "Analüüsi ei saanud koostada." }));
+    } catch {
+      setAiInsightMap((m) => ({ ...m, [item.id]: "Analüüsi ei saanud koostada." }));
+    } finally {
+      setAiLoadingId(null);
+    }
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -143,6 +240,7 @@ export default function KestvuskatsedPage() {
           bottleId: addForm.bottleId.trim(),
           bottledDate: addForm.bottledDate,
           intervalMonths: Number(addForm.intervalMonths),
+          flavoringEventId: addForm.flavoringEventId ?? undefined,
         }),
       });
       if (!res.ok) {
@@ -152,7 +250,7 @@ export default function KestvuskatsedPage() {
       const created = await res.json();
       setItems((prev) => [...prev, created]);
       setShowAddModal(false);
-      setAddForm({ product: "", bottleId: "", bottledDate: todayISO(), intervalMonths: 1 });
+      setAddForm({ product: "", bottleId: "", bottledDate: todayISO(), intervalMonths: 1, flavoringEventId: null });
     } catch (e: unknown) {
       setAddError(e instanceof Error ? e.message : "Viga");
     } finally {
@@ -187,10 +285,9 @@ export default function KestvuskatsedPage() {
         const d = await res.json();
         throw new Error(d.error ?? "Viga");
       }
-      const updated = await res.json();
-      setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+      await res.json();
+      await fetchItems();
       setTasteTarget(null);
-      setTasteForm({ result: "", conclusion: "", tastedDate: todayISO() });
     } catch (e: unknown) {
       setTasteError(e instanceof Error ? e.message : "Viga");
     } finally {
@@ -226,6 +323,7 @@ export default function KestvuskatsedPage() {
       result: item.result ?? "",
       conclusion: item.conclusion ?? "",
       tastedDate: item.tastedDate ? new Date(item.tastedDate).toISOString().slice(0, 10) : todayISO(),
+      flavoringEventId: item.flavoringEventId ?? null,
     });
     setEditError(null);
   }
@@ -246,6 +344,7 @@ export default function KestvuskatsedPage() {
         bottleId: editForm.bottleId.trim(),
         bottledDate: editForm.bottledDate,
         intervalMonths: Number(editForm.intervalMonths),
+        flavoringEventId: editForm.flavoringEventId,
       };
       if (editTarget.status === "maitsitud") {
         body.result = editForm.result.trim();
@@ -267,6 +366,7 @@ export default function KestvuskatsedPage() {
       await res.json();
       await fetchItems();
       setEditTarget(null);
+      setJourneyMap((m) => { const n = { ...m }; delete n[editTarget.id]; return n; });
     } catch (e: unknown) {
       setEditError(e instanceof Error ? e.message : "Viga");
     } finally {
@@ -302,6 +402,133 @@ export default function KestvuskatsedPage() {
     URL.revokeObjectURL(url);
   }
 
+  function FlavEventDropdown({
+    value,
+    onChange,
+    bottledDate,
+  }: {
+    value: number | null;
+    onChange: (id: number | null) => void;
+    bottledDate: string;
+  }) {
+    const candidates = relevantFlavEvents(bottledDate);
+    return (
+      <div>
+        <label className="block text-sm font-medium mb-1.5">
+          Seotud maitsestamine / villimissündmus{" "}
+          <span className="text-muted-foreground font-normal text-xs">(valikuline)</span>
+        </label>
+        <select
+          className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+        >
+          <option value="">— Vali (valikuline) —</option>
+          {candidates.map((ev) => (
+            <option key={ev.id} value={ev.id}>
+              Maitsestamine {ev.date}
+              {ev.bottlingDate ? ` → villitud ${ev.bottlingDate}` : ""}
+            </option>
+          ))}
+          {candidates.length === 0 && flavEvents.length > 0 && (
+            <option disabled>Valitud kuupäeva lähedal sündmusi ei leitud</option>
+          )}
+        </select>
+        {candidates.length === 0 && flavEvents.length === 0 && (
+          <p className="text-xs text-muted-foreground mt-1">Lisa kõigepealt maitsestamissündmused Maitsestamine lehelt.</p>
+        )}
+      </div>
+    );
+  }
+
+  function JourneySection({ item }: { item: BottleTest }) {
+    const j = journeyMap[item.id];
+    const isLoading = journeyLoading === item.id;
+    const aiInsight = aiInsightMap[item.id];
+    const aiIsLoading = aiLoadingId === item.id;
+
+    if (isLoading) {
+      return (
+        <div className="mt-3 pt-3 border-t border-border/40 flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 size={12} className="animate-spin" />
+          Laadin teekonda...
+        </div>
+      );
+    }
+
+    if (!j) {
+      return (
+        <div className="mt-3 pt-3 border-t border-border/40 text-xs text-muted-foreground">
+          {item.flavoringEventId
+            ? "Teekonnaandmed puuduvad."
+            : "Seosta katse maitsestamissündmusega, et teekond kuvataks. Kasuta redigeeri nuppu."}
+        </div>
+      );
+    }
+
+    return (
+      <div className="mt-3 pt-3 border-t border-border/40 space-y-3">
+        <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+          <GitBranch size={12} />
+          Pruulimise teekond
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+          {j.brew && (
+            <div className="bg-muted/40 rounded-xl p-2.5 space-y-0.5">
+              <div className="font-semibold text-foreground/80 mb-1">Pruulimine</div>
+              <div>{fmtD(j.brew.date)}</div>
+              {j.brew.teaG > 0 && <div>{j.brew.teaG}g teed</div>}
+              {j.brew.sugarG > 0 && <div>{j.brew.sugarG}g suhkrut</div>}
+              {j.brew.steepMin && <div>Tõmbis {j.brew.steepMin}min</div>}
+              {j.brew.temp && <div>Temp {j.brew.temp}°C</div>}
+            </div>
+          )}
+          {j.fermentation && (
+            <div className="bg-muted/40 rounded-xl p-2.5 space-y-0.5">
+              <div className="font-semibold text-foreground/80 mb-1">Käärimine</div>
+              <div>Algus {fmtD(j.fermentation.startDate)}</div>
+              {j.fermentation.teaSort && <div>{j.fermentation.teaSort}</div>}
+              {j.fermentation.f1Days != null && (
+                <div className="font-medium text-amber-700">F1: {j.fermentation.f1Days} päeva</div>
+              )}
+            </div>
+          )}
+          {j.flavoringEvent && (
+            <div className="bg-muted/40 rounded-xl p-2.5 space-y-0.5">
+              <div className="font-semibold text-foreground/80 mb-1">Maitsestamine → Villimine</div>
+              <div>Maitsestatud {fmtD(j.flavoringEvent.date)}</div>
+              {j.flavoringEvent.bottlingDate && <div>Villitud {fmtD(j.flavoringEvent.bottlingDate)}</div>}
+              {j.f2Days != null && (
+                <div className="font-medium text-amber-700">F2: {j.f2Days} päeva</div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {aiInsight && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900">
+            <div className="font-semibold mb-1 flex items-center gap-1">
+              <Sparkles size={11} />
+              AI tähelepanekud
+            </div>
+            {aiInsight}
+          </div>
+        )}
+
+        {!aiInsight && (
+          <button
+            onClick={() => loadAiInsight(item)}
+            disabled={aiIsLoading}
+            className="flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-900 border border-amber-200 hover:border-amber-400 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50"
+          >
+            {aiIsLoading ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+            {aiIsLoading ? "Analysin..." : "AI tähelepanekud"}
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <Layout>
       {/* Header */}
@@ -322,7 +549,6 @@ export default function KestvuskatsedPage() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-5 space-y-8">
-        {/* Loading / error */}
         {loading && (
           <p className="text-muted-foreground text-sm text-center py-12">Laadin...</p>
         )}
@@ -353,6 +579,7 @@ export default function KestvuskatsedPage() {
               <div className="space-y-3">
                 {waiting.map((item) => {
                   const badge = urgencyBadge(item.nextTasting);
+                  const isJourneyOpen = expandedJourneyId === item.id;
                   return (
                     <div
                       key={item.id}
@@ -369,6 +596,11 @@ export default function KestvuskatsedPage() {
                             <span className="text-xs text-muted-foreground font-mono bg-muted rounded px-1.5 py-0.5">
                               {item.bottleId}
                             </span>
+                            {item.flavoringEventId && (
+                              <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
+                                Seotud
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-muted-foreground mb-1">
                             Villitud: {format(new Date(item.bottledDate), "d. MMM yyyy")} · {item.intervalMonths} kuu intervall
@@ -416,15 +648,23 @@ export default function KestvuskatsedPage() {
                             <Trash2 size={13} />
                             Kustuta
                           </Button>
+                          <button
+                            onClick={() => toggleJourney(item)}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            <GitBranch size={12} />
+                            {isJourneyOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          </button>
                         </div>
                       </div>
+                      {isJourneyOpen && <JourneySection item={item} />}
                     </div>
                   );
                 })}
               </div>
             </section>
 
-            {/* Tasted results section — always visible */}
+            {/* Tasted results section */}
             <section>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
@@ -677,6 +917,11 @@ export default function KestvuskatsedPage() {
                   onChange={(e) => setAddForm((f) => ({ ...f, bottledDate: e.target.value }))}
                 />
               </div>
+              <FlavEventDropdown
+                value={addForm.flavoringEventId}
+                onChange={(id) => setAddForm((f) => ({ ...f, flavoringEventId: id }))}
+                bottledDate={addForm.bottledDate}
+              />
               <div>
                 <label className="block text-sm font-medium mb-1.5">Maitsemisintervall (kuudes)</label>
                 <input
@@ -764,6 +1009,11 @@ export default function KestvuskatsedPage() {
                   onChange={(e) => setEditForm((f) => ({ ...f, bottledDate: e.target.value }))}
                 />
               </div>
+              <FlavEventDropdown
+                value={editForm.flavoringEventId}
+                onChange={(id) => setEditForm((f) => ({ ...f, flavoringEventId: id }))}
+                bottledDate={editForm.bottledDate}
+              />
               <div>
                 <label className="block text-sm font-medium mb-1.5">Maitsemisintervall (kuudes)</label>
                 <input
