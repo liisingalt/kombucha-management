@@ -1767,6 +1767,7 @@ function TooraineTab({
   const [editCustomUnit, setEditCustomUnit] = useState("");
   const [editMinStock, setEditMinStock] = useState("");
   const [addMinStock, setAddMinStock] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
   const resolvedAddUnit = addUnit === "__custom__" ? addCustomUnit.trim() : addUnit;
   const resolvedEditUnit = editUnit === "__custom__" ? editCustomUnit.trim() : editUnit;
 
@@ -2103,6 +2104,65 @@ function TooraineTab({
         </div>
       )}
 
+
+      {(() => {
+        const matMovements = data.movements
+          .filter((m) =>
+            (m.deltas as Array<{ kind: string }>).some((d) => d.kind === "material")
+          )
+          .slice(0, 50);
+        return (
+          <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-stone-50 transition"
+            >
+              <span className="font-medium text-stone-800 text-sm flex items-center gap-2">
+                <History className="w-4 h-4 text-stone-400" />
+                Tooraine liikumised
+                {matMovements.length > 0 && (
+                  <span className="text-xs text-stone-400 font-normal">({matMovements.length})</span>
+                )}
+              </span>
+              {showHistory
+                ? <ChevronUp className="w-4 h-4 text-stone-400" />
+                : <ChevronDown className="w-4 h-4 text-stone-400" />}
+            </button>
+            {showHistory && (
+              matMovements.length === 0 ? (
+                <p className="px-4 pb-4 text-sm text-stone-400">Ühtegi toorainekanne pole.</p>
+              ) : (
+                <div className="border-t border-stone-100 divide-y divide-stone-100">
+                  {matMovements.map((m) => {
+                    const matDeltas = (m.deltas as Array<{ kind: string; materialId?: number; amount?: number }>)
+                      .filter((d) => d.kind === "material");
+                    return (
+                      <div key={m.id} className="px-4 py-2.5">
+                        <div className="text-xs text-stone-400 mb-1">
+                          {new Date(m.createdAt).toLocaleString("et-EE")}
+                        </div>
+                        {matDeltas.map((d, i) => {
+                          const mat = data.materials.find((mat) => mat.id === d.materialId);
+                          const amt = d.amount ?? 0;
+                          return (
+                            <div key={i} className="flex items-center justify-between text-sm">
+                              <span className="text-stone-700">{mat?.name ?? `#${d.materialId}`}</span>
+                              <span className={`font-medium tabular-nums ${amt >= 0 ? "text-green-700" : "text-red-600"}`}>
+                                {amt >= 0 ? "+" : ""}{formatQty(amt)} {mat?.unit ?? ""}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            )}
+          </div>
+        );
+      })()}
 
       <div className="rounded-xl border border-stone-200 bg-white p-5">
         <h3 className="font-serif text-base text-stone-900 mb-3">Lisa tooraine</h3>
