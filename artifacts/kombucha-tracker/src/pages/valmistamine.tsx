@@ -455,6 +455,16 @@ function UusPruulimine({
             ))}
           </select>
         </Field>
+        {sugarStockId !== "" && totalSugarG > 0 && (() => {
+          const sel = sugars.find((s) => s.id === sugarStockId);
+          if (!sel) return null;
+          const remaining = sel.qtyG - totalSugarG;
+          return remaining >= 0 ? (
+            <p className="text-xs text-stone-500 -mt-2">Pärast pruulimist jääb: <strong>{remaining} g</strong></p>
+          ) : (
+            <p className="text-xs text-red-600 -mt-2">Varust ei jätku — laos {sel.qtyG} g, kulub {totalSugarG} g (puudu {-remaining} g)</p>
+          );
+        })()}
         <Field label="Suhkur, g" hint="Arvutatud: kogu vedelik × 80">
           <input value={totalSugarG} readOnly className={calcCls} />
         </Field>
@@ -1224,6 +1234,16 @@ function BrewCard({
                 ))}
               </select>
             </Field>
+            {sugarStockId !== "" && sugarG > 0 && (() => {
+              const sel = sugars.find((s) => s.id === sugarStockId);
+              if (!sel) return null;
+              const remaining = sel.qtyG - sugarG;
+              return remaining >= 0 ? (
+                <p className="text-xs text-stone-500 -mt-2">Pärast pruulimist jääb: <strong>{remaining} g</strong></p>
+              ) : (
+                <p className="text-xs text-red-600 -mt-2">Varust ei jätku — laos {sel.qtyG} g, kulub {sugarG} g (puudu {-remaining} g)</p>
+              );
+            })()}
             <Field label="Suhkur, g" hint="Arvutatud: kogu vedelik × 80">
               <input value={sugarG} readOnly className={calcCls} />
             </Field>
