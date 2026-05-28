@@ -1034,6 +1034,7 @@ function BrewCard({
   const [tempReachedMin, setTempReachedMin] = useState(brew.tempReachedMin != null ? String(brew.tempReachedMin) : "");
   const [temp, setTemp] = useState(brew.temp != null ? String(brew.temp) : "");
   const [teaStockId, setTeaStockId] = useState<number | "">(brew.teaStockId ?? "");
+  const [sugarStockId, setSugarStockId] = useState<number | "">(brew.sugarStockId ?? "");
   const [steepMin, setSteepMin] = useState(String(brew.steepMin ?? 10));
   const [steepHeat, setSteepHeat] = useState(String(brew.steepHeat ?? 0));
   const [coldWaterL, setColdWaterL] = useState(String(brew.coldWaterL));
@@ -1052,6 +1053,7 @@ function BrewCard({
     setTempReachedMin(brew.tempReachedMin != null ? String(brew.tempReachedMin) : "");
     setTemp(brew.temp != null ? String(brew.temp) : "");
     setTeaStockId(brew.teaStockId ?? "");
+    setSugarStockId(brew.sugarStockId ?? "");
     setSteepMin(String(brew.steepMin ?? 10));
     setSteepHeat(String(brew.steepHeat ?? 0));
     setColdWaterL(String(brew.coldWaterL));
@@ -1110,6 +1112,7 @@ function BrewCard({
       teaG,
       steepMin,
       steepHeat,
+      sugarStockId: sugarStockId || null,
       sugarG,
       coldWaterL: cold,
       coolStartTime,
@@ -1207,6 +1210,20 @@ function BrewCard({
 
           <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 space-y-4">
             <h3 className="font-serif text-base text-stone-900">Suhkur ja vesi</h3>
+            <Field label="Suhkru varu">
+              <select
+                value={sugarStockId}
+                onChange={(e) => setSugarStockId(e.target.value ? Number(e.target.value) : "")}
+                className={inputCls}
+              >
+                <option value="">— vali suhkru varu —</option>
+                {sugars.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.qtyG} g laos)
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field label="Suhkur, g" hint="Arvutatud: kogu vedelik × 80">
               <input value={sugarG} readOnly className={calcCls} />
             </Field>

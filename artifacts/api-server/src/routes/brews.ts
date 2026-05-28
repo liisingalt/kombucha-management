@@ -323,6 +323,32 @@ router.patch("/brews/:id", requireAuth, async (req, res) => {
             .where(eq(teaStockTable.id, newTeaStockId));
         }
       }
+      const newSugarStockId = b.sugarStockId ? Number(b.sugarStockId) : null;
+      const newSugarG = Number(b.sugarG) || 0;
+      if (old.sugarStockId && old.sugarG > 0) {
+        const [oldSs] = await tx
+          .select()
+          .from(sugarStockTable)
+          .where(and(eq(sugarStockTable.id, old.sugarStockId), eq(sugarStockTable.userId, userId)));
+        if (oldSs) {
+          await tx
+            .update(sugarStockTable)
+            .set({ qtyG: oldSs.qtyG + old.sugarG })
+            .where(eq(sugarStockTable.id, old.sugarStockId));
+        }
+      }
+      if (newSugarStockId && newSugarG > 0) {
+        const [newSs] = await tx
+          .select()
+          .from(sugarStockTable)
+          .where(and(eq(sugarStockTable.id, newSugarStockId), eq(sugarStockTable.userId, userId)));
+        if (newSs) {
+          await tx
+            .update(sugarStockTable)
+            .set({ qtyG: newSs.qtyG - newSugarG })
+            .where(eq(sugarStockTable.id, newSugarStockId));
+        }
+      }
       await tx
         .update(brewsTable)
         .set({
@@ -336,7 +362,8 @@ router.patch("/brews/:id", requireAuth, async (req, res) => {
           teaG: newTeaG,
           steepMin: Number(b.steepMin) || 0,
           steepHeat: Number(b.steepHeat) || 0,
-          sugarG: Number(b.sugarG) || 0,
+          sugarStockId: newSugarStockId,
+          sugarG: newSugarG,
           coldWaterL: Number(b.coldWaterL) || 0,
           coolStartTime: b.coolStartTime ?? "",
           coolPlace: b.coolPlace ?? "",
