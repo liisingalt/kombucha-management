@@ -297,6 +297,12 @@ export default function KestvuskatsedPage() {
     .filter((i) => i.status === "maitsitud")
     .sort((a, b) => new Date(b.tastedDate ?? 0).getTime() - new Date(a.tastedDate ?? 0).getTime());
 
+  const activeFilterCount = [
+    filterProduct,
+    filterDateFrom || filterDateTo,
+    filterBottledFrom || filterBottledTo,
+  ].filter(Boolean).length;
+
   const filteredTasted = tasted.filter((i) => {
     if (filterProduct && !i.product.toLowerCase().includes(filterProduct.toLowerCase())) return false;
     if (filterDateFrom && i.tastedDate && i.tastedDate.slice(0, 10) < filterDateFrom) return false;
@@ -1041,6 +1047,9 @@ export default function KestvuskatsedPage() {
                       }}
                     >
                       Tühista filtrid
+                      <span className="ml-1 inline-flex items-center justify-center rounded-full bg-primary/15 text-primary text-[10px] font-semibold w-4 h-4 leading-none">
+                        {activeFilterCount}
+                      </span>
                     </button>
                   )}
                 </div>
