@@ -22,6 +22,9 @@ const COLOR_HEX: Record<string, string> = {
 
 type Flavor = { id: number; name: string; defaultCapId: number | null };
 type Bottle = { id: number; size: number; qty: number };
+type BrewMin = { id: number; date: string; sessionId: number | null };
+type FermMin = { id: number; brewId: number | null };
+type EventMin = { id: number; bottlingDate: string | null; fermentationBatchId: number | null };
 type Label = { id: number; flavorId: number; size: number; qty: number };
 type Cap = { id: number; size: number; type: string; color: string; qty: number };
 type CustomLabelBottle = { id: number; size: number; qty: number };
@@ -156,6 +159,28 @@ export default function LaduPage() {
     queryKey: LADU_QUERY_KEY,
     queryFn: async () => {
       const res = await authFetch("/ladu");
+      return res.json();
+    },
+  });
+
+  const brewsTraceQ = useQuery<BrewMin[]>({
+    queryKey: ["brews"],
+    queryFn: async () => {
+      const res = await authFetch("/brews");
+      return res.json();
+    },
+  });
+  const fermsTraceQ = useQuery<FermMin[]>({
+    queryKey: ["fermentations"],
+    queryFn: async () => {
+      const res = await authFetch("/fermentations");
+      return res.json();
+    },
+  });
+  const eventsTraceQ = useQuery<EventMin[]>({
+    queryKey: ["flavoring-events"],
+    queryFn: async () => {
+      const res = await authFetch("/flavoring/events");
       return res.json();
     },
   });
@@ -425,7 +450,13 @@ export default function LaduPage() {
           />
         )}
         {tab === "ajalugu" && (
-          <AjaluguTab data={data} undoMutation={undoMutation} />
+          <AjaluguTab
+            data={data}
+            undoMutation={undoMutation}
+            brews={brewsTraceQ.data ?? []}
+            ferms={fermsTraceQ.data ?? []}
+            flavEvents={eventsTraceQ.data ?? []}
+          />
         )}
       </div>
 
@@ -1924,37 +1955,66 @@ function formatQty(n: number | null | undefined): string {
 function AjaluguTab({
   data,
   undoMutation,
+  brews,
+  ferms,
+  flavEvents,
 }: {
   data: LaduData;
   undoMutation: ReturnType<typeof useMutation<void, Error, number>>;
+  brews: BrewMin[];
+  ferms: FermMin[];
+  flavEvents: EventMin[];
 }) {
   if (data.movements.length === 0)
     return <p className="text-sm text-stone-400">Veel ühtegi kannet pole.</p>;
+
+  const brewDateForBottlingDate = (bottlingDate: string | null): string | null => {
+    if (!bottlingDate) return null;
+    const ferm = flavEvents
+      .filter((e) => e.bottlingDate === bottlingDate && e.fermentationBatchId != null)
+      .map((e) => ferms.find((f) => f.id === e.fermentationBatchId))
+      .find(Boolean);
+    const brew = ferm?.brewId != null ? brews.find((b) => b.id === ferm.brewId) : null;
+    if (!brew) return null;
+    const sessionPortCount = brew.sessionId != null
+      ? brews.filter((b) => b.sessionId === brew.sessionId).length
+      : 1;
+    const dateStr = new Date(brew.date).toLocaleDateString("et-EE");
+    return sessionPortCount > 1 ? `${dateStr} (${sessionPortCount} ports)` : dateStr;
+  };
+
   return (
     <div className="space-y-2">
-      {data.movements.map((m) => (
-        <div key={m.id} className="flex items-start justify-between rounded-xl border border-stone-200 bg-white px-4 py-3">
-          <div className="pr-3">
-            <div className="flex items-center gap-2 mb-0.5">
-              <span className={`text-xs px-2 py-0.5 rounded-full ${m.type === "villimine" ? "bg-amber-100 text-amber-800" : "bg-stone-100 text-stone-600"}`}>
-                {m.type}
-              </span>
-              <span className="text-xs text-stone-400">
-                {new Date(m.createdAt).toLocaleString("et-EE")}
-              </span>
+      {data.movements.map((m) => {
+        const movDate = m.createdAt.slice(0, 10);
+        const brewDateLabel = m.type === "villimine" ? brewDateForBottlingDate(movDate) : null;
+        return (
+          <div key={m.id} className="flex items-start justify-between rounded-xl border border-stone-200 bg-white px-4 py-3">
+            <div className="pr-3">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className={`text-xs px-2 py-0.5 rounded-full ${m.type === "villimine" ? "bg-amber-100 text-amber-800" : "bg-stone-100 text-stone-600"}`}>
+                  {m.type}
+                </span>
+                <span className="text-xs text-stone-400">
+                  {new Date(m.createdAt).toLocaleString("et-EE")}
+                </span>
+              </div>
+              <div className="text-sm text-stone-700">{m.summary}</div>
+              {brewDateLabel && (
+                <div className="text-xs text-stone-400 mt-0.5">Pruulimine: {brewDateLabel}</div>
+              )}
             </div>
-            <div className="text-sm text-stone-700">{m.summary}</div>
+            <button
+              type="button"
+              onClick={() => undoMutation.mutate(m.id)}
+              disabled={undoMutation.isPending}
+              className="text-stone-400 hover:text-amber-700 flex items-center gap-1 text-xs shrink-0 disabled:opacity-40"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> tagasi
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => undoMutation.mutate(m.id)}
-            disabled={undoMutation.isPending}
-            className="text-stone-400 hover:text-amber-700 flex items-center gap-1 text-xs shrink-0 disabled:opacity-40"
-          >
-            <RotateCcw className="w-3.5 h-3.5" /> tagasi
-          </button>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

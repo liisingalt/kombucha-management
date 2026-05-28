@@ -249,12 +249,17 @@ function UusKaarimine({
           if (!brewId) return null;
           const sel = brews.find((b) => b.id === brewId);
           if (!sel?.sessionId) return null;
-          const sessionBrews = brews.filter((b) => b.sessionId === sel.sessionId);
+          const sessionBrews = [...brews.filter((b) => b.sessionId === sel.sessionId)].sort((a, b) => a.id - b.id);
           if (sessionBrews.length <= 1) return null;
           const totalBoiled = sessionBrews.reduce((s, b) => s + b.boiledL, 0);
           return (
-            <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
-              Sessiooni ülevaade: {sessionBrews.length} ports ühel päeval · kokku {totalBoiled} L keedetud vett
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 space-y-0.5">
+              <div className="font-medium">{sessionBrews.length} ports teed ühel päeval · kokku {totalBoiled} L</div>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-amber-700">
+                {sessionBrews.map((b, i) => (
+                  <span key={b.id}>Ports {i + 1}: {b.boiledL} L{b.teaSort ? ` (${b.teaSort})` : ""}</span>
+                ))}
+              </div>
             </div>
           );
         })()}
