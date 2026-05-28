@@ -1021,7 +1021,7 @@ function BrewCard({
       <div className="flex items-start justify-between px-4 py-3">
         <div>
           <div className="text-sm font-medium">
-            {new Date(brew.date).toLocaleDateString("et-EE")} · {brew.boiledL} L · {brew.teaSort || "tee märkimata"}
+            {new Date(brew.date).toLocaleDateString("et-EE")} · {brew.boiledL + (brew.coldWaterL ?? brew.boiledL)} L · {brew.teaSort || "tee märkimata"}
           </div>
           <div className="text-xs text-stone-500 mt-0.5">
             Tee {brew.teaG} g · suhkur {brew.sugarG} g · juuretis {brew.starterG} g
