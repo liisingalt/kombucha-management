@@ -22,6 +22,7 @@ import KaariminePage from "@/pages/kaarimine";
 import MaitsestaminePage from "@/pages/maitsestamine";
 import EluigaPage from "@/pages/eluiga";
 import VarundusedPage from "@/pages/varundused";
+import TootminePage from "@/pages/tootmine";
 import NotFound from "@/pages/not-found";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -188,6 +189,9 @@ function ClerkProviderWithRoutes() {
             </Route>
             <Route path="/varundused">
               {() => <ProtectedRoute component={VarundusedPage} />}
+            </Route>
+            <Route path="/tootmine">
+              {() => <ProtectedRoute component={TootminePage} />}
             </Route>
             <Route component={NotFound} />
           </Switch>

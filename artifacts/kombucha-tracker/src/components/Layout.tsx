@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useClerk, useUser } from "@clerk/react";
-import { Home, BookOpen, MessageSquare, Settings, Beaker, Image, Sparkles, LogOut, ChevronRight, FlaskConical, Package, Droplets, Leaf, GitBranch, Database } from "lucide-react";
+import { Home, BookOpen, MessageSquare, Settings, Beaker, Image, Sparkles, LogOut, ChevronRight, FlaskConical, Package, Droplets, Leaf, GitBranch, Database, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -8,6 +8,7 @@ const bottomTabs = [
   { href: "/dashboard", label: "Täna", icon: Home },
   { href: "/insights", label: "Ülevaade", icon: BookOpen },
   { href: "/advisor", label: "Abiline", icon: MessageSquare },
+  { href: "/tootmine", label: "Tootmine", icon: PlusCircle },
   { href: "/settings", label: "Seaded", icon: Settings },
 ];
 
