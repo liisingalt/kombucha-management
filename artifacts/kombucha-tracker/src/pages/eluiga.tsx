@@ -544,6 +544,126 @@ function LifecycleCard({
   );
 }
 
+function LineageChain({
+  items,
+  onNavigateTo,
+}: {
+  items: LifecycleItem[];
+  onNavigateTo: (id: number) => void;
+}) {
+  const hasLinks = items.some((i) => i.starterSourceBatchId !== null);
+  if (items.length < 2 || !hasLinks) return null;
+
+  const byId = new Map(items.map((i) => [i.id, i]));
+
+  const childrenMap = new Map<number, number[]>();
+  for (const item of items) {
+    if (item.starterSourceBatchId !== null && byId.has(item.starterSourceBatchId)) {
+      const arr = childrenMap.get(item.starterSourceBatchId) ?? [];
+      arr.push(item.id);
+      childrenMap.set(item.starterSourceBatchId, arr);
+    }
+  }
+
+  function buildBranches(id: number): number[][] {
+    const kids = (childrenMap.get(id) ?? []).slice().sort((a, b) => {
+      const aDate = byId.get(a)?.startDate ?? "";
+      const bDate = byId.get(b)?.startDate ?? "";
+      return aDate.localeCompare(bDate);
+    });
+    if (kids.length === 0) return [[id]];
+    const result: number[][] = [];
+    for (const kid of kids) {
+      for (const branch of buildBranches(kid)) {
+        result.push([id, ...branch]);
+      }
+    }
+    return result;
+  }
+
+  const roots = items.filter(
+    (i) => i.starterSourceBatchId === null || !byId.has(i.starterSourceBatchId)
+  );
+
+  const visited = new Set<number>();
+  const allChains: number[][] = [];
+
+  for (const root of roots) {
+    if (visited.has(root.id)) continue;
+    for (const branch of buildBranches(root.id)) {
+      allChains.push(branch);
+      for (const id of branch) visited.add(id);
+    }
+  }
+  for (const item of items) {
+    if (!visited.has(item.id)) allChains.push([item.id]);
+  }
+
+  const linkedChains = allChains.filter((ch) => ch.length >= 2);
+  const singles = allChains.filter((ch) => ch.length === 1);
+
+  if (linkedChains.length === 0) return null;
+
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white px-4 pt-4 pb-3 mb-2">
+      <div className="flex items-center gap-2 mb-3">
+        <GitBranch size={14} className="text-amber-600" />
+        <span className="text-xs font-semibold text-stone-600 uppercase tracking-wide">Juuretise sugupuu</span>
+      </div>
+      <div className="space-y-2.5">
+        {linkedChains.map((chain, ci) => (
+          <div key={ci} className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-thin">
+            {chain.map((id, ni) => {
+              const batch = byId.get(id);
+              if (!batch) return null;
+              const isActive = !batch.flavoringEvent?.bottlingDate;
+              return (
+                <React.Fragment key={id}>
+                  <button
+                    onClick={() => onNavigateTo(id)}
+                    title={`Partii #${id}: ${batch.teaSort || "Nimeta"}`}
+                    className={`flex-shrink-0 rounded-xl px-2.5 py-1.5 border text-left transition hover:shadow-sm ${
+                      isActive
+                        ? "bg-amber-50 border-amber-200 hover:border-amber-400"
+                        : "bg-stone-50 border-stone-200 hover:border-stone-300"
+                    }`}
+                  >
+                    <div className="text-[11px] font-bold text-stone-800">#{id}</div>
+                    <div className="text-[10px] text-stone-500 leading-tight max-w-[80px] truncate">
+                      {batch.teaSort || "Nimeta"}
+                    </div>
+                    <div className="text-[9px] text-stone-400 mt-0.5">{fmtDate(batch.startDate)}</div>
+                  </button>
+                  {ni < chain.length - 1 && (
+                    <ArrowRight size={11} className="text-stone-300 flex-shrink-0" />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        ))}
+        {singles.length > 0 && (
+          <div className="flex items-center gap-1.5 pt-1 border-t border-stone-100">
+            <span className="text-[10px] text-stone-400 flex-shrink-0">Seostamata:</span>
+            {singles.map((ch) => {
+              const id = ch[0];
+              return (
+                <button
+                  key={id}
+                  onClick={() => onNavigateTo(id)}
+                  className="text-[10px] text-stone-500 border border-stone-200 rounded-md px-1.5 py-0.5 hover:bg-stone-50 flex-shrink-0"
+                >
+                  #{id}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function EluigaPage() {
   const authFetch = useAuthFetch();
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -605,6 +725,8 @@ export default function EluigaPage() {
             </a>
           </div>
         )}
+
+        <LineageChain items={items} onNavigateTo={navigateTo} />
 
         {items.map((item) => (
           <LifecycleCard
