@@ -32,6 +32,7 @@ type StatsGroup = {
   label: string;
   count: number;
   avgDays: number;
+  avgAllDays: number;
   minDays: number;
   maxDays: number;
   heaCount: number;

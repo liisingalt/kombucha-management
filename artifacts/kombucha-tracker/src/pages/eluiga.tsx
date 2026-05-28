@@ -4,7 +4,7 @@ import { useAuth } from "@clerk/react";
 import {
   GitBranch, Link2, Link2Off, ChevronDown, ChevronUp,
   Droplets, FlaskConical, Leaf, Package, Wheat, Sprout,
-  ArrowLeft, ArrowRight,
+  ArrowLeft, ArrowRight, Sparkles, Loader2,
 } from "lucide-react";
 import { Layout } from "@/components/Layout";
 
@@ -196,6 +196,25 @@ function LifecycleCard({
   onNavigateTo: (id: number) => void;
 }) {
   const [linkOpen, setLinkOpen] = useState(false);
+  const [aiRec, setAiRec] = useState<string | null>(null);
+  const [aiRecLoading, setAiRecLoading] = useState(false);
+
+  async function fetchAiRec() {
+    if (!item.flavoringEvent?.id) return;
+    setAiRecLoading(true);
+    try {
+      const res = await authFetch("/bottle-tests/analytics/ai-recommendation", {
+        method: "POST",
+        body: JSON.stringify({ flavoringEventId: item.flavoringEvent.id }),
+      });
+      const data = await res.json();
+      setAiRec(data.recommendation ?? null);
+    } catch {
+      setAiRec("Soovituse laadimine ebaõnnestus.");
+    } finally {
+      setAiRecLoading(false);
+    }
+  }
 
   const isDone = !!item.flavoringEvent?.bottlingDate;
   const isActive = !isDone;
@@ -455,6 +474,41 @@ function LifecycleCard({
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {/* ── AI soovitus villimise korral ── */}
+          {item.flavoringEvent && (
+            <div className="rounded-xl border border-violet-100 bg-violet-50/50 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
+                  <Sparkles size={12} />
+                  AI soovitus sarnaste parameetrite põhjal
+                </div>
+                {aiRec && (
+                  <button
+                    onClick={() => { setAiRec(null); fetchAiRec(); }}
+                    className="text-[10px] text-violet-500 hover:text-violet-700 transition"
+                  >
+                    Küsi uuesti
+                  </button>
+                )}
+              </div>
+              {aiRec ? (
+                <p className="text-xs text-violet-900 leading-relaxed">{aiRec}</p>
+              ) : (
+                <button
+                  onClick={fetchAiRec}
+                  disabled={aiRecLoading}
+                  className="flex items-center gap-1.5 text-xs text-violet-700 hover:text-violet-900 border border-violet-200 hover:border-violet-400 bg-white rounded-lg px-3 py-1.5 transition disabled:opacity-60"
+                >
+                  {aiRecLoading ? (
+                    <><Loader2 size={11} className="animate-spin" /> Laen soovitust…</>
+                  ) : (
+                    <><Sparkles size={11} /> Küsi soovitust</>
+                  )}
+                </button>
+              )}
             </div>
           )}
 

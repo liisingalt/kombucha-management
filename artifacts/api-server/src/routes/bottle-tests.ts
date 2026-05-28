@@ -186,6 +186,7 @@ router.get("/bottle-tests/analytics", requireAuth, async (req, res) => {
       label: string;
       count: number;
       avgDays: number;
+      avgAllDays: number;
       minDays: number;
       maxDays: number;
       heaCount: number;
@@ -196,21 +197,25 @@ router.get("/bottle-tests/analytics", requireAuth, async (req, res) => {
       getKey: (r: EnrichedRecord) => string | null,
       getValue: (r: EnrichedRecord) => number
     ): StatsGroup[] {
-      const groups: Record<string, { count: number; total: number; values: number[]; heaCount: number }> = {};
+      const groups: Record<string, { count: number; total: number; values: number[]; heaCount: number; heaTotal: number }> = {};
       for (const r of recs) {
         const k = getKey(r);
         if (!k) continue;
-        if (!groups[k]) groups[k] = { count: 0, total: 0, values: [], heaCount: 0 };
+        if (!groups[k]) groups[k] = { count: 0, total: 0, values: [], heaCount: 0, heaTotal: 0 };
         const v = getValue(r);
         groups[k].count++;
         groups[k].total += v;
         groups[k].values.push(v);
-        if (r.isHea) groups[k].heaCount++;
+        if (r.isHea) {
+          groups[k].heaCount++;
+          groups[k].heaTotal += v;
+        }
       }
-      return Object.entries(groups).map(([label, { count, total, values, heaCount }]) => ({
+      return Object.entries(groups).map(([label, { count, total, values, heaCount, heaTotal }]) => ({
         label,
         count,
-        avgDays: Math.round(total / count),
+        avgDays: heaCount > 0 ? Math.round(heaTotal / heaCount) : Math.round(total / count),
+        avgAllDays: Math.round(total / count),
         minDays: Math.min(...values),
         maxDays: Math.max(...values),
         heaCount,
@@ -319,6 +324,129 @@ router.post("/bottle-tests/analytics/ai-summary", requireAuth, async (req, res) 
     res.json({ summary });
   } catch (err) {
     req.log.error({ err }, "Failed to generate analytics summary");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/bottle-tests/analytics/ai-recommendation", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const { flavoringEventId } = req.body as { flavoringEventId?: number };
+
+  if (!flavoringEventId || typeof flavoringEventId !== "number") {
+    res.status(400).json({ error: "flavoringEventId required" });
+    return;
+  }
+
+  try {
+    const [flavEv] = await db
+      .select()
+      .from(flavoringEventTable)
+      .where(and(eq(flavoringEventTable.id, flavoringEventId), eq(flavoringEventTable.userId, userId)));
+
+    if (!flavEv) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    let steepMin: number | null = null;
+    let temp: number | null = null;
+    let avgCoeff: number | null = null;
+
+    avgCoeff = (() => {
+      if (!Array.isArray(flavEv.blocks) || flavEv.blocks.length === 0) return null;
+      const coeffs = (flavEv.blocks as Array<unknown>)
+        .map((b) => (b && typeof b === "object" && "coefficient" in b ? Number((b as Record<string, unknown>).coefficient) : NaN))
+        .filter((n) => !isNaN(n) && n > 0);
+      if (coeffs.length === 0) return null;
+      return Math.round((coeffs.reduce((s, n) => s + n, 0) / coeffs.length) * 100) / 100;
+    })();
+
+    if (flavEv.fermentationBatchId) {
+      const [ferm] = await db
+        .select()
+        .from(fermentationBatchTable)
+        .where(eq(fermentationBatchTable.id, flavEv.fermentationBatchId));
+      if (ferm?.brewId) {
+        const [brew] = await db.select().from(brewsTable).where(eq(brewsTable.id, ferm.brewId));
+        if (brew) {
+          steepMin = brew.steepMin ?? null;
+          temp = brew.temp ?? null;
+        }
+      }
+    }
+
+    const completed = await db
+      .select()
+      .from(bottleTestsTable)
+      .where(and(eq(bottleTestsTable.userId, userId), eq(bottleTestsTable.status, "maitsitud")));
+
+    if (completed.length === 0) {
+      res.json({ recommendation: "Pole veel kestvuskatse ajalugu, millega võrrelda. Lisa mõned katsed ja maitsesta neid tulevikus." });
+      return;
+    }
+
+    const similarParts: string[] = [];
+    for (const test of completed) {
+      if (!test.flavoringEventId) continue;
+      const [tFlavEv] = await db
+        .select()
+        .from(flavoringEventTable)
+        .where(and(eq(flavoringEventTable.id, test.flavoringEventId), eq(flavoringEventTable.userId, userId)));
+      if (!tFlavEv) continue;
+
+      let tSteepMin: number | null = null;
+      let tTemp: number | null = null;
+      let tCoeff: number | null = null;
+
+      if (Array.isArray(tFlavEv.blocks) && tFlavEv.blocks.length > 0) {
+        const coeffs = (tFlavEv.blocks as Array<unknown>)
+          .map((b) => (b && typeof b === "object" && "coefficient" in b ? Number((b as Record<string, unknown>).coefficient) : NaN))
+          .filter((n) => !isNaN(n) && n > 0);
+        if (coeffs.length > 0) tCoeff = Math.round((coeffs.reduce((s, n) => s + n, 0) / coeffs.length) * 100) / 100;
+      }
+
+      if (tFlavEv.fermentationBatchId) {
+        const [tFerm] = await db.select().from(fermentationBatchTable).where(eq(fermentationBatchTable.id, tFlavEv.fermentationBatchId));
+        if (tFerm?.brewId) {
+          const [tBrew] = await db.select().from(brewsTable).where(eq(brewsTable.id, tFerm.brewId));
+          if (tBrew) {
+            tSteepMin = tBrew.steepMin ?? null;
+            tTemp = tBrew.temp ?? null;
+          }
+        }
+      }
+
+      const bDate = test.bottledDate instanceof Date ? test.bottledDate.toISOString().slice(0, 10) : String(test.bottledDate).slice(0, 10);
+      const tDate = test.tastedDate instanceof Date ? test.tastedDate.toISOString().slice(0, 10) : String(test.tastedDate ?? "").slice(0, 10);
+      const days = daysBetween(bDate, tDate) ?? 0;
+
+      similarParts.push(
+        `Varasem katse "${test.product}": tõmbis ${tSteepMin ?? "?"}min, temp ${tTemp ?? "?"}°C, koefitsient ${tCoeff ?? "?"}. Säilis ${days}p (${Math.round(days / 30.5)}k). Järeldus: "${test.conclusion ?? "—"}".`
+      );
+    }
+
+    const currentParams = [
+      `Praegused pruulimisparameetrid: tõmbis ${steepMin ?? "teadmata"} min, temp ${temp ?? "teadmata"}°C, maitsestuskoefitsient ${avgCoeff ?? "teadmata"}.`,
+    ];
+
+    const prompt = [...currentParams, `Varasemad katsed:\n${similarParts.slice(0, 15).join("\n")}`].join("\n");
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      max_completion_tokens: 200,
+      messages: [
+        {
+          role: "system",
+          content: "Oled kombuchavalmistamise ekspert. Kasutaja on just villimas uut partii. Vaata praeguseid pruulimisparameetreid ja varasemaid kestvuskatse tulemusi. Anna lühike (1-3 lauset) eestikeelne soovitus: mida sarnaste parameetritega partii eelmisel korral saavutas ja mis maitsimisintervalli soovitad. Ole konkreetne ja praktiliselt kasulik.",
+        },
+        { role: "user", content: prompt },
+      ],
+    });
+
+    const recommendation = response.choices[0]?.message?.content ?? "Soovitust ei saanud koostada.";
+    res.json({ recommendation });
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate AI recommendation");
     res.status(500).json({ error: "Internal server error" });
   }
 });
