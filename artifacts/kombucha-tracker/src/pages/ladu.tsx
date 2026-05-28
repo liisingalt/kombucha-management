@@ -74,7 +74,7 @@ function ColorDot({ color }: { color: string }) {
   );
 }
 
-function Num({ value, onChange, className = "" }: { value: string; onChange: (v: string) => void; className?: string }) {
+function Num({ value, onChange, onKeyDown, className = "" }: { value: string; onChange: (v: string) => void; onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void; className?: string }) {
   return (
     <input
       type="number"
@@ -82,6 +82,7 @@ function Num({ value, onChange, className = "" }: { value: string; onChange: (v:
       min="0"
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      onKeyDown={onKeyDown}
       className={`w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600 ${className}`}
     />
   );
@@ -1100,6 +1101,7 @@ function BlankLabelsCard({
                         inputMode="numeric"
                         value={inputVal}
                         onChange={(e) => setQtys((prev) => ({ ...prev, [qKey]: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === "Enter") commit(t.id, t.name, s, parseInt(inputVal) || 0); }}
                         placeholder="±"
                         className="w-20 rounded-lg border border-stone-300 px-2 py-1.5 text-sm text-center focus:border-amber-600 focus:outline-none"
                       />
@@ -1235,7 +1237,7 @@ function LisaVaruTab({
         <label className="block text-sm text-stone-600 mb-1">Suurus</label>
         <Seg options={SIZES.map((s) => ({ value: s, label: `${s} ml` }))} value={bSize} onChange={(v) => setBSize(v as number)} />
         <div className="mt-3 flex gap-2">
-          <Num value={bQty} onChange={setBQty} className="flex-1" />
+          <Num value={bQty} onChange={setBQty} onKeyDown={(e) => { if (e.key === "Enter") addBottles(); }} className="flex-1" />
           <button type="button" onClick={addBottles} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
       </Card>
@@ -1245,7 +1247,7 @@ function LisaVaruTab({
         <label className="block text-sm text-stone-600 mb-1">Suurus</label>
         <Seg options={SIZES.map((s) => ({ value: s, label: `${s} ml` }))} value={clbSize} onChange={(v) => setClbSize(v as number)} />
         <div className="mt-3 flex gap-2">
-          <Num value={clbQty} onChange={setClbQty} className="flex-1" />
+          <Num value={clbQty} onChange={setClbQty} onKeyDown={(e) => { if (e.key === "Enter") addCustomLabelBottles(); }} className="flex-1" />
           <button type="button" onClick={addCustomLabelBottles} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
       </Card>
@@ -1268,7 +1270,7 @@ function LisaVaruTab({
           </div>
         </div>
         <div className="mt-3 flex gap-2">
-          <Num value={lQty} onChange={setLQty} className="flex-1" />
+          <Num value={lQty} onChange={setLQty} onKeyDown={(e) => { if (e.key === "Enter") addLabels(); }} className="flex-1" />
           <button type="button" onClick={addLabels} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
       </Card>
@@ -1276,7 +1278,7 @@ function LisaVaruTab({
       <Card title="Traatkorgi">
         <p className="text-xs text-stone-400 mb-3">750 ml punnkorkide jaoks — üks traatkork ühe pudeli kohta.</p>
         <div className="flex gap-2">
-          <Num value={wcQty} onChange={setWcQty} className="flex-1" />
+          <Num value={wcQty} onChange={setWcQty} onKeyDown={(e) => { if (e.key === "Enter") addWireCages(); }} className="flex-1" />
           <button type="button" onClick={addWireCages} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
       </Card>
@@ -1286,7 +1288,7 @@ function LisaVaruTab({
         <label className="block text-sm text-stone-600 mb-1">Suurus</label>
         <Seg options={SIZES.map((s) => ({ value: s, label: `${s} ml` }))} value={rcSize} onChange={(v) => setRcSize(v as number)} />
         <div className="mt-3 flex gap-2">
-          <Num value={rcQty} onChange={setRcQty} className="flex-1" />
+          <Num value={rcQty} onChange={setRcQty} onKeyDown={(e) => { if (e.key === "Enter") addReusableCaps(); }} className="flex-1" />
           <button type="button" onClick={addReusableCaps} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
       </Card>
@@ -1343,7 +1345,7 @@ function LisaVaruTab({
           </div>
         )}
         <div className="mt-3 flex gap-2">
-          <Num value={cQty} onChange={setCQty} className="flex-1" />
+          <Num value={cQty} onChange={setCQty} onKeyDown={(e) => { if (e.key === "Enter") addCaps(); }} className="flex-1" />
           <button type="button" onClick={addCaps} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
       </Card>
