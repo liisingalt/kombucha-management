@@ -78,6 +78,196 @@ router.get("/bottle-tests", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/bottle-tests/analytics", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  try {
+    const completed = await db
+      .select()
+      .from(bottleTestsTable)
+      .where(and(eq(bottleTestsTable.userId, userId), eq(bottleTestsTable.status, "maitsitud")));
+
+    type EnrichedRecord = {
+      testId: number;
+      product: string;
+      bottledDate: string;
+      tastedDate: string;
+      shelfLifeDays: number;
+      result: string | null;
+      conclusion: string | null;
+      steepMin: number | null;
+      temp: number | null;
+      teaG: number | null;
+      sugarG: number | null;
+      f1Days: number | null;
+      f2Days: number | null;
+    };
+
+    const records: EnrichedRecord[] = [];
+
+    for (const test of completed) {
+      const bDate = test.bottledDate instanceof Date ? test.bottledDate.toISOString().slice(0, 10) : String(test.bottledDate).slice(0, 10);
+      const tDate = test.tastedDate instanceof Date ? test.tastedDate.toISOString().slice(0, 10) : String(test.tastedDate ?? "").slice(0, 10);
+      const shelfLifeDays = daysBetween(bDate, tDate) ?? 0;
+
+      let steepMin: number | null = null;
+      let temp: number | null = null;
+      let teaG: number | null = null;
+      let sugarG: number | null = null;
+      let f1Days: number | null = null;
+      let f2Days: number | null = null;
+
+      if (test.flavoringEventId) {
+        const [flavEv] = await db
+          .select()
+          .from(flavoringEventTable)
+          .where(and(eq(flavoringEventTable.id, test.flavoringEventId), eq(flavoringEventTable.userId, userId)));
+        if (flavEv) {
+          f2Days = daysBetween(flavEv.date, flavEv.bottlingDate);
+          if (flavEv.fermentationBatchId) {
+            const [ferm] = await db
+              .select()
+              .from(fermentationBatchTable)
+              .where(eq(fermentationBatchTable.id, flavEv.fermentationBatchId));
+            if (ferm) {
+              f1Days = daysBetween(ferm.startDate, ferm.flavoringDate ?? flavEv.date);
+              if (ferm.brewId) {
+                const [brew] = await db.select().from(brewsTable).where(eq(brewsTable.id, ferm.brewId));
+                if (brew) {
+                  steepMin = brew.steepMin ?? null;
+                  temp = brew.temp ?? null;
+                  teaG = brew.teaG;
+                  sugarG = brew.sugarG;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      records.push({
+        testId: test.id,
+        product: test.product,
+        bottledDate: bDate,
+        tastedDate: tDate,
+        shelfLifeDays,
+        result: test.result ?? null,
+        conclusion: test.conclusion ?? null,
+        steepMin,
+        temp,
+        teaG,
+        sugarG,
+        f1Days,
+        f2Days,
+      });
+    }
+
+    function bucket<T extends Record<string, unknown>>(
+      recs: T[],
+      getKey: (r: T) => string | null,
+      getValue: (r: T) => number
+    ) {
+      const groups: Record<string, { count: number; total: number; values: number[] }> = {};
+      for (const r of recs) {
+        const k = getKey(r);
+        if (!k) continue;
+        if (!groups[k]) groups[k] = { count: 0, total: 0, values: [] };
+        const v = getValue(r);
+        groups[k].count++;
+        groups[k].total += v;
+        groups[k].values.push(v);
+      }
+      return Object.entries(groups).map(([label, { count, total, values }]) => ({
+        label,
+        count,
+        avgDays: Math.round(total / count),
+        minDays: Math.min(...values),
+        maxDays: Math.max(...values),
+      }));
+    }
+
+    const steepBucket = (r: EnrichedRecord) =>
+      r.steepMin == null ? null : r.steepMin < 8 ? "< 8 min" : r.steepMin <= 12 ? "8–12 min" : "> 12 min";
+
+    const tempBucket = (r: EnrichedRecord) =>
+      r.temp == null ? null : r.temp < 22 ? "< 22°C" : r.temp <= 25 ? "22–25°C" : "> 25°C";
+
+    const bySteepping = bucket(records, steepBucket, (r) => r.shelfLifeDays);
+    const byTemp = bucket(records, tempBucket, (r) => r.shelfLifeDays);
+
+    res.json({
+      totalCompleted: completed.length,
+      withJourney: records.filter((r) => r.steepMin != null || r.temp != null).length,
+      avgShelfLifeDays: records.length > 0 ? Math.round(records.reduce((s, r) => s + r.shelfLifeDays, 0) / records.length) : 0,
+      records,
+      bySteepping,
+      byTemp,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch analytics");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/bottle-tests/analytics/ai-summary", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  try {
+    const completed = await db
+      .select()
+      .from(bottleTestsTable)
+      .where(and(eq(bottleTestsTable.userId, userId), eq(bottleTestsTable.status, "maitsitud")));
+
+    if (completed.length === 0) {
+      res.json({ summary: "Analüüsi tegemiseks pole piisavalt andmeid. Lisa kõigepealt mõned maitsitud kestvuskatsed." });
+      return;
+    }
+
+    const parts: string[] = [];
+    parts.push(`Kokku lõpetatud kestvuskatseid: ${completed.length}.`);
+
+    const enriched: string[] = [];
+    for (const test of completed.slice(0, 20)) {
+      const bDate = test.bottledDate instanceof Date ? test.bottledDate.toISOString().slice(0, 10) : String(test.bottledDate).slice(0, 10);
+      const tDate = test.tastedDate instanceof Date ? test.tastedDate.toISOString().slice(0, 10) : String(test.tastedDate ?? "").slice(0, 10);
+      const days = daysBetween(bDate, tDate) ?? 0;
+      let line = `Toode "${test.product}": villitud ${bDate}, maitsitud ${tDate} (${days}p), järeldus: "${test.conclusion ?? "—"}".`;
+
+      if (test.flavoringEventId) {
+        const [flavEv] = await db.select().from(flavoringEventTable).where(eq(flavoringEventTable.id, test.flavoringEventId));
+        if (flavEv?.fermentationBatchId) {
+          const [ferm] = await db.select().from(fermentationBatchTable).where(eq(fermentationBatchTable.id, flavEv.fermentationBatchId));
+          if (ferm?.brewId) {
+            const [brew] = await db.select().from(brewsTable).where(eq(brewsTable.id, ferm.brewId));
+            if (brew) {
+              line += ` Pruulimine: tõmbis ${brew.steepMin ?? "?"}min, temp ${brew.temp ?? "?"}°C, suhkrut ${brew.sugarG}g.`;
+            }
+          }
+        }
+      }
+      enriched.push(line);
+    }
+
+    parts.push(...enriched);
+
+    const prompt = parts.join("\n");
+    const response = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      max_completion_tokens: 400,
+      messages: [
+        {
+          role: "system",
+          content: "Oled kombuchavalmistamise ekspert. Analüüsi allpool toodud kestvuskatse andmeid. Kirjuta lühike eestikeelne kokkuvõte (3-5 lauset): millised pruulimisparameetrid (tõmbeaeg, temperatuur, suhkrukogus) on seotud pikema säilivusajaga, ja mis soovitused tulenevad andmetest. Kui andmeid on liiga vähe üldistuste tegemiseks, ütle seda ausalt.",
+        },
+        { role: "user", content: prompt },
+      ],
+    });
+    const summary = response.choices[0]?.message?.content ?? "Analüüsi ei saanud koostada.";
+    res.json({ summary });
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate analytics summary");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/bottle-tests/:id/journey", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const id = parseInt(req.params.id, 10);

@@ -4,7 +4,7 @@ import { format, differenceInDays } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Plus, FlaskConical, Trash2, CheckCircle, X, Download, Pencil, ChevronDown, ChevronUp, Sparkles, Loader2, GitBranch } from "lucide-react";
+import { Plus, FlaskConical, Trash2, CheckCircle, X, Download, Pencil, ChevronDown, ChevronUp, Sparkles, Loader2, GitBranch, BarChart2 } from "lucide-react";
 
 type BottleTest = {
   id: number;
@@ -26,6 +26,37 @@ type FlavEvent = {
   date: string;
   bottlingDate: string | null;
   fermentationBatchId: number | null;
+};
+
+type StatsGroup = {
+  label: string;
+  count: number;
+  avgDays: number;
+  minDays: number;
+  maxDays: number;
+};
+
+type AnalyticsData = {
+  totalCompleted: number;
+  withJourney: number;
+  avgShelfLifeDays: number;
+  records: {
+    testId: number;
+    product: string;
+    bottledDate: string;
+    tastedDate: string;
+    shelfLifeDays: number;
+    result: string | null;
+    conclusion: string | null;
+    steepMin: number | null;
+    temp: number | null;
+    teaG: number | null;
+    sugarG: number | null;
+    f1Days: number | null;
+    f2Days: number | null;
+  }[];
+  bySteepping: StatsGroup[];
+  byTemp: StatsGroup[];
 };
 
 type JourneyData = {
@@ -105,12 +136,20 @@ export default function KestvuskatsedPage() {
   const [filterBottledFrom, setFilterBottledFrom] = useState("");
   const [filterBottledTo, setFilterBottledTo] = useState("");
 
+  const [activeTab, setActiveTab] = useState<"katsed" | "statistika">("katsed");
+
   const [flavEvents, setFlavEvents] = useState<FlavEvent[]>([]);
   const [expandedJourneyId, setExpandedJourneyId] = useState<number | null>(null);
   const [journeyMap, setJourneyMap] = useState<Record<number, JourneyData | null>>({});
   const [journeyLoading, setJourneyLoading] = useState<number | null>(null);
   const [aiInsightMap, setAiInsightMap] = useState<Record<number, string>>({});
   const [aiLoadingId, setAiLoadingId] = useState<number | null>(null);
+
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -143,10 +182,52 @@ export default function KestvuskatsedPage() {
     }
   }, [getToken]);
 
+  const fetchAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true);
+    setAnalyticsError(null);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${BASE_URL}/api/bottle-tests/analytics`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Statistika laadimine ebaõnnestus");
+      const data = await res.json();
+      setAnalytics(data);
+    } catch (e: unknown) {
+      setAnalyticsError(e instanceof Error ? e.message : "Viga");
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [getToken]);
+
+  async function loadAiSummary() {
+    if (aiSummary || aiSummaryLoading) return;
+    setAiSummaryLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${BASE_URL}/api/bottle-tests/analytics/ai-summary`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      setAiSummary(data.summary ?? "Analüüsi ei saanud koostada.");
+    } catch {
+      setAiSummary("Analüüsi ei saanud koostada.");
+    } finally {
+      setAiSummaryLoading(false);
+    }
+  }
+
   useEffect(() => {
     fetchItems();
     fetchFlavEvents();
   }, [fetchItems, fetchFlavEvents]);
+
+  useEffect(() => {
+    if (activeTab === "statistika" && !analytics && !analyticsLoading) {
+      fetchAnalytics();
+    }
+  }, [activeTab, analytics, analyticsLoading, fetchAnalytics]);
 
   const waiting = items
     .filter((i) => i.status === "ootab")
@@ -532,31 +613,214 @@ export default function KestvuskatsedPage() {
   return (
     <Layout>
       {/* Header */}
-      <div className="sticky top-0 z-30 flex items-center justify-between px-5 py-4 bg-background/95 backdrop-blur-sm border-b border-border">
-        <div className="flex items-center gap-2">
-          <FlaskConical size={20} className="text-primary" />
-          <h1 className="font-serif font-semibold text-xl">Kestvuskatsed</h1>
+      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b border-border">
+        <div className="flex items-center justify-between px-5 py-4">
+          <div className="flex items-center gap-2">
+            <FlaskConical size={20} className="text-primary" />
+            <h1 className="font-serif font-semibold text-xl">Kestvuskatsed</h1>
+          </div>
+          {activeTab === "katsed" && (
+            <Button
+              data-testid="button-add-test"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setShowAddModal(true)}
+            >
+              <Plus size={15} />
+              Lisa uus
+            </Button>
+          )}
         </div>
-        <Button
-          data-testid="button-add-test"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => setShowAddModal(true)}
-        >
-          <Plus size={15} />
-          Lisa uus
-        </Button>
+        <div className="flex border-t border-border">
+          <button
+            onClick={() => setActiveTab("katsed")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors",
+              activeTab === "katsed"
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <FlaskConical size={14} />
+            Katsed
+          </button>
+          <button
+            onClick={() => setActiveTab("statistika")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors",
+              activeTab === "statistika"
+                ? "text-primary border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <BarChart2 size={14} />
+            Statistika
+          </button>
+        </div>
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-5 space-y-8">
-        {loading && (
+
+        {/* Analytics tab */}
+        {activeTab === "statistika" && (
+          <section className="space-y-5">
+            {analyticsLoading && (
+              <p className="text-muted-foreground text-sm text-center py-12">Laadin statistikat...</p>
+            )}
+            {analyticsError && (
+              <p className="text-red-600 text-sm text-center py-6">{analyticsError}</p>
+            )}
+            {!analyticsLoading && !analyticsError && analytics && (
+              <>
+                {/* Summary cards */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-2xl border border-border bg-muted/30 p-3 text-center">
+                    <div className="text-2xl font-bold text-foreground">{analytics.totalCompleted}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Lõpetatud katset</div>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-muted/30 p-3 text-center">
+                    <div className="text-2xl font-bold text-foreground">{analytics.withJourney}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Seotud pruulimisega</div>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-muted/30 p-3 text-center">
+                    <div className="text-2xl font-bold text-foreground">
+                      {analytics.avgShelfLifeDays > 0 ? `${Math.round(analytics.avgShelfLifeDays / 30.5)}k` : "—"}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Kesk. säilivus</div>
+                  </div>
+                </div>
+
+                {/* By steep time */}
+                {analytics.bySteepping.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                      Tõmbeaja järgi
+                    </h3>
+                    <div className="rounded-2xl border border-border overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/40">
+                            <th className="text-left px-4 py-2 text-xs font-semibold text-muted-foreground">Tõmbeaeg</th>
+                            <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Katseid</th>
+                            <th className="text-right px-4 py-2 text-xs font-semibold text-muted-foreground">Kesk. säilivus</th>
+                            <th className="text-right px-4 py-2 text-xs font-semibold text-muted-foreground">Vahemik</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {analytics.bySteepping
+                            .sort((a, b) => a.label.localeCompare(b.label))
+                            .map((g, i) => (
+                              <tr key={g.label} className={i % 2 === 0 ? "" : "bg-muted/20"}>
+                                <td className="px-4 py-2.5 font-medium">{g.label}</td>
+                                <td className="px-3 py-2.5 text-center text-muted-foreground">{g.count}</td>
+                                <td className="px-4 py-2.5 text-right font-semibold">
+                                  {Math.round(g.avgDays / 30.5)}k ({g.avgDays}p)
+                                </td>
+                                <td className="px-4 py-2.5 text-right text-muted-foreground text-xs">
+                                  {g.minDays}–{g.maxDays}p
+                                </td>
+                              </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* By temperature */}
+                {analytics.byTemp.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground mb-2">
+                      Temperatuuri järgi
+                    </h3>
+                    <div className="rounded-2xl border border-border overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/40">
+                            <th className="text-left px-4 py-2 text-xs font-semibold text-muted-foreground">Temperatuur</th>
+                            <th className="text-center px-3 py-2 text-xs font-semibold text-muted-foreground">Katseid</th>
+                            <th className="text-right px-4 py-2 text-xs font-semibold text-muted-foreground">Kesk. säilivus</th>
+                            <th className="text-right px-4 py-2 text-xs font-semibold text-muted-foreground">Vahemik</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {analytics.byTemp
+                            .sort((a, b) => a.label.localeCompare(b.label))
+                            .map((g, i) => (
+                              <tr key={g.label} className={i % 2 === 0 ? "" : "bg-muted/20"}>
+                                <td className="px-4 py-2.5 font-medium">{g.label}</td>
+                                <td className="px-3 py-2.5 text-center text-muted-foreground">{g.count}</td>
+                                <td className="px-4 py-2.5 text-right font-semibold">
+                                  {Math.round(g.avgDays / 30.5)}k ({g.avgDays}p)
+                                </td>
+                                <td className="px-4 py-2.5 text-right text-muted-foreground text-xs">
+                                  {g.minDays}–{g.maxDays}p
+                                </td>
+                              </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {analytics.bySteepping.length === 0 && analytics.byTemp.length === 0 && analytics.totalCompleted > 0 && (
+                  <div className="rounded-2xl border border-dashed border-border p-6 text-center text-muted-foreground text-sm">
+                    Seosta kestvuskatseid maitsestamissündmustega, et pruulimisparameetrite statistika ilmuks siia.
+                  </div>
+                )}
+
+                {analytics.totalCompleted === 0 && (
+                  <div className="rounded-2xl border border-dashed border-border p-8 text-center text-muted-foreground text-sm">
+                    Statistika ilmub, kui oled mõne katse maitsituks märkinud.
+                  </div>
+                )}
+
+                {/* AI Summary */}
+                {analytics.totalCompleted > 0 && (
+                  <div>
+                    {aiSummary ? (
+                      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-4">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300 mb-2">
+                          <Sparkles size={13} />
+                          AI kokkuvõte
+                        </div>
+                        <p className="text-sm text-amber-900 dark:text-amber-200 leading-relaxed">{aiSummary}</p>
+                        <button
+                          onClick={() => { setAiSummary(null); }}
+                          className="mt-2 text-xs text-amber-600 hover:text-amber-800 underline"
+                        >
+                          Küsi uuesti
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={loadAiSummary}
+                        disabled={aiSummaryLoading}
+                        className="w-full flex items-center justify-center gap-2 rounded-2xl border border-amber-200 hover:border-amber-400 bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-950/40 px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-300 transition-colors disabled:opacity-50"
+                      >
+                        {aiSummaryLoading ? (
+                          <><Loader2 size={15} className="animate-spin" /> Analüüsin andmeid...</>
+                        ) : (
+                          <><Sparkles size={15} /> Genereeri AI kokkuvõte</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        )}
+
+        {activeTab === "katsed" && loading && (
           <p className="text-muted-foreground text-sm text-center py-12">Laadin...</p>
         )}
-        {error && (
+        {activeTab === "katsed" && error && (
           <p className="text-red-600 text-sm text-center py-12">{error}</p>
         )}
 
-        {!loading && !error && (
+        {activeTab === "katsed" && !loading && !error && (
           <>
             {/* Waiting section */}
             <section>
