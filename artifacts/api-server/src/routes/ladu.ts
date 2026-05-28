@@ -75,6 +75,9 @@ const commitSchema = z.object({
   type: z.string().min(1),
   summary: z.string().min(1),
   deltas: z.array(deltaSchema),
+  villimineGoods: z
+    .object({ flavorId: z.number().int(), size: z.number().int(), amount: z.number().int().min(1) })
+    .optional(),
 });
 
 const flavorSchema = z.object({
@@ -172,7 +175,7 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
     return;
   }
-  const { type, summary, deltas } = parsed.data;
+  const { type, summary, deltas, villimineGoods } = parsed.data;
 
   try {
     await db.transaction(async (tx) => {
@@ -373,6 +376,29 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
             amount: delta.amount,
           });
         }
+      }
+
+      if (villimineGoods) {
+        const { flavorId: vFlavorId, size: vSize, amount: vAmount } = villimineGoods;
+        const [vExisting] = await tx
+          .select()
+          .from(laduFinishedGoodsTable)
+          .where(
+            and(
+              eq(laduFinishedGoodsTable.userId, userId),
+              eq(laduFinishedGoodsTable.flavorId, vFlavorId),
+              eq(laduFinishedGoodsTable.size, vSize)
+            )
+          );
+        if (vExisting) {
+          await tx
+            .update(laduFinishedGoodsTable)
+            .set({ qty: vExisting.qty + vAmount })
+            .where(eq(laduFinishedGoodsTable.id, vExisting.id));
+        } else {
+          await tx.insert(laduFinishedGoodsTable).values({ userId, flavorId: vFlavorId, size: vSize, qty: vAmount });
+        }
+        storedDeltas.push({ kind: "finished_goods", flavorId: vFlavorId, size: vSize, amount: vAmount });
       }
 
       await tx
@@ -612,6 +638,14 @@ router.delete("/ladu/flavors/:id", requireAuth, async (req, res) => {
       res.status(409).json({ error: "Custom label bottle stock exists — reset inventory before deleting a flavor" });
       return;
     }
+    const finishedGoodsRows = await db
+      .select()
+      .from(laduFinishedGoodsTable)
+      .where(and(eq(laduFinishedGoodsTable.userId, userId), eq(laduFinishedGoodsTable.flavorId, id), gt(laduFinishedGoodsTable.qty, 0)));
+    if (finishedGoodsRows.length > 0) {
+      res.status(409).json({ error: "Flavor has finished goods in stock — clear the stock first before deleting" });
+      return;
+    }
     await db
       .delete(laduFlavorsTable)
       .where(and(eq(laduFlavorsTable.id, id), eq(laduFlavorsTable.userId, userId)));
@@ -658,7 +692,17 @@ router.put("/ladu/caps/:id", requireAuth, async (req, res) => {
 router.get("/ladu/finished-goods", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   try {
-    const rows = await db.select().from(laduFinishedGoodsTable).where(eq(laduFinishedGoodsTable.userId, userId));
+    const rows = await db
+      .select({
+        id: laduFinishedGoodsTable.id,
+        flavorId: laduFinishedGoodsTable.flavorId,
+        flavorName: laduFlavorsTable.name,
+        size: laduFinishedGoodsTable.size,
+        qty: laduFinishedGoodsTable.qty,
+      })
+      .from(laduFinishedGoodsTable)
+      .innerJoin(laduFlavorsTable, eq(laduFinishedGoodsTable.flavorId, laduFlavorsTable.id))
+      .where(eq(laduFinishedGoodsTable.userId, userId));
     res.json(rows);
   } catch (err) {
     req.log.error({ err }, "Failed to fetch finished goods");

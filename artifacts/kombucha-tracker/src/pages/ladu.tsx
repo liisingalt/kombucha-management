@@ -157,10 +157,10 @@ export default function LaduPage() {
   });
 
   const commitMutation = useMutation({
-    mutationFn: async ({ deltas, type, summary }: { deltas: unknown[]; type: string; summary: string }) => {
+    mutationFn: async ({ deltas, type, summary, villimineGoods }: { deltas: unknown[]; type: string; summary: string; villimineGoods?: { flavorId: number; size: number; amount: number } }) => {
       const res = await authFetch("/ladu/commit", {
         method: "POST",
-        body: JSON.stringify({ type, summary, deltas }),
+        body: JSON.stringify({ type, summary, deltas, ...(villimineGoods ? { villimineGoods } : {}) }),
       });
       return res.json() as Promise<LaduData>;
     },
@@ -406,7 +406,7 @@ export default function LaduPage() {
   );
 }
 
-type CommitMutation = ReturnType<typeof useMutation<LaduData, Error, { deltas: unknown[]; type: string; summary: string }>>;
+type CommitMutation = ReturnType<typeof useMutation<LaduData, Error, { deltas: unknown[]; type: string; summary: string; villimineGoods?: { flavorId: number; size: number; amount: number } }>>;
 
 function LaduTab({ data, flavorName, bottleQty, updateCapMutation, flash }: { data: LaduData; flavorName: (id: number) => string; bottleQty: (size: number) => number; updateCapMutation: ReturnType<typeof useMutation<Cap, Error, { id: number; size: number; type: string; color: string }>>; flash: (msg: string) => void }) {
   const [editingCapId, setEditingCapId] = useState<number | null>(null);
@@ -711,7 +711,6 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
     if (capId !== "" && capDeduct > 0) deltas.push({ kind: "cap", key: capId, amount: -capDeduct });
     if (wireCageDeduct > 0) deltas.push({ kind: "wire_cage", amount: -wireCageDeduct });
     if (reusableCapDeduct > 0) deltas.push({ kind: "reusable_cap", size, amount: -reusableCapDeduct });
-    if (t > 0) deltas.push({ kind: "finished_goods", flavorId, size, amount: t });
 
     const cap = selectedCap;
     const parts = [`Villisin ${t} × ${flavorName(flavorId as number)} ${size} ml`];
@@ -722,7 +721,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
     if (wireCageDeduct > 0) parts.push(`${wireCageDeduct} traatkorki`);
 
     commitMutation.mutate(
-      { deltas, type: "villimine", summary: parts.join(" · ") },
+      { deltas, type: "villimine", summary: parts.join(" · "), villimineGoods: { flavorId: flavorId as number, size, amount: t } },
       {
         onSuccess: () => {
           flash("Villimine kirja pandud");
