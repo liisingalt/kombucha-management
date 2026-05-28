@@ -90,6 +90,15 @@ router.get("/fermentations/lifecycle", requireAuth, async (req, res) => {
     }
     const starterMap = new Map(starterBatches.map((b) => [b.id, b]));
 
+    // Reverse starter map: for each batch, which batch used it as starter source?
+    // reverseMap[A] = B means batch B has starterSourceBatchId = A
+    const reverseStarterMap = new Map<number, { nextBatchId: number; nextBrewId: number | null }>();
+    for (const b of batches) {
+      if (b.starterSourceBatchId != null) {
+        reverseStarterMap.set(b.starterSourceBatchId, { nextBatchId: b.id, nextBrewId: b.brewId ?? null });
+      }
+    }
+
     const result = batches.map((b) => {
       const brew = b.brewId ? brewMap.get(b.brewId) ?? null : null;
       const flavEv = flavMap.get(b.id) ?? null;
@@ -98,6 +107,10 @@ router.get("/fermentations/lifecycle", requireAuth, async (req, res) => {
       const f2Days = flavEv ? daysBetween(flavEv.date, flavEv.bottlingDate) : null;
       const bottles = flavEv ? totalBottles((flavEv.blocks as unknown[])) : 0;
       const volL = totalVolumeL(b.vessels as unknown[]);
+
+      // Outgoing starter: the batch that used THIS batch as its starter source
+      const nextEntry = reverseStarterMap.get(b.id) ?? null;
+      const nextBrew = nextEntry?.nextBrewId ? brewMap.get(nextEntry.nextBrewId) ?? null : null;
 
       return {
         id: b.id,
@@ -110,6 +123,9 @@ router.get("/fermentations/lifecycle", requireAuth, async (req, res) => {
         starterSourceBatch: starterSrc
           ? { id: starterSrc.id, teaSort: starterSrc.teaSort, startDate: starterSrc.startDate }
           : null,
+        nextBatchId: nextEntry?.nextBatchId ?? null,
+        outgoingStarterG: nextBrew?.starterG ?? null,
+        outgoingStarterPct: nextBrew?.starterPct ?? null,
         brew: brew
           ? {
               id: brew.id,

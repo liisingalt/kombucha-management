@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import {
   GitBranch, Link2, Link2Off, ChevronDown, ChevronUp,
   Droplets, FlaskConical, Leaf, Package, Wheat, Sprout,
+  ArrowLeft, ArrowRight,
 } from "lucide-react";
 import { Layout } from "@/components/Layout";
 
@@ -43,6 +44,9 @@ type LifecycleItem = {
   vessels: Vessel[];
   starterSourceBatchId: number | null;
   starterSourceBatch: StarterRef | null;
+  nextBatchId: number | null;
+  outgoingStarterG: number | null;
+  outgoingStarterPct: number | null;
   brew: BrewInfo | null;
   flavoringEvent: FlavInfo | null;
   totalVolumeL: number;
@@ -57,22 +61,24 @@ function fmtDate(d: string | null | undefined) {
 }
 
 function DurationBadge({ days, label }: { days: number | null; label: string }) {
-  if (days === null) return (
-    <div className="flex flex-col items-center justify-center px-1 self-center">
-      <div className="w-6 h-px bg-stone-200" />
-    </div>
-  );
+  if (days === null) {
+    return (
+      <div className="flex items-center self-center px-0.5">
+        <div className="w-4 h-px bg-stone-200" />
+      </div>
+    );
+  }
   const color =
     days > 14 ? "bg-red-100 text-red-700 border border-red-200" :
     days > 10 ? "bg-amber-100 text-amber-700 border border-amber-200" :
     "bg-green-100 text-green-700 border border-green-200";
   return (
     <div className="flex flex-col items-center justify-center gap-0.5 px-0.5 self-center">
-      <div className="w-5 h-px bg-stone-300" />
+      <div className="w-4 h-px bg-stone-300" />
       <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${color}`}>
         {label}: {days}p
       </span>
-      <div className="w-5 h-px bg-stone-300" />
+      <div className="w-4 h-px bg-stone-300" />
     </div>
   );
 }
@@ -139,8 +145,10 @@ function StarterLinkDropdown({
   const candidates = allBatches.filter((b) => b.id !== batchId);
 
   return (
-    <div className="absolute left-0 top-full mt-1 z-30 bg-white border border-stone-200 rounded-xl shadow-xl p-1 min-w-[210px]">
-      <div className="text-[10px] text-stone-400 px-3 py-1 font-medium uppercase tracking-wide">Vali juuretise allikas</div>
+    <div className="absolute left-0 top-full mt-1 z-30 bg-white border border-stone-200 rounded-xl shadow-xl p-1 min-w-[220px]">
+      <div className="text-[10px] text-stone-400 px-3 py-1 font-medium uppercase tracking-wide">
+        Vali juuretise allikas
+      </div>
       {candidates.length === 0 && (
         <div className="text-xs text-stone-400 px-3 py-2">Teisi partiisid pole</div>
       )}
@@ -178,17 +186,19 @@ function LifecycleCard({
   authFetch,
   expanded,
   onToggle,
+  onNavigateTo,
 }: {
   item: LifecycleItem;
   allBatches: LifecycleItem[];
   authFetch: ReturnType<typeof useAuthFetch>;
   expanded: boolean;
   onToggle: () => void;
+  onNavigateTo: (id: number) => void;
 }) {
   const [linkOpen, setLinkOpen] = useState(false);
 
-  const isActive = !item.flavoringEvent?.bottlingDate;
   const isDone = !!item.flavoringEvent?.bottlingDate;
+  const isActive = !isDone;
 
   const juuretisStatus: "done" | "active" | "empty" =
     item.starterSourceBatch ? "done" : "active";
@@ -200,15 +210,30 @@ function LifecycleCard({
   const bottlingStatus: "done" | "active" | "empty" =
     isDone ? "done" : "empty";
 
+  // Look up prev (source) and next batch summaries for chain nav
+  const prevBatch = item.starterSourceBatch;
+  const nextBatch = item.nextBatchId != null
+    ? allBatches.find((b) => b.id === item.nextBatchId) ?? null
+    : null;
+
   return (
-    <div className={`border rounded-2xl overflow-hidden transition-all ${isDone ? "border-stone-200 bg-white" : "border-amber-200 bg-amber-50/20"}`}>
+    <div
+      id={`batch-${item.id}`}
+      className={`border rounded-2xl overflow-hidden transition-all ${
+        isDone ? "border-stone-200 bg-white" : "border-amber-200 bg-amber-50/20"
+      }`}
+    >
       {/* Header */}
       <button
         className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-stone-50/60 transition"
         onClick={onToggle}
       >
         <div className="flex items-center gap-3">
-          <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isDone ? "bg-green-500" : "bg-amber-500 animate-pulse"}`} />
+          <div
+            className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+              isDone ? "bg-green-500" : "bg-amber-500 animate-pulse"
+            }`}
+          />
           <div>
             <div className="font-semibold text-stone-800 text-sm">
               #{item.id} — {item.teaSort || "Nimeta tee"}
@@ -224,16 +249,44 @@ function LifecycleCard({
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
           {isActive && (
-            <span className="text-xs bg-amber-100 text-amber-700 font-medium px-2 py-0.5 rounded-full">Aktiivne</span>
+            <span className="text-xs bg-amber-100 text-amber-700 font-medium px-2 py-0.5 rounded-full">
+              Aktiivne
+            </span>
           )}
-          {expanded ? <ChevronUp size={15} className="text-stone-400" /> : <ChevronDown size={15} className="text-stone-400" />}
+          {expanded
+            ? <ChevronUp size={15} className="text-stone-400" />
+            : <ChevronDown size={15} className="text-stone-400" />}
         </div>
       </button>
 
       {expanded && (
         <div className="border-t border-stone-100 px-4 pb-5 pt-4 space-y-4">
 
-          {/* Timeline — horizontal, scrollable on mobile */}
+          {/* ── Chain navigation: prev / next ── */}
+          {(prevBatch || nextBatch) && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {prevBatch && (
+                <button
+                  onClick={() => onNavigateTo(prevBatch.id)}
+                  className="flex items-center gap-1.5 text-xs text-stone-500 hover:text-amber-700 border border-stone-200 hover:border-amber-300 rounded-lg px-2.5 py-1 transition"
+                >
+                  <ArrowLeft size={11} />
+                  Eelmine: #{prevBatch.id} {prevBatch.teaSort || "Nimeta"}
+                </button>
+              )}
+              {nextBatch && (
+                <button
+                  onClick={() => onNavigateTo(nextBatch.id)}
+                  className="flex items-center gap-1.5 text-xs text-stone-500 hover:text-amber-700 border border-stone-200 hover:border-amber-300 rounded-lg px-2.5 py-1 transition"
+                >
+                  Järgmine: #{nextBatch.id} {nextBatch.teaSort || "Nimeta"}
+                  <ArrowRight size={11} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── Timeline — horizontal, scrollable ── */}
           <div className="overflow-x-auto pb-1 -mx-1 px-1">
             <div className="flex items-stretch gap-0 min-w-max">
 
@@ -241,9 +294,13 @@ function LifecycleCard({
               <StageBox icon={Sprout} title="Juuretis" status={juuretisStatus}>
                 {item.starterSourceBatch ? (
                   <>
-                    <div className="font-medium text-stone-800">
+                    {/* Clickable source batch link */}
+                    <button
+                      onClick={() => onNavigateTo(item.starterSourceBatch!.id)}
+                      className="text-left font-medium text-amber-700 hover:text-amber-900 hover:underline"
+                    >
                       #{item.starterSourceBatch.id} — {item.starterSourceBatch.teaSort || "Nimeta"}
-                    </div>
+                    </button>
                     <div className="text-stone-500">{fmtDate(item.starterSourceBatch.startDate)}</div>
                     {item.brew && item.brew.starterG > 0 && (
                       <div className="text-amber-700 font-medium">
@@ -263,10 +320,11 @@ function LifecycleCard({
                 <div className="relative mt-1">
                   <button
                     onClick={(e) => { e.stopPropagation(); setLinkOpen(!linkOpen); }}
-                    className={`text-[10px] flex items-center gap-1 rounded px-1.5 py-0.5 transition
-                      ${item.starterSourceBatch
+                    className={`text-[10px] flex items-center gap-1 rounded px-1.5 py-0.5 transition ${
+                      item.starterSourceBatch
                         ? "text-stone-400 hover:text-amber-700"
-                        : "text-amber-700 border border-dashed border-amber-300 hover:bg-amber-50"}`}
+                        : "text-amber-700 border border-dashed border-amber-300 hover:bg-amber-50"
+                    }`}
                   >
                     <Link2 size={9} />
                     {item.starterSourceBatch ? "Muuda" : "Lingi allikas"}
@@ -287,7 +345,7 @@ function LifecycleCard({
               </StageBox>
 
               {/* Connector */}
-              <div className="flex flex-col items-center justify-center px-0.5 self-center">
+              <div className="flex items-center self-center px-0.5">
                 <div className="w-4 h-px bg-stone-300" />
               </div>
 
@@ -316,9 +374,7 @@ function LifecycleCard({
               <StageBox icon={Droplets} title="Käärimine F1" status={f1Status}>
                 <div>Algus {fmtDate(item.startDate)}</div>
                 {item.vessels.length > 0 && (
-                  <div>
-                    {item.vessels.reduce((s, v) => s + (v.count ?? 1), 0)} nõud
-                  </div>
+                  <div>{item.vessels.reduce((s, v) => s + (v.count ?? 1), 0)} nõud</div>
                 )}
                 {item.totalVolumeL > 0 && <div>{item.totalVolumeL.toFixed(1)} L</div>}
                 {item.flavoringDate ? (
@@ -351,7 +407,7 @@ function LifecycleCard({
               </StageBox>
 
               {/* Connector */}
-              <div className="flex flex-col items-center justify-center px-0.5 self-center">
+              <div className="flex items-center self-center px-0.5">
                 <div className="w-4 h-px bg-stone-300" />
               </div>
 
@@ -363,6 +419,14 @@ function LifecycleCard({
                     {item.totalBottles > 0 && (
                       <div className="font-medium text-stone-800">{item.totalBottles} pudelit</div>
                     )}
+                    {/* Outgoing starter — derived from the next batch's brew */}
+                    {item.outgoingStarterG != null && item.outgoingStarterG > 0 ? (
+                      <div className="text-amber-700 font-medium mt-0.5 pt-0.5 border-t border-stone-100">
+                        Juuretis edasi: {item.outgoingStarterG} g ({item.outgoingStarterPct ?? "?"}%)
+                      </div>
+                    ) : (
+                      <div className="text-stone-400 italic mt-0.5">Juuretis edasi: —</div>
+                    )}
                   </>
                 ) : (
                   <div className="text-stone-400 italic">Ootel</div>
@@ -372,10 +436,12 @@ function LifecycleCard({
             </div>
           </div>
 
-          {/* Flavor block detail */}
+          {/* ── Flavor block detail ── */}
           {item.flavoringEvent?.blocks && item.flavoringEvent.blocks.length > 0 && (
             <div className="rounded-xl bg-stone-50 border border-stone-100 p-3">
-              <div className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">Maitseploki detail</div>
+              <div className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2">
+                Maitseploki detail
+              </div>
               <div className="space-y-1.5">
                 {item.flavoringEvent.blocks.map((bl, i) => {
                   const bottles = bl.vesselL > 0 ? Math.floor(bl.koguseL / bl.vesselL) : 0;
@@ -392,26 +458,26 @@ function LifecycleCard({
             </div>
           )}
 
-          {/* Notes */}
+          {/* ── Notes ── */}
           {item.notes && (
             <div className="text-xs text-stone-500 bg-stone-50 rounded-lg px-3 py-2">
               <span className="font-medium text-stone-600">Märkmed: </span>{item.notes}
             </div>
           )}
 
-          {/* Links to pages */}
+          {/* ── Links to editing pages ── */}
           <div className="flex gap-2 pt-1">
             <a
               href={`${BASE_URL}/kaarimine`}
               className="text-xs text-amber-700 hover:text-amber-900 border border-stone-200 hover:border-amber-300 rounded-lg px-3 py-1.5 transition"
             >
-              Käärimise leht →
+              Käärimine →
             </a>
             <a
               href={`${BASE_URL}/maitsestamine`}
               className="text-xs text-amber-700 hover:text-amber-900 border border-stone-200 hover:border-amber-300 rounded-lg px-3 py-1.5 transition"
             >
-              Maitsestamise leht →
+              Maitsestamine →
             </a>
           </div>
         </div>
@@ -423,6 +489,7 @@ function LifecycleCard({
 export default function EluigaPage() {
   const authFetch = useAuthFetch();
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const { data, isLoading } = useQuery<LifecycleItem[]>({
     queryKey: ["lifecycle"],
@@ -434,6 +501,18 @@ export default function EluigaPage() {
 
   const items = data ?? [];
 
+  // Navigate to a batch: expand it and scroll to its card
+  const navigateTo = useCallback((id: number) => {
+    setExpandedId(id);
+    // Small delay so the card expands first
+    setTimeout(() => {
+      const el = document.getElementById(`batch-${id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+  }, []);
+
   return (
     <Layout>
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-4 pb-24">
@@ -441,7 +520,9 @@ export default function EluigaPage() {
           <GitBranch size={22} className="text-amber-600" />
           <div>
             <h1 className="text-2xl font-serif font-semibold text-stone-800">Tee eluiga</h1>
-            <p className="text-sm text-stone-500">Iga partii täielik teekond pruulimisest pudeldamiseni</p>
+            <p className="text-sm text-stone-500">
+              Iga partii täielik teekond pruulimisest pudeldamiseni
+            </p>
           </div>
         </div>
 
@@ -475,6 +556,7 @@ export default function EluigaPage() {
             authFetch={authFetch}
             expanded={expandedId === item.id}
             onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
+            onNavigateTo={navigateTo}
           />
         ))}
       </div>
