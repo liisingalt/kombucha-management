@@ -464,6 +464,7 @@ export default function LaduPage() {
             brews={brewsTraceQ.data ?? []}
             ferms={fermsTraceQ.data ?? []}
             flavEvents={eventsTraceQ.data ?? []}
+            flash={flash}
           />
         )}
       </div>
@@ -1988,13 +1989,36 @@ function AjaluguTab({
   brews,
   ferms,
   flavEvents,
+  flash,
 }: {
   data: LaduData;
   undoMutation: ReturnType<typeof useMutation<void, Error, number>>;
   brews: BrewMin[];
   ferms: FermMin[];
   flavEvents: EventMin[];
+  flash: (msg: string) => void;
 }) {
+  const authFetch = useAuthFetch();
+  const qc = useQueryClient();
+  const [editingMovId, setEditingMovId] = useState<number | null>(null);
+  const [editCapId, setEditCapId] = useState<number | "">("");
+
+  const updateMovMutation = useMutation({
+    mutationFn: async ({ id, capId }: { id: number; capId: number | null }) => {
+      const res = await authFetch(`/ladu/movements/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ capId }),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: LADU_QUERY_KEY });
+      setEditingMovId(null);
+      flash("Kanne uuendatud");
+    },
+    onError: (err: Error) => flash(err.message),
+  });
+
   if (data.movements.length === 0)
     return <p className="text-sm text-stone-400">Veel ühtegi kannet pole.</p>;
 
@@ -2016,34 +2040,101 @@ function AjaluguTab({
     return dateStr;
   };
 
+  function startEdit(m: Movement) {
+    const capDelta = (m.deltas as Array<{ kind: string; key?: number }>).find((d) => d.kind === "cap");
+    setEditCapId(capDelta?.key ?? "");
+    setEditingMovId(m.id);
+  }
+
   return (
     <div className="space-y-2">
       {data.movements.map((m) => {
         const brewDateLabel = brewLabelForMovement(m);
+        const capDelta = (m.deltas as Array<{ kind: string; key?: number; amount?: number }>).find((d) => d.kind === "cap");
+        const currentCap = capDelta?.key ? data.caps.find((c) => c.id === capDelta.key) : undefined;
+        const isEditing = editingMovId === m.id;
+
         return (
-          <div key={m.id} className="flex items-start justify-between rounded-xl border border-stone-200 bg-white px-4 py-3">
-            <div className="pr-3">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className={`text-xs px-2 py-0.5 rounded-full ${m.type === "villimine" ? "bg-amber-100 text-amber-800" : "bg-stone-100 text-stone-600"}`}>
-                  {m.type}
-                </span>
-                <span className="text-xs text-stone-400">
-                  {new Date(m.createdAt).toLocaleString("et-EE")}
-                </span>
+          <div key={m.id} className="rounded-xl border border-stone-200 bg-white px-4 py-3">
+            <div className="flex items-start justify-between">
+              <div className="pr-3 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${m.type === "villimine" ? "bg-amber-100 text-amber-800" : "bg-stone-100 text-stone-600"}`}>
+                    {m.type}
+                  </span>
+                  <span className="text-xs text-stone-400">
+                    {new Date(m.createdAt).toLocaleString("et-EE")}
+                  </span>
+                </div>
+                <div className="text-sm text-stone-700">{m.summary}</div>
+                {currentCap && !isEditing && (
+                  <div className="text-xs text-stone-400 mt-0.5 flex items-center">
+                    <ColorDot color={currentCap.color} />
+                    {capLabel(currentCap)}
+                  </div>
+                )}
+                {brewDateLabel && (
+                  <div className="text-xs text-stone-400 mt-0.5">Pruulimine: {brewDateLabel}</div>
+                )}
               </div>
-              <div className="text-sm text-stone-700">{m.summary}</div>
-              {brewDateLabel && (
-                <div className="text-xs text-stone-400 mt-0.5">Pruulimine: {brewDateLabel}</div>
-              )}
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                {m.type === "villimine" && !isEditing && (
+                  <button
+                    type="button"
+                    onClick={() => startEdit(m)}
+                    className="text-stone-400 hover:text-amber-700 flex items-center gap-1 text-xs"
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> muuda
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => undoMutation.mutate(m.id)}
+                  disabled={undoMutation.isPending}
+                  className="text-stone-400 hover:text-amber-700 flex items-center gap-1 text-xs shrink-0 disabled:opacity-40"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> tagasi
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => undoMutation.mutate(m.id)}
-              disabled={undoMutation.isPending}
-              className="text-stone-400 hover:text-amber-700 flex items-center gap-1 text-xs shrink-0 disabled:opacity-40"
-            >
-              <RotateCcw className="w-3.5 h-3.5" /> tagasi
-            </button>
+
+            {isEditing && (
+              <div className="mt-3 pt-3 border-t border-stone-100">
+                <div className="text-xs font-medium text-stone-500 mb-2">Korrigeeri kannet (laoseis ei muutu)</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-xs text-stone-500 shrink-0">Kork:</label>
+                  <select
+                    value={editCapId}
+                    onChange={(e) => setEditCapId(e.target.value ? Number(e.target.value) : "")}
+                    className="flex-1 min-w-[180px] rounded-lg border border-stone-300 px-2 py-1.5 text-xs text-stone-800 focus:border-amber-600 focus:outline-none"
+                  >
+                    <option value="">— kork valimata —</option>
+                    {data.caps.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.size}ml · {c.type}{c.color ? ` · ${c.color}` : ""} ({c.qty} tk laos)
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => updateMovMutation.mutate({ id: m.id, capId: editCapId ? Number(editCapId) : null })}
+                    disabled={updateMovMutation.isPending || !editCapId}
+                    className="flex items-center gap-1 text-xs px-3 py-1.5 bg-amber-700 text-white rounded-lg hover:bg-amber-800 disabled:opacity-40"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    {updateMovMutation.isPending ? "Salvestan…" : "Salvesta"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingMovId(null)}
+                    className="flex items-center gap-1 text-xs px-3 py-1.5 border border-stone-300 rounded-lg hover:bg-stone-50"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Tühista
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
       })}

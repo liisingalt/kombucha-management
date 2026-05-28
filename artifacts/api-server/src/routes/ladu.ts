@@ -521,6 +521,39 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
   }
 });
 
+router.put("/ladu/movements/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const { capId } = req.body as { capId?: number | null };
+  try {
+    const [movement] = await db
+      .select()
+      .from(laduMovementsTable)
+      .where(and(eq(laduMovementsTable.id, id), eq(laduMovementsTable.userId, userId)));
+    if (!movement) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    const deltas = movement.deltas as StoredDelta[];
+    const updatedDeltas = capId !== undefined && capId !== null
+      ? deltas.map((d) => (d.kind === "cap" ? { ...d, key: capId } : d))
+      : deltas;
+    const [updated] = await db
+      .update(laduMovementsTable)
+      .set({ deltas: updatedDeltas as unknown[] })
+      .where(eq(laduMovementsTable.id, id))
+      .returning();
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update movement");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.delete("/ladu/movements/:id", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const id = parseInt(req.params.id, 10);
