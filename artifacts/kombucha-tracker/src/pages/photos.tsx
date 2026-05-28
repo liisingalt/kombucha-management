@@ -45,6 +45,9 @@ export default function PhotosPage() {
 
   const [showUpload, setShowUpload] = useState(false);
   const [selectedPhase, setSelectedPhase] = useState<Phase | null>(null);
+  const [activeBatches, setActiveBatches] = useState<{ id: number; label: string; date: string }[]>([]);
+  const [batchesLoading, setBatchesLoading] = useState(false);
+  const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
   const [useCustomDate, setUseCustomDate] = useState(false);
   const [photoDate, setPhotoDate] = useState(new Date().toISOString().slice(0, 10));
   const [caption, setCaption] = useState("");
@@ -73,8 +76,25 @@ export default function PhotosPage() {
     fetchPhotos();
   }, [fetchPhotos]);
 
+  async function fetchActiveBatches(phase: Phase) {
+    setBatchesLoading(true);
+    setActiveBatches([]);
+    setSelectedBatchId(null);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${BASE_URL}/api/photos/active-batches?phase=${phase}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setActiveBatches(await res.json());
+    } catch {
+    } finally {
+      setBatchesLoading(false);
+    }
+  }
+
   function pickPhase(phase: Phase) {
     setSelectedPhase(phase);
+    fetchActiveBatches(phase);
   }
 
   async function handleUpload(file: File) {
@@ -105,7 +125,7 @@ export default function PhotosPage() {
         body: JSON.stringify({
           objectPath,
           phase: selectedPhase ?? null,
-          stageRefId: null,
+          stageRefId: selectedBatchId ?? null,
           photoDate: useCustomDate ? photoDate : new Date().toISOString().slice(0, 10),
           caption: caption.trim() || null,
         }),
@@ -114,6 +134,8 @@ export default function PhotosPage() {
 
       setShowUpload(false);
       setSelectedPhase(null);
+      setSelectedBatchId(null);
+      setActiveBatches([]);
       setCaption("");
       setUseCustomDate(false);
       setPhotoDate(new Date().toISOString().slice(0, 10));
@@ -264,7 +286,7 @@ export default function PhotosPage() {
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-serif font-semibold text-lg">Lisa foto</h2>
               <button
-                onClick={() => { setShowUpload(false); setSelectedPhase(null); setUploadError(null); }}
+                onClick={() => { setShowUpload(false); setSelectedPhase(null); setSelectedBatchId(null); setActiveBatches([]); setUploadError(null); }}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <X size={20} />
@@ -297,6 +319,35 @@ export default function PhotosPage() {
                   })}
                 </div>
               </div>
+
+              {/* Stage / event picker */}
+              {selectedPhase && (
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">
+                    {phaseInfo[selectedPhase].label} sündmus{" "}
+                    <span className="text-muted-foreground font-normal text-xs">(valikuline)</span>
+                  </label>
+                  {batchesLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                      <Loader2 size={12} className="animate-spin" />
+                      Laadin...
+                    </div>
+                  ) : activeBatches.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-1">Selles etapis aktiivseid sündmusi ei leitud.</p>
+                  ) : (
+                    <select
+                      className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      value={selectedBatchId ?? ""}
+                      onChange={(e) => setSelectedBatchId(e.target.value ? Number(e.target.value) : null)}
+                    >
+                      <option value="">— Vali (valikuline) —</option>
+                      {activeBatches.map((b) => (
+                        <option key={b.id} value={b.id}>{b.label}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
 
               {/* Date */}
               <div>
@@ -368,7 +419,7 @@ export default function PhotosPage() {
                   type="button"
                   variant="outline"
                   className="flex-1"
-                  onClick={() => { setShowUpload(false); setSelectedPhase(null); setUploadError(null); }}
+                  onClick={() => { setShowUpload(false); setSelectedPhase(null); setSelectedBatchId(null); setActiveBatches([]); setUploadError(null); }}
                 >
                   Tühista
                 </Button>
