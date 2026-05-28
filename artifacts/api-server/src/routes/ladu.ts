@@ -6,6 +6,7 @@ import {
   laduBottlesTable,
   laduLabelsTable,
   laduCapsTable,
+  laduLabeledBottlesTable,
   laduMovementsTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
@@ -37,6 +38,12 @@ const deltaSchema = z.discriminatedUnion("kind", [
       })
       .optional(),
   }),
+  z.object({
+    kind: z.literal("labeled_bottle"),
+    flavorId: z.number().int(),
+    size: z.number().int(),
+    amount: z.number().int(),
+  }),
 ]);
 
 const commitSchema = z.object({
@@ -53,14 +60,16 @@ const flavorSchema = z.object({
 type StoredDelta =
   | { kind: "bottle"; key: number; amount: number }
   | { kind: "label"; flavorId: number; size: number; amount: number }
-  | { kind: "cap"; key: number; amount: number };
+  | { kind: "cap"; key: number; amount: number }
+  | { kind: "labeled_bottle"; flavorId: number; size: number; amount: number };
 
 async function fetchAll(userId: string) {
-  const [flavors, bottles, labels, caps, movements] = await Promise.all([
+  const [flavors, bottles, labels, caps, labeledBottles, movements] = await Promise.all([
     db.select().from(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId)),
     db.select().from(laduBottlesTable).where(eq(laduBottlesTable.userId, userId)),
     db.select().from(laduLabelsTable).where(eq(laduLabelsTable.userId, userId)),
     db.select().from(laduCapsTable).where(eq(laduCapsTable.userId, userId)),
+    db.select().from(laduLabeledBottlesTable).where(eq(laduLabeledBottlesTable.userId, userId)),
     db
       .select()
       .from(laduMovementsTable)
@@ -72,6 +81,7 @@ async function fetchAll(userId: string) {
     bottles,
     labels,
     caps,
+    labeledBottles,
     movements: movements.reverse().slice(0, 200),
   };
 }
@@ -176,6 +186,28 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
               storedDeltas.push({ kind: "cap", key: inserted.id, amount: delta.amount });
             }
           }
+        } else if (delta.kind === "labeled_bottle") {
+          const [existing] = await tx
+            .select()
+            .from(laduLabeledBottlesTable)
+            .where(
+              and(
+                eq(laduLabeledBottlesTable.userId, userId),
+                eq(laduLabeledBottlesTable.flavorId, delta.flavorId),
+                eq(laduLabeledBottlesTable.size, delta.size)
+              )
+            );
+          if (existing) {
+            await tx
+              .update(laduLabeledBottlesTable)
+              .set({ qty: existing.qty + delta.amount })
+              .where(eq(laduLabeledBottlesTable.id, existing.id));
+          } else {
+            await tx
+              .insert(laduLabeledBottlesTable)
+              .values({ userId, flavorId: delta.flavorId, size: delta.size, qty: delta.amount });
+          }
+          storedDeltas.push({ kind: "labeled_bottle", flavorId: delta.flavorId, size: delta.size, amount: delta.amount });
         }
       }
 
@@ -249,6 +281,23 @@ router.delete("/ladu/movements/:id", requireAuth, async (req, res) => {
               .set({ qty: existing.qty - delta.amount })
               .where(eq(laduCapsTable.id, existing.id));
           }
+        } else if (delta.kind === "labeled_bottle") {
+          const [existing] = await tx
+            .select()
+            .from(laduLabeledBottlesTable)
+            .where(
+              and(
+                eq(laduLabeledBottlesTable.userId, userId),
+                eq(laduLabeledBottlesTable.flavorId, delta.flavorId),
+                eq(laduLabeledBottlesTable.size, delta.size)
+              )
+            );
+          if (existing) {
+            await tx
+              .update(laduLabeledBottlesTable)
+              .set({ qty: existing.qty - delta.amount })
+              .where(eq(laduLabeledBottlesTable.id, existing.id));
+          }
         }
       }
       await tx.delete(laduMovementsTable).where(eq(laduMovementsTable.id, id));
@@ -315,6 +364,7 @@ router.delete("/ladu/reset", requireAuth, async (req, res) => {
     await db.transaction(async (tx) => {
       await tx.delete(laduMovementsTable).where(eq(laduMovementsTable.userId, userId));
       await tx.delete(laduLabelsTable).where(eq(laduLabelsTable.userId, userId));
+      await tx.delete(laduLabeledBottlesTable).where(eq(laduLabeledBottlesTable.userId, userId));
       await tx.delete(laduBottlesTable).where(eq(laduBottlesTable.userId, userId));
       await tx.delete(laduCapsTable).where(eq(laduCapsTable.userId, userId));
       await tx.delete(laduFlavorsTable).where(eq(laduFlavorsTable.userId, userId));
