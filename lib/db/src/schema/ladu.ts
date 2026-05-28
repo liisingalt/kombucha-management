@@ -88,6 +88,7 @@ export const laduMaterialsTable = pgTable("ladu_materials", {
   name: text("name").notNull(),
   unit: text("unit").notNull(),
   qty: real("qty").notNull().default(0),
+  minStock: real("min_stock"),
 });
 
 export const laduReturnedBottlesTable = pgTable("ladu_returned_bottles", {

@@ -32,7 +32,7 @@ type Movement = { id: number; type: string; summary: string; deltas: unknown[]; 
 type BlankLabelType = { id: number; userId: string; name: string };
 type BlankLabel = { id: number; userId: string; blankLabelTypeId: number; size: number; qty: number };
 type FinishedGoods = { id: number; flavorId: number; size: number; qty: number };
-type Material = { id: number; userId: string; name: string; unit: string; qty: number };
+type Material = { id: number; userId: string; name: string; unit: string; qty: number; minStock: number | null };
 type ReturnedBottle = { id: number; flavorId: number; size: number; qty: number };
 
 type ReusableCap = { size: number; qty: number };
@@ -296,11 +296,11 @@ export default function LaduPage() {
     onError: (err: Error) => flash(err.message),
   });
 
-  const addMaterialMutation = useMutation({
-    mutationFn: async ({ name, unit }: { name: string; unit: string }) => {
+  const addMaterialMutation = useMutation<Material, Error, { name: string; unit: string; minStock?: number }>({
+    mutationFn: async ({ name, unit, minStock }) => {
       const res = await authFetch("/ladu/materials", {
         method: "POST",
-        body: JSON.stringify({ name, unit }),
+        body: JSON.stringify({ name, unit, ...(minStock != null ? { minStock } : {}) }),
       });
       return res.json() as Promise<Material>;
     },
@@ -314,11 +314,11 @@ export default function LaduPage() {
     onError: (err: Error) => flash(err.message),
   });
 
-  const updateMaterialMutation = useMutation({
-    mutationFn: async ({ id, name, unit }: { id: number; name: string; unit: string }) => {
+  const updateMaterialMutation = useMutation<Material, Error, { id: number; name: string; unit: string; minStock?: number | null }>({
+    mutationFn: async ({ id, name, unit, minStock }) => {
       const res = await authFetch(`/ladu/materials/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({ name, unit }),
+        body: JSON.stringify({ name, unit, minStock: minStock ?? null }),
       });
       return res.json() as Promise<Material>;
     },
@@ -1733,8 +1733,8 @@ function TooraineTab({
 }: {
   data: LaduData;
   commitMutation: CommitMutation;
-  addMaterialMutation: ReturnType<typeof useMutation<Material, Error, { name: string; unit: string }>>;
-  updateMaterialMutation: ReturnType<typeof useMutation<Material, Error, { id: number; name: string; unit: string }>>;
+  addMaterialMutation: ReturnType<typeof useMutation<Material, Error, { name: string; unit: string; minStock?: number }>>;
+  updateMaterialMutation: ReturnType<typeof useMutation<Material, Error, { id: number; name: string; unit: string; minStock?: number | null }>>;
   deleteMaterialMutation: ReturnType<typeof useMutation<number, Error, number>>;
   flash: (msg: string) => void;
 }) {
@@ -1749,6 +1749,8 @@ function TooraineTab({
   const [editName, setEditName] = useState("");
   const [editUnit, setEditUnit] = useState("kg");
   const [editCustomUnit, setEditCustomUnit] = useState("");
+  const [editMinStock, setEditMinStock] = useState("");
+  const [addMinStock, setAddMinStock] = useState("");
   const resolvedAddUnit = addUnit === "__custom__" ? addCustomUnit.trim() : addUnit;
   const resolvedEditUnit = editUnit === "__custom__" ? editCustomUnit.trim() : editUnit;
 
@@ -1757,13 +1759,15 @@ function TooraineTab({
     const unit = resolvedAddUnit;
     if (!name) return flash("Sisesta tooraine nimi");
     if (!unit) return flash("Sisesta ühik");
+    const minStock = addMinStock !== "" ? parseFloat(addMinStock.replace(",", ".")) : null;
     addMaterialMutation.mutate(
-      { name, unit },
+      { name, unit, ...(minStock != null && !isNaN(minStock) ? { minStock } : {}) },
       {
         onSuccess: () => {
           setAddName("");
           setAddUnit("kg");
           setAddCustomUnit("");
+          setAddMinStock("");
         },
       }
     );
@@ -1772,6 +1776,7 @@ function TooraineTab({
   const startEdit = (m: Material) => {
     setEditingId(m.id);
     setEditName(m.name);
+    setEditMinStock(m.minStock != null ? String(m.minStock) : "");
     if (PRESET_UNITS.includes(m.unit)) {
       setEditUnit(m.unit);
       setEditCustomUnit("");
@@ -1786,8 +1791,9 @@ function TooraineTab({
     const unit = resolvedEditUnit;
     if (!name) return flash("Sisesta nimi");
     if (!unit) return flash("Sisesta ühik");
+    const minStock = editMinStock !== "" ? parseFloat(editMinStock.replace(",", ".")) : null;
     updateMaterialMutation.mutate(
-      { id: m.id, name, unit },
+      { id: m.id, name, unit, ...(minStock != null && !isNaN(minStock) ? { minStock } : { minStock: null }) },
       { onSuccess: () => setEditingId(null) }
     );
   };
@@ -1982,6 +1988,19 @@ function TooraineTab({
                       )}
                     </div>
                   </div>
+                  <div>
+                    <label className="block text-xs text-stone-500 mb-1">Miinimumvaru ({resolvedEditUnit || m.unit}) <span className="text-stone-400">— hoiatuse piir</span></label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="any"
+                      value={editMinStock}
+                      onChange={(e) => setEditMinStock(e.target.value)}
+                      placeholder="nt 0.5"
+                      className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
+                    />
+                  </div>
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -2004,7 +2023,7 @@ function TooraineTab({
             }
 
             return (
-              <div key={m.id} className="rounded-xl border border-stone-200 bg-white p-4">
+              <div key={m.id} className={`rounded-xl border p-4 ${m.minStock != null && m.qty < m.minStock ? "border-red-300 bg-red-50" : "border-stone-200 bg-white"}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="font-medium text-stone-900">{m.name}</div>
@@ -2012,6 +2031,15 @@ function TooraineTab({
                       {formatQty(m.qty)}{" "}
                       <span className="text-base font-normal text-stone-500">{m.unit}</span>
                     </div>
+                    {m.minStock != null && m.qty < m.minStock && (
+                      <div className="mt-1 flex items-center gap-1 text-xs text-red-600 font-medium">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        Varu on alla miinimumi ({formatQty(m.minStock)} {m.unit})
+                      </div>
+                    )}
+                    {m.minStock != null && m.qty >= m.minStock && (
+                      <div className="mt-1 text-xs text-stone-400">Min: {formatQty(m.minStock)} {m.unit}</div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0 pt-0.5">
                     <button
@@ -2093,6 +2121,19 @@ function TooraineTab({
                 />
               )}
             </div>
+          </div>
+          <div>
+            <label className="block text-xs text-stone-500 mb-1">Miinimumvaru <span className="text-stone-400">(valikuline — hoiatuse piir)</span></label>
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="any"
+              value={addMinStock}
+              onChange={(e) => setAddMinStock(e.target.value)}
+              placeholder="nt 0.5"
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
+            />
           </div>
           <button
             type="button"

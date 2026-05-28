@@ -204,6 +204,9 @@ export async function runMigrations(): Promise<void> {
     await client.query(`
       ALTER TABLE flavoring_event ADD COLUMN IF NOT EXISTS saved_starter_g INTEGER;
     `);
+    await client.query(`
+      ALTER TABLE ladu_materials ADD COLUMN IF NOT EXISTS min_stock REAL;
+    `);
     logger.info("Migrations complete");
   } finally {
     client.release();

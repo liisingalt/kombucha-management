@@ -1043,6 +1043,7 @@ router.delete("/ladu/blank-label-types/:id", requireAuth, async (req, res) => {
 const materialSchema = z.object({
   name: z.string().min(1),
   unit: z.string().min(1),
+  minStock: z.number().min(0).nullable().optional(),
 });
 
 router.post("/ladu/materials", requireAuth, async (req, res) => {
@@ -1055,7 +1056,7 @@ router.post("/ladu/materials", requireAuth, async (req, res) => {
   try {
     const [material] = await db
       .insert(laduMaterialsTable)
-      .values({ userId, name: parsed.data.name.trim(), unit: parsed.data.unit.trim(), qty: 0 })
+      .values({ userId, name: parsed.data.name.trim(), unit: parsed.data.unit.trim(), qty: 0, minStock: parsed.data.minStock ?? null })
       .returning();
     res.status(201).json(material);
   } catch (err) {
@@ -1087,7 +1088,7 @@ router.patch("/ladu/materials/:id", requireAuth, async (req, res) => {
     }
     const [updated] = await db
       .update(laduMaterialsTable)
-      .set({ name: parsed.data.name.trim(), unit: parsed.data.unit.trim() })
+      .set({ name: parsed.data.name.trim(), unit: parsed.data.unit.trim(), minStock: parsed.data.minStock ?? null })
       .where(eq(laduMaterialsTable.id, id))
       .returning();
     res.json(updated);
