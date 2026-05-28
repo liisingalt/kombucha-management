@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle } from "lucide-react";
+import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle, Pencil, Check, X } from "lucide-react";
 import { Layout } from "@/components/Layout";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -195,6 +195,42 @@ export default function LaduPage() {
     onError: (err: Error) => flash(err.message),
   });
 
+  const updateFlavorMutation = useMutation({
+    mutationFn: async ({ id, name, defaultCapId }: { id: number; name: string; defaultCapId: number | null }) => {
+      const res = await authFetch(`/ladu/flavors/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ name, defaultCapId }),
+      });
+      return res.json() as Promise<Flavor>;
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData<LaduData>(LADU_QUERY_KEY, (old = EMPTY) => ({
+        ...old,
+        flavors: old.flavors.map((f) => (f.id === updated.id ? updated : f)),
+      }));
+      flash("Maitse uuendatud");
+    },
+    onError: (err: Error) => flash(err.message),
+  });
+
+  const updateCapMutation = useMutation({
+    mutationFn: async ({ id, size, type, color }: { id: number; size: number; type: string; color: string }) => {
+      const res = await authFetch(`/ladu/caps/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ size, type, color }),
+      });
+      return res.json() as Promise<Cap>;
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData<LaduData>(LADU_QUERY_KEY, (old = EMPTY) => ({
+        ...old,
+        caps: old.caps.map((c) => (c.id === updated.id ? updated : c)),
+      }));
+      flash("Kork uuendatud");
+    },
+    onError: (err: Error) => flash(err.message),
+  });
+
   const resetMutation = useMutation({
     mutationFn: async () => {
       await authFetch("/ladu/reset", { method: "DELETE" });
@@ -269,7 +305,7 @@ export default function LaduPage() {
           })}
         </nav>
 
-        {tab === "ladu" && <LaduTab data={data} flavorName={flavorName} bottleQty={bottleQty} />}
+        {tab === "ladu" && <LaduTab data={data} flavorName={flavorName} bottleQty={bottleQty} updateCapMutation={updateCapMutation} flash={flash} />}
         {tab === "villimine" && (
           <VillimineTab data={data} flavorName={flavorName} commitMutation={commitMutation} flash={flash} />
         )}
@@ -281,6 +317,7 @@ export default function LaduPage() {
             data={data}
             addFlavorMutation={addFlavorMutation}
             removeFlavorMutation={removeFlavorMutation}
+            updateFlavorMutation={updateFlavorMutation}
             resetAll={resetAll}
           />
         )}
@@ -300,7 +337,32 @@ export default function LaduPage() {
 
 type CommitMutation = ReturnType<typeof useMutation<LaduData, Error, { deltas: unknown[]; type: string; summary: string }>>;
 
-function LaduTab({ data, flavorName, bottleQty }: { data: LaduData; flavorName: (id: number) => string; bottleQty: (size: number) => number }) {
+function LaduTab({ data, flavorName, bottleQty, updateCapMutation, flash }: { data: LaduData; flavorName: (id: number) => string; bottleQty: (size: number) => number; updateCapMutation: ReturnType<typeof useMutation<Cap, Error, { id: number; size: number; type: string; color: string }>>; flash: (msg: string) => void }) {
+  const [editingCapId, setEditingCapId] = useState<number | null>(null);
+  const [editSize, setEditSize] = useState(330);
+  const [editType, setEditType] = useState("kroonkork");
+  const [editColor, setEditColor] = useState("");
+  const [editPunnkorkKat, setEditPunnkorkKat] = useState<"uus" | "taaskasutus">("uus");
+
+  const startEditCap = (c: Cap) => {
+    setEditingCapId(c.id);
+    setEditSize(c.size);
+    setEditType(c.type);
+    if (c.type === "punnkork") {
+      setEditPunnkorkKat((c.color === "taaskasutus" ? "taaskasutus" : "uus") as "uus" | "taaskasutus");
+      setEditColor("");
+    } else {
+      setEditColor(c.color);
+    }
+  };
+
+  const saveEditCap = (id: number) => {
+    const color = editType === "punnkork" ? editPunnkorkKat : editColor.trim();
+    updateCapMutation.mutate(
+      { id, size: editSize, type: editType, color },
+      { onSuccess: () => setEditingCapId(null) }
+    );
+  };
   const Low = ({ show }: { show: boolean }) =>
     show ? (
       <span className="inline-flex items-center gap-1 text-xs text-red-600 mt-1">
@@ -433,17 +495,80 @@ function LaduTab({ data, flavorName, bottleQty }: { data: LaduData; flavorName: 
                 </tr>
               </thead>
               <tbody>
-                {data.caps.map((c) => (
-                  <tr key={c.id} className="border-t border-stone-100">
-                    <td className="px-4 py-2">
-                      <ColorDot color={c.color} />
-                      {c.type === "punnkork"
-                        ? `${c.size} ml · punnkork${c.color ? ` · ${c.color}` : ""}`
-                        : capLabel(c)}
-                    </td>
-                    <td className={`px-4 py-2 text-right font-medium ${c.qty <= 0 ? "text-red-600" : ""}`}>{c.qty}</td>
-                  </tr>
-                ))}
+                {data.caps.map((c) => {
+                  if (editingCapId === c.id) {
+                    return (
+                      <tr key={c.id} className="border-t border-stone-100 bg-amber-50">
+                        <td className="px-3 py-2" colSpan={2}>
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <select value={editSize} onChange={(e) => setEditSize(parseInt(e.target.value))} className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm">
+                                {SIZES.map((s) => <option key={s} value={s}>{s} ml</option>)}
+                              </select>
+                              <select value={editType} onChange={(e) => { setEditType(e.target.value); setEditColor(""); }} className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm">
+                                {CAP_TYPES.map((tp) => <option key={tp} value={tp}>{tp}</option>)}
+                              </select>
+                            </div>
+                            {editType === "punnkork" ? (
+                              <Seg
+                                options={[{ value: "uus", label: "Uus" }, { value: "taaskasutus", label: "Taaskasutus" }]}
+                                value={editPunnkorkKat}
+                                onChange={(v) => setEditPunnkorkKat(v as "uus" | "taaskasutus")}
+                              />
+                            ) : (
+                              <input
+                                value={editColor}
+                                onChange={(e) => setEditColor(e.target.value)}
+                                placeholder="värv (valikuline)"
+                                className="w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                              />
+                            )}
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => saveEditCap(c.id)}
+                                disabled={updateCapMutation.isPending}
+                                className="flex items-center gap-1 rounded-lg bg-amber-700 px-3 py-1.5 text-xs text-white hover:bg-amber-800 disabled:opacity-60"
+                              >
+                                <Check className="w-3 h-3" /> Salvesta
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingCapId(null)}
+                                className="flex items-center gap-1 rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-100"
+                              >
+                                <X className="w-3 h-3" /> Tühista
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr key={c.id} className="border-t border-stone-100">
+                      <td className="px-4 py-2">
+                        <ColorDot color={c.color} />
+                        {c.type === "punnkork"
+                          ? `${c.size} ml · punnkork${c.color ? ` · ${c.color}` : ""}`
+                          : capLabel(c)}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <span className={`font-medium ${c.qty <= 0 ? "text-red-600" : ""}`}>{c.qty}</span>
+                          <button
+                            type="button"
+                            onClick={() => startEditCap(c)}
+                            className="text-stone-400 hover:text-amber-700"
+                            title="Muuda"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -852,21 +977,40 @@ function MaitsedTab({
   data,
   addFlavorMutation,
   removeFlavorMutation,
+  updateFlavorMutation,
   resetAll,
 }: {
   data: LaduData;
   addFlavorMutation: ReturnType<typeof useMutation<Flavor, Error, { name: string; defaultCapId: number | null }>>;
   removeFlavorMutation: ReturnType<typeof useMutation<number, Error, number>>;
+  updateFlavorMutation: ReturnType<typeof useMutation<Flavor, Error, { id: number; name: string; defaultCapId: number | null }>>;
   resetAll: () => void;
 }) {
   const [name, setName] = useState("");
   const [capId, setCapId] = useState<number | "">("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editCapId, setEditCapId] = useState<number | "">("");
 
   const add = () => {
     if (!name.trim()) return;
     addFlavorMutation.mutate(
       { name: name.trim(), defaultCapId: capId !== "" ? (capId as number) : null },
       { onSuccess: () => { setName(""); setCapId(""); } }
+    );
+  };
+
+  const startEdit = (f: Flavor) => {
+    setEditingId(f.id);
+    setEditName(f.name);
+    setEditCapId(f.defaultCapId ?? "");
+  };
+
+  const saveEdit = (id: number) => {
+    if (!editName.trim()) return;
+    updateFlavorMutation.mutate(
+      { id, name: editName.trim(), defaultCapId: editCapId !== "" ? (editCapId as number) : null },
+      { onSuccess: () => setEditingId(null) }
     );
   };
 
@@ -904,6 +1048,44 @@ function MaitsedTab({
         <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
           {data.flavors.map((f) => {
             const defCap = data.caps.find((c) => c.id === f.defaultCapId);
+            if (editingId === f.id) {
+              return (
+                <div key={f.id} className="px-4 py-3 border-b border-stone-100 last:border-0 bg-amber-50 space-y-2">
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveEdit(f.id); if (e.key === "Escape") setEditingId(null); }}
+                    autoFocus
+                    className="w-full rounded-lg border border-stone-300 px-3 py-1.5 text-sm focus:border-amber-600 focus:outline-none"
+                  />
+                  <select
+                    value={editCapId}
+                    onChange={(e) => setEditCapId(e.target.value ? Number(e.target.value) : "")}
+                    className="w-full rounded-lg border border-stone-300 px-3 py-1.5 text-sm"
+                  >
+                    <option value="">— vaikekork pole —</option>
+                    {data.caps.map((c) => <option key={c.id} value={c.id}>{capLabel(c)}</option>)}
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(f.id)}
+                      disabled={updateFlavorMutation.isPending}
+                      className="flex items-center gap-1 rounded-lg bg-amber-700 px-3 py-1.5 text-xs text-white hover:bg-amber-800 disabled:opacity-60"
+                    >
+                      <Check className="w-3 h-3" /> Salvesta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="flex items-center gap-1 rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-100"
+                    >
+                      <X className="w-3 h-3" /> Tühista
+                    </button>
+                  </div>
+                </div>
+              );
+            }
             return (
               <div key={f.id} className="flex items-center justify-between px-4 py-3 border-b border-stone-100 last:border-0">
                 <div>
@@ -912,14 +1094,24 @@ function MaitsedTab({
                     {defCap ? capLabel(defCap) : "vaikekork määramata"}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => removeFlavorMutation.mutate(f.id)}
-                  disabled={removeFlavorMutation.isPending}
-                  className="text-stone-400 hover:text-red-600 disabled:opacity-40"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => startEdit(f)}
+                    className="text-stone-400 hover:text-amber-700"
+                    title="Muuda"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeFlavorMutation.mutate(f.id)}
+                    disabled={removeFlavorMutation.isPending}
+                    className="text-stone-400 hover:text-red-600 disabled:opacity-40"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             );
           })}

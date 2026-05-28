@@ -68,6 +68,12 @@ const flavorSchema = z.object({
   defaultCapId: z.number().int().nullable().optional(),
 });
 
+const capUpdateSchema = z.object({
+  size: z.number().int(),
+  type: z.string().min(1),
+  color: z.string(),
+});
+
 type StoredDelta =
   | { kind: "bottle"; key: number; amount: number }
   | { kind: "label"; flavorId: number; size: number; amount: number }
@@ -413,6 +419,39 @@ router.post("/ladu/flavors", requireAuth, async (req, res) => {
   }
 });
 
+router.put("/ladu/flavors/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const parsed = flavorSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const [existing] = await db
+      .select()
+      .from(laduFlavorsTable)
+      .where(and(eq(laduFlavorsTable.id, id), eq(laduFlavorsTable.userId, userId)));
+    if (!existing) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    const [updated] = await db
+      .update(laduFlavorsTable)
+      .set({ name: parsed.data.name, defaultCapId: parsed.data.defaultCapId ?? null })
+      .where(eq(laduFlavorsTable.id, id))
+      .returning();
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update flavor");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.delete("/ladu/flavors/:id", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const id = parseInt(req.params.id, 10);
@@ -435,6 +474,39 @@ router.delete("/ladu/flavors/:id", requireAuth, async (req, res) => {
     res.status(204).end();
   } catch (err) {
     req.log.error({ err }, "Failed to delete flavor");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/ladu/caps/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const parsed = capUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const [existing] = await db
+      .select()
+      .from(laduCapsTable)
+      .where(and(eq(laduCapsTable.id, id), eq(laduCapsTable.userId, userId)));
+    if (!existing) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    const [updated] = await db
+      .update(laduCapsTable)
+      .set({ size: parsed.data.size, type: parsed.data.type, color: parsed.data.color })
+      .where(eq(laduCapsTable.id, id))
+      .returning();
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update cap");
     res.status(500).json({ error: "Internal server error" });
   }
 });
