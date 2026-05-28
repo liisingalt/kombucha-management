@@ -6,3 +6,4 @@ export * from "./chat_messages";
 export * from "./persona_materials";
 export * from "./scoby_conditions";
 export * from "./bottle_tests";
+export * from "./ladu";
