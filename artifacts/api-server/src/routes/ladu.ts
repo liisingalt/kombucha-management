@@ -550,7 +550,7 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
             await tx
               .update(flavoringEventTable)
               .set({ savedStarterG: villimineGoods.savedStarterG })
-              .where(eq(flavoringEventTable.id, villimineGoods.flavoringEventId));
+              .where(and(eq(flavoringEventTable.id, villimineGoods.flavoringEventId), eq(flavoringEventTable.userId, userId)));
           }
         }
       }
