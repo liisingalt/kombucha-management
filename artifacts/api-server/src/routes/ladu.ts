@@ -842,15 +842,7 @@ router.delete("/ladu/flavors/:id", requireAuth, async (req, res) => {
       .from(laduLabelsTable)
       .where(and(eq(laduLabelsTable.userId, userId), eq(laduLabelsTable.flavorId, id)));
     if (labels.length > 0) {
-      res.status(409).json({ error: "Flavor has label records — delete them first or reset inventory" });
-      return;
-    }
-    const customLabelBottles = await db
-      .select()
-      .from(laduCustomLabelBottlesTable)
-      .where(and(eq(laduCustomLabelBottlesTable.userId, userId), gt(laduCustomLabelBottlesTable.qty, 0)));
-    if (customLabelBottles.length > 0) {
-      res.status(409).json({ error: "Custom label bottle stock exists — reset inventory before deleting a flavor" });
+      res.status(409).json({ error: "Maitsele on laos silte — tühjenda varu enne kustutamist" });
       return;
     }
     const finishedGoodsRows = await db
@@ -858,7 +850,15 @@ router.delete("/ladu/flavors/:id", requireAuth, async (req, res) => {
       .from(laduFinishedGoodsTable)
       .where(and(eq(laduFinishedGoodsTable.userId, userId), eq(laduFinishedGoodsTable.flavorId, id), gt(laduFinishedGoodsTable.qty, 0)));
     if (finishedGoodsRows.length > 0) {
-      res.status(409).json({ error: "Flavor has finished goods in stock — clear the stock first before deleting" });
+      res.status(409).json({ error: "Maitsele on laos valmistoodangut — tühjenda varu enne kustutamist" });
+      return;
+    }
+    const returnedBottleRows = await db
+      .select()
+      .from(laduReturnedBottlesTable)
+      .where(and(eq(laduReturnedBottlesTable.userId, userId), eq(laduReturnedBottlesTable.flavorId, id), gt(laduReturnedBottlesTable.qty, 0)));
+    if (returnedBottleRows.length > 0) {
+      res.status(409).json({ error: "Maitsele on laos tagasi tulnud pudeleid — tühjenda varu enne kustutamist" });
       return;
     }
     await db
