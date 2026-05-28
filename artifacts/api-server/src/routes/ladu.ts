@@ -11,7 +11,7 @@ import {
   laduReusableCapsTable,
   laduMovementsTable,
 } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 
 const router = Router();
@@ -453,6 +453,14 @@ router.delete("/ladu/flavors/:id", requireAuth, async (req, res) => {
       .where(and(eq(laduLabelsTable.userId, userId), eq(laduLabelsTable.flavorId, id)));
     if (labels.length > 0) {
       res.status(409).json({ error: "Flavor has label records — delete them first or reset inventory" });
+      return;
+    }
+    const customLabelBottles = await db
+      .select()
+      .from(laduCustomLabelBottlesTable)
+      .where(and(eq(laduCustomLabelBottlesTable.userId, userId), gt(laduCustomLabelBottlesTable.qty, 0)));
+    if (customLabelBottles.length > 0) {
+      res.status(409).json({ error: "Custom label bottle stock exists — reset inventory before deleting a flavor" });
       return;
     }
     await db
