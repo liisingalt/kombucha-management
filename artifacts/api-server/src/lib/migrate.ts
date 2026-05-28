@@ -207,6 +207,9 @@ export async function runMigrations(): Promise<void> {
     await client.query(`
       ALTER TABLE ladu_materials ADD COLUMN IF NOT EXISTS min_stock REAL;
     `);
+    await client.query(`
+      DELETE FROM ladu_reusable_caps WHERE size != 750;
+    `);
     logger.info("Migrations complete");
   } finally {
     client.release();
