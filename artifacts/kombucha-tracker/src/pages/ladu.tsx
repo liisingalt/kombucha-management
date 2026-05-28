@@ -2241,6 +2241,11 @@ function AjaluguTab({
         const capDelta = (m.deltas as Array<{ kind: string; key?: number; amount?: number }>).find((d) => d.kind === "cap");
         const currentCap = capDelta?.key ? data.caps.find((c) => c.id === capDelta.key) : undefined;
         const isEditing = editingMovId === m.id;
+        const blankLabelCount = m.type === "villimine"
+          ? (m.deltas as Array<{ kind: string; amount?: number }>)
+              .filter((d) => d.kind === "blank_label")
+              .reduce((sum, d) => sum + Math.abs(d.amount ?? 0), 0)
+          : 0;
 
         return (
           <div key={m.id} className="rounded-xl border border-stone-200 bg-white px-4 py-3">
@@ -2259,6 +2264,12 @@ function AjaluguTab({
                   <div className="text-xs text-stone-400 mt-0.5 flex items-center">
                     <ColorDot color={currentCap.color} />
                     {capLabel(currentCap)}
+                  </div>
+                )}
+                {blankLabelCount > 0 && (
+                  <div className="text-xs text-teal-700 mt-0.5 flex items-center gap-1">
+                    <span className="inline-block w-3.5 h-3.5 shrink-0 text-center leading-none font-bold">✎</span>
+                    {blankLabelCount} vabalt kirjutatava sildiga pudelit
                   </div>
                 )}
                 {brewDateLabel && (
