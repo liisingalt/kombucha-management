@@ -15,7 +15,7 @@ import {
   laduFinishedGoodsTable,
   laduMaterialsTable,
 } from "@workspace/db";
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, ne } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 
 const router = Router();
@@ -119,6 +119,76 @@ type StoredDelta =
   | { kind: "blank_label"; blankLabelTypeId: number; size: number; amount: number }
   | { kind: "finished_goods"; flavorId: number; size: number; amount: number }
   | { kind: "material"; materialId: number; amount: number };
+
+type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function resolveDefaultBlankLabelType(tx: DbTx, userId: string): Promise<number> {
+  // Find or create the canonical "__default__" type — never returns a named type
+  let defaultType = (
+    await tx
+      .select()
+      .from(laduBlankLabelTypesTable)
+      .where(and(eq(laduBlankLabelTypesTable.userId, userId), eq(laduBlankLabelTypesTable.name, "__default__")))
+  )[0];
+
+  if (!defaultType) {
+    [defaultType] = await tx
+      .insert(laduBlankLabelTypesTable)
+      .values({ userId, name: "__default__" })
+      .returning();
+  }
+
+  const defaultTypeId = defaultType.id;
+
+  // Consolidate stock from all non-default types into the default type (always, not
+  // just on creation — handles the case where default existed but named types still have stock)
+  const allTypes = await tx
+    .select()
+    .from(laduBlankLabelTypesTable)
+    .where(eq(laduBlankLabelTypesTable.userId, userId));
+
+  const otherTypeIds = new Set(allTypes.filter((t) => t.id !== defaultTypeId).map((t) => t.id));
+
+  if (otherTypeIds.size > 0) {
+    const allStock = await tx
+      .select()
+      .from(laduBlankLabelsTable)
+      .where(eq(laduBlankLabelsTable.userId, userId));
+
+    // Only migrate rows with non-zero qty (idempotent: already-zeroed rows are skipped)
+    const otherStock = allStock.filter((r) => otherTypeIds.has(r.blankLabelTypeId) && r.qty !== 0);
+
+    if (otherStock.length > 0) {
+      // Aggregate net qty per size — preserving negative values exactly
+      const bySize: Record<number, number> = {};
+      for (const row of otherStock) {
+        bySize[row.size] = (bySize[row.size] ?? 0) + row.qty;
+      }
+
+      for (const [sizeStr, qty] of Object.entries(bySize)) {
+        if (qty === 0) continue;
+        const size = Number(sizeStr);
+        // Add to existing default row, or insert a new one
+        const defaultRow = allStock.find((r) => r.blankLabelTypeId === defaultTypeId && r.size === size);
+        if (defaultRow) {
+          await tx
+            .update(laduBlankLabelsTable)
+            .set({ qty: defaultRow.qty + qty })
+            .where(eq(laduBlankLabelsTable.id, defaultRow.id));
+        } else {
+          await tx.insert(laduBlankLabelsTable).values({ userId, blankLabelTypeId: defaultTypeId, size, qty });
+        }
+      }
+
+      // Zero out migrated rows so they are not double-counted on future calls
+      for (const row of otherStock) {
+        await tx.update(laduBlankLabelsTable).set({ qty: 0 }).where(eq(laduBlankLabelsTable.id, row.id));
+      }
+    }
+  }
+
+  return defaultTypeId;
+}
 
 async function fetchAll(userId: string) {
   const [
@@ -320,13 +390,16 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
           }
           storedDeltas.push({ kind: "reusable_cap", size: delta.size, amount: delta.amount });
         } else if (delta.kind === "blank_label") {
+          const resolvedTypeId = delta.blankLabelTypeId === 0
+            ? await resolveDefaultBlankLabelType(tx, userId)
+            : delta.blankLabelTypeId;
           const [existing] = await tx
             .select()
             .from(laduBlankLabelsTable)
             .where(
               and(
                 eq(laduBlankLabelsTable.userId, userId),
-                eq(laduBlankLabelsTable.blankLabelTypeId, delta.blankLabelTypeId),
+                eq(laduBlankLabelsTable.blankLabelTypeId, resolvedTypeId),
                 eq(laduBlankLabelsTable.size, delta.size)
               )
             );
@@ -338,14 +411,14 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
           } else {
             await tx.insert(laduBlankLabelsTable).values({
               userId,
-              blankLabelTypeId: delta.blankLabelTypeId,
+              blankLabelTypeId: resolvedTypeId,
               size: delta.size,
               qty: delta.amount,
             });
           }
           storedDeltas.push({
             kind: "blank_label",
-            blankLabelTypeId: delta.blankLabelTypeId,
+            blankLabelTypeId: resolvedTypeId,
             size: delta.size,
             amount: delta.amount,
           });
