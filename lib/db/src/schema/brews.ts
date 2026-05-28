@@ -48,7 +48,19 @@ export const brewsTable = pgTable("brews", {
   sessionId: integer("session_id"),
 });
 
+export const sugarStockMovementsTable = pgTable("sugar_stock_movements", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  sugarStockId: integer("sugar_stock_id").notNull(),
+  deltaG: integer("delta_g").notNull(),
+  reason: text("reason").notNull(),
+  brewId: integer("brew_id"),
+  note: text("note"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export type TeaStock = typeof teaStockTable.$inferSelect;
 export type SugarStock = typeof sugarStockTable.$inferSelect;
+export type SugarStockMovement = typeof sugarStockMovementsTable.$inferSelect;
 export type Brew = typeof brewsTable.$inferSelect;
 export type BrewSession = typeof brewSessionsTable.$inferSelect;

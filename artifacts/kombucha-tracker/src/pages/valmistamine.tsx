@@ -8,6 +8,15 @@ const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 type Tea = { id: number; name: string; qtyG: number };
 type Sugar = { id: number; name: string; qtyG: number };
+type SugarMovement = {
+  id: number;
+  sugarStockId: number;
+  deltaG: number;
+  reason: string;
+  brewId: number | null;
+  note: string | null;
+  createdAt: string;
+};
 type Brew = {
   id: number;
   date: string;
@@ -776,6 +785,16 @@ function SuhkruVaru({
   const [mode, setMode] = useState<"olemasolev" | "uus">("olemasolev");
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameVal, setRenameVal] = useState("");
+  const [historyId, setHistoryId] = useState<number | null>(null);
+
+  const movementsQuery = useQuery<SugarMovement[]>({
+    queryKey: ["sugar-movements", historyId],
+    queryFn: async () => {
+      const res = await authFetch(`/brews/sugar-stock/${historyId}/movements`);
+      return res.json();
+    },
+    enabled: historyId !== null,
+  });
 
   const addMut = useMutation({
     mutationFn: async (body: unknown) => {
@@ -906,7 +925,8 @@ function SuhkruVaru({
               </tr>
             ) : (
               sugars.map((s) => (
-                <tr key={s.id} className="border-t border-stone-100">
+                <React.Fragment key={s.id}>
+                <tr className="border-t border-stone-100">
                   <td className="px-4 py-2">
                     {renamingId === s.id ? (
                       <div className="flex gap-1">
@@ -948,15 +968,58 @@ function SuhkruVaru({
                     {s.qtyG} g
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => deleteMut.mutate(s.id)}
-                      disabled={deleteMut.isPending}
-                      className="text-stone-400 hover:text-red-600 text-xs disabled:opacity-50"
-                    >
-                      kustuta
-                    </button>
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        onClick={() => setHistoryId(historyId === s.id ? null : s.id)}
+                        className={`text-xs transition ${historyId === s.id ? "text-amber-700 font-medium" : "text-stone-400 hover:text-amber-700"}`}
+                      >
+                        ajalugu
+                      </button>
+                      <button
+                        onClick={() => deleteMut.mutate(s.id)}
+                        disabled={deleteMut.isPending}
+                        className="text-stone-400 hover:text-red-600 text-xs disabled:opacity-50"
+                      >
+                        kustuta
+                      </button>
+                    </div>
                   </td>
                 </tr>
+                {historyId === s.id && (
+                  <tr className="border-t border-amber-100 bg-amber-50">
+                    <td colSpan={3} className="px-4 py-3">
+                      {movementsQuery.isLoading ? (
+                        <p className="text-xs text-stone-400">Laen ajalugu…</p>
+                      ) : movementsQuery.data && movementsQuery.data.length > 0 ? (
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-stone-500 mb-2">Liikumiste ajalugu</p>
+                          {movementsQuery.data.map((m) => {
+                            const label =
+                              m.reason === "manual" ? "Manuaalne lisamine" :
+                              m.reason === "brew" ? "Keetmine" :
+                              m.reason === "brew_deleted" ? "Keetmine kustutatud" :
+                              m.reason === "brew_edited" ? "Keetmine muudetud" : m.reason;
+                            const sign = m.deltaG >= 0 ? "+" : "";
+                            const color = m.deltaG >= 0 ? "text-green-700" : "text-red-600";
+                            const date = new Date(m.createdAt).toLocaleDateString("et-EE", { day: "2-digit", month: "2-digit", year: "numeric" });
+                            return (
+                              <div key={m.id} className="flex items-center justify-between text-xs text-stone-600">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-stone-400">{date}</span>
+                                  <span>{label}{m.note && m.reason !== "manual" ? ` (${m.note})` : ""}</span>
+                                </div>
+                                <span className={`font-medium ${color}`}>{sign}{m.deltaG} g</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-stone-400">Liikumisi pole veel kirjeldatud.</p>
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               ))
             )}
           </tbody>

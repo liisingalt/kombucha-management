@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { teaStockTable, sugarStockTable, brewsTable, brewSessionsTable } from "@workspace/db";
+import { teaStockTable, sugarStockTable, sugarStockMovementsTable, brewsTable, brewSessionsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 
@@ -84,8 +84,18 @@ router.post("/brews/sugar-stock", requireAuth, async (req, res) => {
         .update(sugarStockTable)
         .set({ qtyG: existing.qtyG + qty })
         .where(eq(sugarStockTable.id, existing.id));
+      if (qty !== 0) {
+        await db.insert(sugarStockMovementsTable).values({
+          userId, sugarStockId: existing.id, deltaG: qty, reason: "manual", note: trimmed,
+        });
+      }
     } else {
-      await db.insert(sugarStockTable).values({ userId, name: trimmed, qtyG: qty });
+      const [inserted] = await db.insert(sugarStockTable).values({ userId, name: trimmed, qtyG: qty }).returning();
+      if (qty !== 0) {
+        await db.insert(sugarStockMovementsTable).values({
+          userId, sugarStockId: inserted.id, deltaG: qty, reason: "manual", note: trimmed,
+        });
+      }
     }
     res.json({ ok: true });
   } catch (err) {
@@ -123,6 +133,23 @@ router.delete("/brews/sugar-stock/:id", requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to delete sugar stock");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/brews/sugar-stock/:id/movements", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = Number(req.params.id);
+  try {
+    const rows = await db
+      .select()
+      .from(sugarStockMovementsTable)
+      .where(and(eq(sugarStockMovementsTable.sugarStockId, id), eq(sugarStockMovementsTable.userId, userId)))
+      .orderBy(desc(sugarStockMovementsTable.createdAt))
+      .limit(50);
+    res.json(rows);
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch sugar stock movements");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -235,6 +262,9 @@ router.post("/brews", requireAuth, async (req, res) => {
               .update(sugarStockTable)
               .set({ qtyG: ss.qtyG - sugarG })
               .where(eq(sugarStockTable.id, sugarStockId));
+            await tx.insert(sugarStockMovementsTable).values({
+              userId, sugarStockId, deltaG: -sugarG, reason: "brew", note: b.date ?? null,
+            });
           }
         }
       }
@@ -335,6 +365,9 @@ router.patch("/brews/:id", requireAuth, async (req, res) => {
             .update(sugarStockTable)
             .set({ qtyG: oldSs.qtyG + old.sugarG })
             .where(eq(sugarStockTable.id, old.sugarStockId));
+          await tx.insert(sugarStockMovementsTable).values({
+            userId, sugarStockId: old.sugarStockId, deltaG: old.sugarG, reason: "brew_edited", brewId: id, note: old.date ?? null,
+          });
         }
       }
       if (newSugarStockId && newSugarG > 0) {
@@ -347,6 +380,9 @@ router.patch("/brews/:id", requireAuth, async (req, res) => {
             .update(sugarStockTable)
             .set({ qtyG: newSs.qtyG - newSugarG })
             .where(eq(sugarStockTable.id, newSugarStockId));
+          await tx.insert(sugarStockMovementsTable).values({
+            userId, sugarStockId: newSugarStockId, deltaG: -newSugarG, reason: "brew_edited", brewId: id, note: b.date ?? null,
+          });
         }
       }
       await tx
@@ -415,6 +451,9 @@ router.delete("/brews/:id", requireAuth, async (req, res) => {
             .update(sugarStockTable)
             .set({ qtyG: ss.qtyG + row.sugarG })
             .where(eq(sugarStockTable.id, row.sugarStockId));
+          await tx.insert(sugarStockMovementsTable).values({
+            userId, sugarStockId: row.sugarStockId, deltaG: row.sugarG, reason: "brew_deleted", brewId: id, note: row.date ?? null,
+          });
         }
       }
       await tx.delete(brewsTable).where(eq(brewsTable.id, id));

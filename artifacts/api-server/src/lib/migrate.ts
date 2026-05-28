@@ -210,6 +210,18 @@ export async function runMigrations(): Promise<void> {
     await client.query(`
       DELETE FROM ladu_reusable_caps WHERE size != 750;
     `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sugar_stock_movements (
+        id              SERIAL PRIMARY KEY,
+        user_id         TEXT NOT NULL,
+        sugar_stock_id  INTEGER NOT NULL,
+        delta_g         INTEGER NOT NULL,
+        reason          TEXT NOT NULL,
+        brew_id         INTEGER,
+        note            TEXT,
+        created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
     logger.info("Migrations complete");
   } finally {
     client.release();
