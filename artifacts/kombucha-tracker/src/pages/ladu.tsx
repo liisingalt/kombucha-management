@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@clerk/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle, Pencil, Check, X, PenLine, ShoppingBag, Leaf } from "lucide-react";
+import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle, Pencil, Check, X, PenLine, ShoppingBag, Leaf, Minus } from "lucide-react";
 import { Layout } from "@/components/Layout";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -1503,9 +1503,26 @@ function TooraineTab({
   const [editName, setEditName] = useState("");
   const [editUnit, setEditUnit] = useState("kg");
   const [editCustomUnit, setEditCustomUnit] = useState("");
+  const [reduceOpen, setReduceOpen] = useState(false);
+  const [reduceMaterialId, setReduceMaterialId] = useState<number | "">("");
+  const [reduceAmount, setReduceAmount] = useState("");
+  const [reduceInputUnit, setReduceInputUnit] = useState<"native" | "g">("native");
 
   const resolvedAddUnit = addUnit === "__custom__" ? addCustomUnit.trim() : addUnit;
   const resolvedEditUnit = editUnit === "__custom__" ? editCustomUnit.trim() : editUnit;
+
+  const reduceMat = data.materials.find((m) => m.id === reduceMaterialId) ?? null;
+  const reduceIsKg = reduceMat?.unit === "kg";
+  const reduceDisplayUnit = reduceIsKg && reduceInputUnit === "g" ? "g" : (reduceMat?.unit ?? "");
+  const reduceRaw = parseFloat(reduceAmount.replace(",", "."));
+  const reduceAmountNative = !isNaN(reduceRaw) && reduceRaw > 0
+    ? (reduceIsKg && reduceInputUnit === "g" ? reduceRaw / 1000 : reduceRaw)
+    : 0;
+  const reduceNewQty = reduceMat ? (reduceMat.qty ?? 0) - reduceAmountNative : 0;
+  const reduceConvHint = reduceIsKg && reduceInputUnit === "g" && reduceAmountNative > 0
+    ? `= ${formatQty(reduceAmountNative)} kg`
+    : null;
+  const reduceBelowZero = reduceMat && reduceAmountNative > 0 && reduceNewQty < 0;
 
   const handleAdd = () => {
     const name = addName.trim();
@@ -1544,6 +1561,27 @@ function TooraineTab({
     updateMaterialMutation.mutate(
       { id: m.id, name, unit },
       { onSuccess: () => setEditingId(null) }
+    );
+  };
+
+  const handleReduce = () => {
+    if (!reduceMat) return flash("Vali tooraine");
+    if (reduceAmountNative <= 0) return flash("Sisesta kehtiv kogus");
+    commitMutation.mutate(
+      {
+        deltas: [{ kind: "material", materialId: reduceMat.id, amount: -reduceAmountNative }],
+        type: "kasutatud",
+        summary: `${reduceMat.name}: kasutatud ${formatQty(reduceAmountNative)} ${reduceMat.unit}`,
+      },
+      {
+        onSuccess: () => {
+          flash("Laoseis vähendatud");
+          setReduceAmount("");
+          setReduceOpen(false);
+          setReduceMaterialId("");
+          setReduceInputUnit("native");
+        },
+      }
     );
   };
 
@@ -1712,6 +1750,106 @@ function TooraineTab({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {data.materials.length > 0 && (
+        <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setReduceOpen(!reduceOpen)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-stone-50 transition"
+          >
+            <span className="font-serif text-base text-stone-900 flex items-center gap-2">
+              <Minus className="w-4 h-4 text-amber-700" /> Vähenda laoseisu
+            </span>
+            <span className="text-xs text-stone-400">{reduceOpen ? "Sulge" : "Ava"}</span>
+          </button>
+
+          {reduceOpen && (
+            <div className="px-5 pb-5 space-y-3 border-t border-stone-100 pt-4">
+              <div>
+                <label className="block text-xs text-stone-500 mb-1">Tooraine</label>
+                <select
+                  value={reduceMaterialId}
+                  onChange={(e) => {
+                    setReduceMaterialId(e.target.value ? Number(e.target.value) : "");
+                    setReduceAmount("");
+                    setReduceInputUnit("native");
+                  }}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
+                >
+                  <option value="">— vali tooraine —</option>
+                  {data.materials.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({formatQty(m.qty)} {m.unit})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {reduceMat && (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs text-stone-500">Kogus ({reduceDisplayUnit})</label>
+                      {reduceIsKg && (
+                        <button
+                          type="button"
+                          onClick={() => { setReduceInputUnit(reduceInputUnit === "g" ? "native" : "g"); setReduceAmount(""); }}
+                          className="text-xs text-amber-700 hover:underline"
+                        >
+                          Sisesta {reduceInputUnit === "g" ? "kg-des" : "grammides"}
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="any"
+                      value={reduceAmount}
+                      onChange={(e) => setReduceAmount(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleReduce(); }}
+                      placeholder={`kogus ${reduceDisplayUnit}`}
+                      className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600"
+                      autoFocus
+                    />
+                    {reduceConvHint && (
+                      <p className="text-xs text-stone-400 mt-1">{reduceConvHint}</p>
+                    )}
+                  </div>
+
+                  {reduceBelowZero && (
+                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-700">
+                        Laoseis läheb miinusesse: {formatQty(reduceNewQty)} {reduceMat.unit}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleReduce}
+                      disabled={commitMutation.isPending}
+                      className="flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm text-white hover:bg-amber-800 disabled:opacity-60"
+                    >
+                      <Minus className="w-4 h-4" /> Vähenda
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setReduceOpen(false); setReduceAmount(""); setReduceMaterialId(""); setReduceInputUnit("native"); }}
+                      className="rounded-lg border border-stone-300 px-4 py-2 text-sm text-stone-600 hover:bg-stone-100"
+                    >
+                      Tühista
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 
