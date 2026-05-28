@@ -28,6 +28,8 @@ type LabeledBottle = { id: number; flavorId: number; size: number; qty: number }
 type CustomLabelBottle = { id: number; size: number; qty: number };
 type Movement = { id: number; type: string; summary: string; deltas: unknown[]; createdAt: string };
 
+type ReusableCap = { size: number; qty: number };
+
 type LaduData = {
   flavors: Flavor[];
   bottles: Bottle[];
@@ -36,10 +38,11 @@ type LaduData = {
   labeledBottles: LabeledBottle[];
   customLabelBottles: CustomLabelBottle[];
   wireCageQty: number;
+  reusableCaps: ReusableCap[];
   movements: Movement[];
 };
 
-const EMPTY: LaduData = { flavors: [], bottles: [], labels: [], caps: [], labeledBottles: [], customLabelBottles: [], wireCageQty: 0, movements: [] };
+const EMPTY: LaduData = { flavors: [], bottles: [], labels: [], caps: [], labeledBottles: [], customLabelBottles: [], wireCageQty: 0, reusableCaps: [], movements: [] };
 
 const capLabel = (c: Cap | undefined) =>
   c ? `${c.size} ml · ${c.type || "kork"}${c.color ? " · " + c.color : ""}` : "";
@@ -476,6 +479,25 @@ function LaduTab({ data, flavorName, bottleQty, updateCapMutation, flash }: { da
       </section>
 
       <section>
+        <h2 className="font-serif text-lg text-stone-900 mb-3">Korduvkasutatavad punnkorgid</h2>
+        <div className="grid grid-cols-3 gap-3">
+          {SIZES.map((s) => {
+            const n = data.reusableCaps.find((r) => r.size === s)?.qty ?? 0;
+            return (
+              <div key={s} className="rounded-xl border border-stone-200 bg-white p-4 text-center">
+                <div className="text-xs text-stone-500">{s} ml</div>
+                <div className={`text-2xl font-semibold ${n <= 0 ? "text-red-600" : "text-stone-900"}`}>{n}</div>
+                <Low show={n <= 0} />
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-stone-400 mt-2">
+          Puhtad punnkorgid, mis on valmis taaskasutusse — villimise ajal arvatakse maha.
+        </p>
+      </section>
+
+      <section>
         <h2 className="font-serif text-lg text-stone-900 mb-3">Korgid</h2>
         <div className="rounded-xl border border-stone-200 bg-white overflow-hidden mb-3">
           <div className="flex items-center justify-between px-4 py-3 border-b border-stone-100">
@@ -601,12 +623,15 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
   const old = Math.min(t, Math.max(0, parseInt(oldCaps) || 0));
 
   const selectedCap = data.caps.find((c) => c.id === capId);
+  const isPunnkork = selectedCap?.type === "punnkork";
+  const reusableStock = data.reusableCaps.find((r) => r.size === size)?.qty ?? 0;
   const bottleDeduct = newCount - fromCust;
   const customLabelBottleDeduct = fromCust;
   const labelDeduct = newCount - fromCust;
   const labeledBottleDeduct = fromLab;
   const capDeduct = capId !== "" ? t - old : 0;
-  const wireCageDeduct = size === 750 && selectedCap?.type === "punnkork" ? t : 0;
+  const wireCageDeduct = size === 750 && isPunnkork ? t : 0;
+  const reusableCapDeduct = isPunnkork ? old : 0;
 
   const villi = () => {
     if (!flavorId) return flash("Vali maitse");
@@ -619,13 +644,14 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
     if (labeledBottleDeduct > 0) deltas.push({ kind: "labeled_bottle", flavorId, size, amount: -labeledBottleDeduct });
     if (capId !== "" && capDeduct > 0) deltas.push({ kind: "cap", key: capId, amount: -capDeduct });
     if (wireCageDeduct > 0) deltas.push({ kind: "wire_cage", amount: -wireCageDeduct });
+    if (reusableCapDeduct > 0) deltas.push({ kind: "reusable_cap", size, amount: -reusableCapDeduct });
 
     const cap = selectedCap;
     const parts = [`Villisin ${t} × ${flavorName(flavorId as number)} ${size} ml`];
     if (ret) parts.push(`${ret} tagasi tulnud pudelit`);
     if (fromLab) parts.push(`sh ${fromLab} sildistatud varust`);
     if (fromCust) parts.push(`${fromCust} kohandatud sildiga pudelit`);
-    if (old) parts.push(`${old} vana korki`);
+    if (reusableCapDeduct > 0) parts.push(`${reusableCapDeduct} korduvkasutatavat punnkorki`);
     if (cap) parts.push(`kork: ${capLabel(cap)}`);
     if (wireCageDeduct > 0) parts.push(`${wireCageDeduct} traatkorki`);
 
@@ -689,12 +715,12 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
           <p className="text-xs text-stone-400 mt-1">Uued pudelid kohandatud sildiga — arvatakse vastavast varust</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className={isPunnkork ? "grid grid-cols-2 gap-3" : ""}>
           <div>
             <label className="block text-sm text-stone-600 mb-1">Kork</label>
             <select
               value={capId}
-              onChange={(e) => setCapId(e.target.value ? Number(e.target.value) : "")}
+              onChange={(e) => { setCapId(e.target.value ? Number(e.target.value) : ""); setOldCaps(""); }}
               className="w-full rounded-lg border border-stone-300 px-3 py-2 focus:border-amber-600 focus:outline-none"
             >
               {sizeCaps.length === 0 && <option value="">korki pole</option>}
@@ -703,11 +729,13 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-sm text-stone-600 mb-1">Vanu korke kasutatud</label>
-            <Num value={oldCaps} onChange={setOldCaps} />
-            <p className="text-xs text-stone-400 mt-1">Peamiselt 750 ml</p>
-          </div>
+          {isPunnkork && (
+            <div>
+              <label className="block text-sm text-stone-600 mb-1">Korduvkasutatavaid korke kasutatud</label>
+              <Num value={oldCaps} onChange={setOldCaps} />
+              <p className="text-xs text-stone-400 mt-1">Laos: {reusableStock} tk</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -723,6 +751,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash }: { data: LaduD
             {capId !== "" && <span className="text-stone-500"> ({capLabel(selectedCap)})</span>}
           </li>
           {wireCageDeduct > 0 && <li>Traatkorgi: <b>{wireCageDeduct}</b></li>}
+          {reusableCapDeduct > 0 && <li>Korduvkasutatavad punnkorgid {size} ml: <b>{reusableCapDeduct}</b></li>}
         </ul>
       </div>
 
@@ -749,6 +778,8 @@ function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMu
   const [lbSize, setLbSize] = useState<number>(330);
   const [lbQty, setLbQty] = useState("");
   const [wcQty, setWcQty] = useState("");
+  const [rcSize, setRcSize] = useState<number>(330);
+  const [rcQty, setRcQty] = useState("");
   const [cMode, setCMode] = useState<"olemasolev" | "uus">("olemasolev");
   const [cExisting, setCExisting] = useState<number | "">(data.caps[0]?.id ?? "");
   const [cSize, setCSize] = useState<number>(330);
@@ -811,6 +842,15 @@ function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMu
     commitMutation.mutate(
       { deltas: [{ kind: "wire_cage", amount: q }], type: "ost", summary: `Ostsin ${q} × traatkorgi` },
       { onSuccess: () => { flash("Traatkorgi lisatud"); setWcQty(""); } }
+    );
+  };
+
+  const addReusableCaps = () => {
+    const q = parseInt(rcQty) || 0;
+    if (q <= 0) return flash("Sisesta kogus");
+    commitMutation.mutate(
+      { deltas: [{ kind: "reusable_cap", size: rcSize, amount: q }], type: "ost", summary: `Lisasin ${q} × korduvkasutatav punnkork ${rcSize} ml` },
+      { onSuccess: () => { flash("Korduvkasutatavad punnkorgid lisatud"); setRcQty(""); } }
     );
   };
 
@@ -910,6 +950,16 @@ function LisaVaruTab({ data, commitMutation, flash }: { data: LaduData; commitMu
         <div className="flex gap-2">
           <Num value={wcQty} onChange={setWcQty} className="flex-1" />
           <button type="button" onClick={addWireCages} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
+        </div>
+      </Card>
+
+      <Card title="Korduvkasutatavad punnkorgid">
+        <p className="text-xs text-stone-400 mb-3">Puhtad punnkorgid, valmis taaskasutusse — villimise ajal arvatakse valitud suuruse laost maha.</p>
+        <label className="block text-sm text-stone-600 mb-1">Suurus</label>
+        <Seg options={SIZES.map((s) => ({ value: s, label: `${s} ml` }))} value={rcSize} onChange={(v) => setRcSize(v as number)} />
+        <div className="mt-3 flex gap-2">
+          <Num value={rcQty} onChange={setRcQty} className="flex-1" />
+          <button type="button" onClick={addReusableCaps} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
         </div>
       </Card>
 
