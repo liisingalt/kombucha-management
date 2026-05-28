@@ -424,6 +424,14 @@ function UusKaarimine({
       </a>
 
       <button
+        type="button"
+        onClick={addVessel}
+        className="w-full rounded-lg border-2 border-dashed border-stone-300 py-3 text-stone-500 font-medium hover:border-stone-400 hover:text-stone-700 flex items-center justify-center gap-2"
+      >
+        <span className="text-lg leading-none">+</span> lisa nõu
+      </button>
+
+      <button
         onClick={save}
         disabled={m.isPending}
         className="w-full rounded-lg bg-amber-700 py-3 text-white font-medium hover:bg-amber-800 disabled:opacity-50"
