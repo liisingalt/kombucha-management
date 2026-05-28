@@ -7,6 +7,7 @@ import { Layout } from "@/components/Layout";
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 type Tea = { id: number; name: string; qtyG: number };
+type Sugar = { id: number; name: string; qtyG: number };
 type Brew = {
   id: number;
   date: string;
@@ -72,6 +73,14 @@ export default function ValmistaminePage() {
     },
   });
 
+  const sugarQ = useQuery<Sugar[]>({
+    queryKey: ["brews-sugar-stock"],
+    queryFn: async () => {
+      const res = await authFetch("/brews/sugar-stock");
+      return res.json();
+    },
+  });
+
   const brewsQ = useQuery<Brew[]>({
     queryKey: ["brews"],
     queryFn: async () => {
@@ -81,10 +90,12 @@ export default function ValmistaminePage() {
   });
 
   const teas = teaQ.data ?? [];
+  const sugars = sugarQ.data ?? [];
 
   const tabs = [
     { id: "uus", label: "Uus pruulimine" },
     { id: "tee", label: "Tee varu" },
+    { id: "suhkur", label: "Suhkru varu" },
     { id: "ajalugu", label: "Ajalugu" },
   ];
 
@@ -119,10 +130,12 @@ export default function ValmistaminePage() {
         {tab === "uus" && (
           <UusPruulimine
             teas={teas}
+            sugars={sugars}
             authFetch={authFetch}
             onSaved={() => {
               qc.invalidateQueries({ queryKey: ["brews"] });
               qc.invalidateQueries({ queryKey: ["brews-tea-stock"] });
+              qc.invalidateQueries({ queryKey: ["brews-sugar-stock"] });
               flash("Pruulimine salvestatud");
             }}
           />
@@ -137,6 +150,16 @@ export default function ValmistaminePage() {
             }}
           />
         )}
+        {tab === "suhkur" && (
+          <SuhkruVaru
+            sugars={sugars}
+            authFetch={authFetch}
+            onChange={() => {
+              qc.invalidateQueries({ queryKey: ["brews-sugar-stock"] });
+              flash("Suhkru varu uuendatud");
+            }}
+          />
+        )}
         {tab === "ajalugu" && (
           <Ajalugu
             brews={brewsQ.data ?? []}
@@ -144,6 +167,7 @@ export default function ValmistaminePage() {
             onChange={() => {
               qc.invalidateQueries({ queryKey: ["brews"] });
               qc.invalidateQueries({ queryKey: ["brews-tea-stock"] });
+              qc.invalidateQueries({ queryKey: ["brews-sugar-stock"] });
               flash("Pruulimine kustutatud");
             }}
           />
@@ -161,10 +185,12 @@ export default function ValmistaminePage() {
 
 function UusPruulimine({
   teas,
+  sugars,
   authFetch,
   onSaved,
 }: {
   teas: Tea[];
+  sugars: Sugar[];
   authFetch: ReturnType<typeof useAuthFetch>;
   onSaved: () => void;
 }) {
@@ -175,6 +201,7 @@ function UusPruulimine({
   const [tempReachedMin, setTempReachedMin] = useState("");
   const [temp, setTemp] = useState("");
   const [teaStockId, setTeaStockId] = useState<number | "">("");
+  const [sugarStockId, setSugarStockId] = useState<number | "">("");
   const [steepMin, setSteepMin] = useState("10");
   const [steepHeat, setSteepHeat] = useState("0");
   const [coldEdited, setColdEdited] = useState(false);
@@ -232,6 +259,7 @@ function UusPruulimine({
 
   const save = () => {
     if (boiled <= 0) return;
+    if (!sugarStockId) return;
     const tea = teas.find((t) => t.id === teaStockId);
     m.mutate({
       date,
@@ -244,6 +272,7 @@ function UusPruulimine({
       teaG,
       steepMin,
       steepHeat,
+      sugarStockId: sugarStockId || null,
       sugarG,
       coldWaterL: cold,
       coolStartTime,
@@ -312,6 +341,20 @@ function UusPruulimine({
 
       <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
         <h3 className="font-serif text-lg text-stone-900">Suhkur ja vesi</h3>
+        <Field label="Suhkru varu" hint={sugarG > 0 ? `Lahutatakse: ${sugarG} g` : undefined}>
+          <select
+            value={sugarStockId}
+            onChange={(e) => setSugarStockId(e.target.value ? Number(e.target.value) : "")}
+            className={inputCls}
+          >
+            <option value="">— vali suhkur —</option>
+            {sugars.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} ({s.qtyG} g laos)
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="Suhkur, g" hint="Arvutatud: kogu vedelik × 80">
           <input value={sugarG} readOnly className={calcCls} />
         </Field>
@@ -377,7 +420,7 @@ function UusPruulimine({
 
       <button
         onClick={save}
-        disabled={m.isPending || boiled <= 0}
+        disabled={m.isPending || boiled <= 0 || !sugarStockId}
         className="w-full rounded-lg bg-amber-700 py-3 text-white font-medium hover:bg-amber-800 disabled:opacity-50"
       >
         {m.isPending ? "Salvestan…" : "Salvesta pruulimine"}
@@ -584,6 +627,211 @@ function TeeVaru({
                   </td>
                   <td className={`px-4 py-2 text-right font-medium ${t.qtyG <= 0 ? "text-red-600" : ""}`}>
                     {t.qtyG} g
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SuhkruVaru({
+  sugars,
+  authFetch,
+  onChange,
+}: {
+  sugars: Sugar[];
+  authFetch: ReturnType<typeof useAuthFetch>;
+  onChange: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [existing, setExisting] = useState<number | "">("");
+  const [qty, setQty] = useState("");
+  const [mode, setMode] = useState<"olemasolev" | "uus">("olemasolev");
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameVal, setRenameVal] = useState("");
+
+  const addMut = useMutation({
+    mutationFn: async (body: unknown) => {
+      const res = await authFetch("/brews/sugar-stock", { method: "POST", body: JSON.stringify(body) });
+      return res.json();
+    },
+    onSuccess: () => {
+      onChange();
+      setQty("");
+      setName("");
+    },
+  });
+
+  const renameMut = useMutation({
+    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+      const res = await authFetch(`/brews/sugar-stock/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      onChange();
+      setRenamingId(null);
+      setRenameVal("");
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await authFetch(`/brews/sugar-stock/${id}`, { method: "DELETE" });
+      return res.json();
+    },
+    onSuccess: onChange,
+  });
+
+  const add = () => {
+    const q = parseInt(qty) || 0;
+    if (mode === "olemasolev") {
+      const s = sugars.find((x) => x.id === existing);
+      if (!s) return;
+      addMut.mutate({ name: s.name, qtyG: q });
+    } else {
+      if (!name.trim()) return;
+      addMut.mutate({ name: name.trim(), qtyG: q });
+    }
+  };
+
+  const startRename = (s: Sugar) => {
+    setRenamingId(s.id);
+    setRenameVal(s.name);
+  };
+
+  const confirmRename = (id: number) => {
+    if (!renameVal.trim()) return;
+    renameMut.mutate({ id, name: renameVal.trim() });
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-3">
+        <h3 className="font-serif text-lg text-stone-900">Lisa suhkrut lattu</h3>
+        <div className="inline-flex rounded-lg border border-stone-300 p-1 bg-stone-50">
+          {(["olemasolev", "uus"] as const).map((mm) => (
+            <button
+              key={mm}
+              type="button"
+              onClick={() => setMode(mm)}
+              className={`px-3 py-1.5 text-sm rounded-md transition ${
+                mode === mm ? "bg-amber-700 text-white shadow-sm" : "text-stone-600 hover:bg-stone-200"
+              }`}
+            >
+              {mm === "olemasolev" ? "Olemasolev" : "Uus"}
+            </button>
+          ))}
+        </div>
+        {mode === "olemasolev" ? (
+          <select
+            value={existing}
+            onChange={(e) => setExisting(e.target.value ? Number(e.target.value) : "")}
+            className={inputCls}
+          >
+            <option value="">— vali suhkur —</option>
+            {sugars.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="nt valge suhkur"
+            className={inputCls}
+          />
+        )}
+        <div className="flex gap-2">
+          <input
+            type="number"
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            placeholder="grammid"
+            className={inputCls}
+          />
+          <button
+            type="button"
+            onClick={add}
+            disabled={addMut.isPending}
+            className="rounded-lg bg-amber-700 px-4 text-white shrink-0 disabled:opacity-50"
+          >
+            Lisa
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-stone-100 text-stone-500 text-left">
+            <tr>
+              <th className="px-4 py-2 font-medium">Nimi</th>
+              <th className="px-4 py-2 font-medium text-right">Grammid</th>
+              <th className="px-4 py-2 font-medium text-right"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {sugars.length === 0 ? (
+              <tr>
+                <td className="px-4 py-3 text-stone-400" colSpan={3}>Ühtegi suhkrut pole veel lisatud.</td>
+              </tr>
+            ) : (
+              sugars.map((s) => (
+                <tr key={s.id} className="border-t border-stone-100">
+                  <td className="px-4 py-2">
+                    {renamingId === s.id ? (
+                      <div className="flex gap-1">
+                        <input
+                          value={renameVal}
+                          onChange={(e) => setRenameVal(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") confirmRename(s.id);
+                            if (e.key === "Escape") setRenamingId(null);
+                          }}
+                          className="rounded border border-stone-300 px-2 py-1 text-sm w-full focus:border-amber-600 focus:outline-none"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => confirmRename(s.id)}
+                          disabled={renameMut.isPending}
+                          className="text-amber-700 text-xs shrink-0 disabled:opacity-50"
+                        >
+                          OK
+                        </button>
+                        <button
+                          onClick={() => setRenamingId(null)}
+                          className="text-stone-400 text-xs shrink-0"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startRename(s)}
+                        className="text-left hover:text-amber-700 transition"
+                        title="Klõpsa nimele ümbernimetamiseks"
+                      >
+                        {s.name}
+                      </button>
+                    )}
+                  </td>
+                  <td className={`px-4 py-2 text-right font-medium ${s.qtyG <= 0 ? "text-red-600" : ""}`}>
+                    {s.qtyG} g
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    <button
+                      onClick={() => deleteMut.mutate(s.id)}
+                      disabled={deleteMut.isPending}
+                      className="text-stone-400 hover:text-red-600 text-xs disabled:opacity-50"
+                    >
+                      kustuta
+                    </button>
                   </td>
                 </tr>
               ))

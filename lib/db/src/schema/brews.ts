@@ -7,6 +7,13 @@ export const teaStockTable = pgTable("tea_stock", {
   qtyG: integer("qty_g").notNull().default(0),
 });
 
+export const sugarStockTable = pgTable("sugar_stock", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  qtyG: integer("qty_g").notNull().default(0),
+});
+
 export const brewsTable = pgTable("brews", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
@@ -21,6 +28,7 @@ export const brewsTable = pgTable("brews", {
   teaG: integer("tea_g").notNull().default(0),
   steepMin: integer("steep_min").default(10),
   steepHeat: integer("steep_heat").default(0),
+  sugarStockId: integer("sugar_stock_id"),
   sugarG: integer("sugar_g").notNull().default(0),
   coldWaterL: real("cold_water_l").notNull().default(0),
   coolStartTime: text("cool_start_time").default(""),
@@ -34,4 +42,5 @@ export const brewsTable = pgTable("brews", {
 });
 
 export type TeaStock = typeof teaStockTable.$inferSelect;
+export type SugarStock = typeof sugarStockTable.$inferSelect;
 export type Brew = typeof brewsTable.$inferSelect;
