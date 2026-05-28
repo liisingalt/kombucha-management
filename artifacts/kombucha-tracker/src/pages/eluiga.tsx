@@ -198,6 +198,24 @@ function LifecycleCard({
   const [linkOpen, setLinkOpen] = useState(false);
   const [aiRec, setAiRec] = useState<string | null>(null);
   const [aiRecLoading, setAiRecLoading] = useState(false);
+  const [aiPred, setAiPred] = useState<string | null>(null);
+  const [aiPredLoading, setAiPredLoading] = useState(false);
+
+  async function fetchAiPred() {
+    setAiPredLoading(true);
+    try {
+      const res = await authFetch("/bottle-tests/analytics/ai-prediction", {
+        method: "POST",
+        body: JSON.stringify({ fermentationBatchId: item.id }),
+      });
+      const data = await res.json();
+      setAiPred(data.prediction ?? null);
+    } catch {
+      setAiPred("Ennustuse laadimine ebaõnnestus.");
+    } finally {
+      setAiPredLoading(false);
+    }
+  }
 
   async function fetchAiRec() {
     if (!item.flavoringEvent?.id) return;
@@ -510,6 +528,41 @@ function LifecycleCard({
                     <><Loader2 size={11} className="animate-spin" /> Laen soovitust…</>
                   ) : (
                     <><Sparkles size={11} /> Küsi soovitust</>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── AI säilivusennustus — shown after bottling ── */}
+          {item.flavoringEvent?.bottlingDate && (
+            <div className="rounded-xl border border-teal-100 bg-teal-50/50 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
+                  <Sparkles size={12} />
+                  AI säilivusennustus
+                </div>
+                {aiPred && (
+                  <button
+                    onClick={() => { setAiPred(null); fetchAiPred(); }}
+                    className="text-[10px] text-teal-500 hover:text-teal-700 transition"
+                  >
+                    Küsi uuesti
+                  </button>
+                )}
+              </div>
+              {aiPred ? (
+                <p className="text-xs text-teal-900 leading-relaxed">{aiPred}</p>
+              ) : (
+                <button
+                  onClick={fetchAiPred}
+                  disabled={aiPredLoading}
+                  className="flex items-center gap-1.5 text-xs text-teal-700 hover:text-teal-900 border border-teal-200 hover:border-teal-400 bg-white rounded-lg px-3 py-1.5 transition disabled:opacity-60"
+                >
+                  {aiPredLoading ? (
+                    <><Loader2 size={11} className="animate-spin" /> Laen ennustust…</>
+                  ) : (
+                    <><Sparkles size={11} /> Küsi säilivusennustust</>
                   )}
                 </button>
               )}

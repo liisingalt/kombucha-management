@@ -451,6 +451,95 @@ router.post("/bottle-tests/analytics/ai-recommendation", requireAuth, async (req
   }
 });
 
+router.post("/bottle-tests/analytics/ai-prediction", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const { fermentationBatchId } = req.body as { fermentationBatchId?: number };
+
+  if (!fermentationBatchId || typeof fermentationBatchId !== "number") {
+    res.status(400).json({ error: "fermentationBatchId required" });
+    return;
+  }
+
+  try {
+    const [ferm] = await db
+      .select()
+      .from(fermentationBatchTable)
+      .where(and(eq(fermentationBatchTable.id, fermentationBatchId), eq(fermentationBatchTable.userId, userId)));
+
+    if (!ferm) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    let steepMin: number | null = null;
+    let temp: number | null = null;
+
+    if (ferm.brewId) {
+      const [brew] = await db.select().from(brewsTable).where(eq(brewsTable.id, ferm.brewId));
+      if (brew) {
+        steepMin = brew.steepMin ?? null;
+        temp = brew.temp ?? null;
+      }
+    }
+
+    const completed = await db
+      .select()
+      .from(bottleTestsTable)
+      .where(and(eq(bottleTestsTable.userId, userId), eq(bottleTestsTable.status, "maitsitud")));
+
+    if (completed.length === 0) {
+      res.json({ prediction: "Sul pole veel lõpetatud kestvuskatseid, millega võrrelda. Alusta mõnest katsest ja maitsesta neid ajas, et tulevikus saada isikupäraseid ennustusi." });
+      return;
+    }
+
+    const shelfLifeParts: string[] = [];
+    for (const test of completed) {
+      if (!test.bottledDate || !test.tastedDate) continue;
+      const bDate = test.bottledDate instanceof Date ? test.bottledDate.toISOString().slice(0, 10) : String(test.bottledDate).slice(0, 10);
+      const tDate = test.tastedDate instanceof Date ? test.tastedDate.toISOString().slice(0, 10) : String(test.tastedDate ?? "").slice(0, 10);
+      const days = daysBetween(bDate, tDate) ?? 0;
+      let tSteepMin: number | null = null;
+      let tTemp: number | null = null;
+      if (test.flavoringEventId) {
+        const [tFlavEv] = await db.select().from(flavoringEventTable).where(eq(flavoringEventTable.id, test.flavoringEventId));
+        if (tFlavEv?.fermentationBatchId) {
+          const [tFerm] = await db.select().from(fermentationBatchTable).where(eq(fermentationBatchTable.id, tFlavEv.fermentationBatchId));
+          if (tFerm?.brewId) {
+            const [tBrew] = await db.select().from(brewsTable).where(eq(brewsTable.id, tFerm.brewId));
+            if (tBrew) { tSteepMin = tBrew.steepMin ?? null; tTemp = tBrew.temp ?? null; }
+          }
+        }
+      }
+      shelfLifeParts.push(
+        `"${test.product}": tõmbis ${tSteepMin ?? "?"}min, temp ${tTemp ?? "?"}°C → säilis ${days}p (${Math.round(days / 30.5)}k), tulemus: "${test.result ?? "—"}", järeldus: "${test.conclusion ?? "—"}".`
+      );
+    }
+
+    const currentDesc = `Praegune partii: tõmbeaeg ${steepMin ?? "teadmata"} min, käärimistemperatuur ${temp ?? "teadmata"}°C.`;
+    const historyDesc = shelfLifeParts.length > 0
+      ? `Varasemad kestvuskatse tulemused:\n${shelfLifeParts.slice(0, 15).join("\n")}`
+      : "Võrreldavaid katseid ei leitud.";
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      max_completion_tokens: 180,
+      messages: [
+        {
+          role: "system",
+          content: "Oled kombuchavalmistamise ekspert. Kasutaja on just pudeldanud uue partii. Analüüsi varasemaid kestvuskatse tulemusi ja anna lühike (1-3 lauset) eestikeelne säilivusennustus: millal on hea esimest korda maitseda ja mis on hinnanguline optimaalne maitsimisaken. Ole konkreetne — nimeta päevades või kuudes.",
+        },
+        { role: "user", content: `${currentDesc}\n\n${historyDesc}` },
+      ],
+    });
+
+    const prediction = response.choices[0]?.message?.content ?? "Ennustust ei saanud koostada.";
+    res.json({ prediction });
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate AI shelf-life prediction");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/bottle-tests/:id/journey", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const id = parseInt(req.params.id, 10);
