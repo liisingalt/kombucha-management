@@ -14,6 +14,7 @@ import fermentationsRouter from "./fermentations";
 import flavoringRouter from "./flavoring";
 import backupsRouter from "./backups";
 import adminRouter from "./admin";
+import teamRouter from "./team";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(fermentationsRouter);
 router.use(flavoringRouter);
 router.use(backupsRouter);
 router.use(adminRouter);
+router.use(teamRouter);
 
 export default router;

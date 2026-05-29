@@ -10,3 +10,4 @@ export * from "./ladu";
 export * from "./brews";
 export * from "./fermentations";
 export * from "./flavoring";
+export * from "./team";

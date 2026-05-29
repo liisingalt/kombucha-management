@@ -24,6 +24,7 @@ import MaitsestaminePage from "@/pages/maitsestamine";
 import EluigaPage from "@/pages/eluiga";
 import VarundusedPage from "@/pages/varundused";
 import TootminePage from "@/pages/tootmine";
+import JoinPage from "@/pages/join";
 import NotFound from "@/pages/not-found";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -195,6 +196,7 @@ function ClerkProviderWithRoutes() {
             <Route path="/tootmine">
               {() => <ProtectedRoute component={TootminePage} />}
             </Route>
+            <Route path="/join/:token" component={JoinPage} />
             <Route component={NotFound} />
           </Switch>
           <Toaster />

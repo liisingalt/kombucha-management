@@ -18,7 +18,7 @@ import {
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useUser, useAuth } from "@clerk/react";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Upload, Loader2, FileText, Key, ShieldCheck, Lock, Users } from "lucide-react";
+import { Trash2, Upload, Loader2, FileText, Key, ShieldCheck, Lock, Users, Copy, Check, UserMinus, Link } from "lucide-react";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -35,6 +35,176 @@ function useAuthFetch() {
       },
     });
   };
+}
+
+interface TeamMember {
+  id: number;
+  memberUserId: string;
+  name: string;
+  email: string;
+  joinedAt: string;
+}
+
+function MeeskondSection() {
+  const { toast } = useToast();
+  const authFetch = useAuthFetch();
+  const queryClient = useQueryClient();
+  const [copied, setCopied] = useState(false);
+  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<number | null>(null);
+
+  const membersQuery = useQuery<TeamMember[]>({
+    queryKey: ["team-members"],
+    queryFn: async () => {
+      const res = await authFetch("/team/members");
+      if (!res.ok) throw new Error("Viga");
+      return res.json();
+    },
+  });
+
+  const inviteMut = useMutation({
+    mutationFn: async () => {
+      const res = await authFetch("/team/invite", { method: "POST" });
+      if (!res.ok) throw new Error("Viga");
+      return res.json() as Promise<{ token: string }>;
+    },
+    onSuccess: (data) => {
+      setPendingInviteToken(data.token);
+    },
+    onError: (err: Error) => {
+      toast({ title: err.message, variant: "destructive" });
+    },
+  });
+
+  const removeMut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await authFetch(`/team/members/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Viga");
+      return res.json();
+    },
+    onSuccess: () => {
+      setConfirmRemoveId(null);
+      queryClient.invalidateQueries({ queryKey: ["team-members"] });
+      toast({ title: "Meeskonnaliige eemaldatud" });
+    },
+    onError: (err: Error) => {
+      toast({ title: err.message, variant: "destructive" });
+    },
+  });
+
+  const inviteLink = pendingInviteToken
+    ? `${window.location.origin}${BASE_URL}/join/${pendingInviteToken}`
+    : null;
+
+  const copyLink = () => {
+    if (!inviteLink) return;
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <Card className="mt-4 border-card-border">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Users size={15} />
+          Meeskond
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-xs text-muted-foreground">
+          Kutsu töötajaid, kes näevad ja haldavad sinu pruulikoja andmeid.
+        </p>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => { setPendingInviteToken(null); inviteMut.mutate(); }}
+          disabled={inviteMut.isPending}
+          className="w-full"
+        >
+          {inviteMut.isPending ? (
+            <><Loader2 size={13} className="animate-spin mr-2" />Loon kutset…</>
+          ) : (
+            <><Link size={13} className="mr-2" />Loo kutse link</>
+          )}
+        </Button>
+
+        {inviteLink && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+            <p className="text-xs text-amber-800 font-medium">Kutse link (kehtib 7 päeva)</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-stone-700 break-all flex-1 font-mono">{inviteLink}</p>
+              <button
+                onClick={copyLink}
+                className="shrink-0 p-1.5 rounded hover:bg-amber-100 transition text-amber-700"
+                title="Kopeeri"
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+              </button>
+            </div>
+            <p className="text-xs text-stone-500">Jaga seda linki töötajaga. Pärast vastuvõtmist näevad nad sinu andmeid.</p>
+          </div>
+        )}
+
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-2">Aktiivsed liikmed</p>
+          {membersQuery.isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 size={13} className="animate-spin" />Laen…
+            </div>
+          ) : membersQuery.isError ? (
+            <p className="text-xs text-destructive">Laadimine ebaõnnestus</p>
+          ) : (membersQuery.data ?? []).length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">Ühtegi meeskonnaliiget pole veel.</p>
+          ) : (
+            <div className="space-y-2">
+              {(membersQuery.data ?? []).map((m) => (
+                <div key={m.id} className="flex items-center gap-3 py-1.5 border-b border-border last:border-0">
+                  <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground shrink-0">
+                    {(m.name || m.email).slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{m.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{m.email}</p>
+                  </div>
+                  {confirmRemoveId === m.id ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-stone-500">Kindel?</span>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-6 px-2 text-xs"
+                        disabled={removeMut.isPending}
+                        onClick={() => removeMut.mutate(m.id)}
+                      >
+                        {removeMut.isPending ? <Loader2 size={11} className="animate-spin" /> : "Eemalda"}
+                      </Button>
+                      <button
+                        onClick={() => setConfirmRemoveId(null)}
+                        className="text-xs text-stone-400 hover:text-stone-700"
+                      >
+                        Tühista
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmRemoveId(m.id)}
+                      className="text-stone-300 hover:text-red-500 transition shrink-0"
+                      title="Eemalda liige"
+                    >
+                      <UserMinus size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 interface AdminUser {
@@ -481,6 +651,9 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Team management — always visible */}
+        <MeeskondSection />
 
         {/* Admin management — only visible to admins */}
         {isAdmin && <AdminSection />}

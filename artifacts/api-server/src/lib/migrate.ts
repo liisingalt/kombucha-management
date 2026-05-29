@@ -289,6 +289,23 @@ export async function runMigrations(): Promise<void> {
       ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tea_base_g REAL NOT NULL DEFAULT 5;
       ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sugar_ratio_g_per_l REAL NOT NULL DEFAULT 80;
     `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS team_invites (
+        id           SERIAL PRIMARY KEY,
+        owner_user_id TEXT NOT NULL,
+        token        TEXT NOT NULL UNIQUE,
+        status       TEXT NOT NULL DEFAULT 'pending',
+        expires_at   TIMESTAMP NOT NULL,
+        created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS team_members (
+        id             SERIAL PRIMARY KEY,
+        owner_user_id  TEXT NOT NULL,
+        member_user_id TEXT NOT NULL,
+        invite_id      INTEGER,
+        joined_at      TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
 
     logger.info("Migrations complete");
   } finally {
