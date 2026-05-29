@@ -284,6 +284,11 @@ export async function runMigrations(): Promise<void> {
       ALTER TABLE tea_stock ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT false;
       ALTER TABLE sugar_stock ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT false;
     `);
+    await client.query(`
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tea_ratio_g_per_l REAL NOT NULL DEFAULT 5;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tea_base_g REAL NOT NULL DEFAULT 5;
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sugar_ratio_g_per_l REAL NOT NULL DEFAULT 80;
+    `);
 
     logger.info("Migrations complete");
   } finally {

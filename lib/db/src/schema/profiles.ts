@@ -1,4 +1,4 @@
-import { pgTable, serial, text, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, timestamp, real } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -13,6 +13,9 @@ export const profilesTable = pgTable("profiles", {
   flavorPreference: text("flavor_preference"),
   onboardingAdvice: text("onboarding_advice"),
   ttsEnabled: boolean("tts_enabled").notNull().default(true),
+  teaRatioGPerL: real("tea_ratio_g_per_l").notNull().default(5),
+  teaBaseG: real("tea_base_g").notNull().default(5),
+  sugarRatioGPerL: real("sugar_ratio_g_per_l").notNull().default(80),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

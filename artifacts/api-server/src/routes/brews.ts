@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { teaStockTable, sugarStockTable, sugarStockMovementsTable, brewsTable, brewSessionsTable } from "@workspace/db";
+import { teaStockTable, sugarStockTable, sugarStockMovementsTable, brewsTable, brewSessionsTable, profilesTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 
@@ -465,6 +465,61 @@ router.patch("/brews/:id", requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to patch brew");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/brews/formula-settings", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  try {
+    let profile = await db.query.profilesTable.findFirst({
+      where: eq(profilesTable.clerkUserId, userId),
+    });
+    if (!profile) {
+      [profile] = await db.insert(profilesTable).values({ clerkUserId: userId }).returning();
+    }
+    res.json({
+      teaRatioGPerL: profile.teaRatioGPerL,
+      teaBaseG: profile.teaBaseG,
+      sugarRatioGPerL: profile.sugarRatioGPerL,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch formula settings");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/brews/formula-settings", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const { teaRatioGPerL, teaBaseG, sugarRatioGPerL } = req.body;
+  try {
+    const updates: Record<string, unknown> = {};
+    if (teaRatioGPerL !== undefined) updates.teaRatioGPerL = Number(teaRatioGPerL);
+    if (teaBaseG !== undefined) updates.teaBaseG = Number(teaBaseG);
+    if (sugarRatioGPerL !== undefined) updates.sugarRatioGPerL = Number(sugarRatioGPerL);
+    if (Object.keys(updates).length === 0) { res.json({ ok: true }); return; }
+    const existing = await db.query.profilesTable.findFirst({
+      where: eq(profilesTable.clerkUserId, userId),
+    });
+    if (existing) {
+      await db.update(profilesTable)
+        .set({
+          ...(teaRatioGPerL !== undefined && { teaRatioGPerL: Number(teaRatioGPerL) }),
+          ...(teaBaseG !== undefined && { teaBaseG: Number(teaBaseG) }),
+          ...(sugarRatioGPerL !== undefined && { sugarRatioGPerL: Number(sugarRatioGPerL) }),
+        })
+        .where(eq(profilesTable.clerkUserId, userId));
+    } else {
+      await db.insert(profilesTable).values({
+        clerkUserId: userId,
+        ...(teaRatioGPerL !== undefined && { teaRatioGPerL: Number(teaRatioGPerL) }),
+        ...(teaBaseG !== undefined && { teaBaseG: Number(teaBaseG) }),
+        ...(sugarRatioGPerL !== undefined && { sugarRatioGPerL: Number(sugarRatioGPerL) }),
+      });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to update formula settings");
     res.status(500).json({ error: "Internal server error" });
   }
 });

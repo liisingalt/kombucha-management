@@ -9,6 +9,8 @@ const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 type Tea = { id: number; name: string; qtyG: number; isDefault: boolean };
 type Sugar = { id: number; name: string; qtyG: number; isDefault: boolean };
+type FormulaSettings = { teaRatioGPerL: number; teaBaseG: number; sugarRatioGPerL: number };
+const DEFAULT_FORMULA: FormulaSettings = { teaRatioGPerL: 5, teaBaseG: 5, sugarRatioGPerL: 80 };
 type SugarMovement = {
   id: number;
   sugarStockId: number;
@@ -119,8 +121,17 @@ export default function ValmistaminePage() {
     },
   });
 
+  const formulaQ = useQuery<FormulaSettings>({
+    queryKey: ["brews-formula-settings"],
+    queryFn: async () => {
+      const res = await authFetch("/brews/formula-settings");
+      return res.json();
+    },
+  });
+
   const teas = teaQ.data ?? [];
   const sugars = sugarQ.data ?? [];
+  const formula = formulaQ.data ?? DEFAULT_FORMULA;
 
   const tabs = [
     { id: "uus", label: "Uus pruulimine" },
@@ -161,6 +172,7 @@ export default function ValmistaminePage() {
           <UusPruulimine
             teas={teas}
             sugars={sugars}
+            formula={formula}
             authFetch={authFetch}
             onSaved={() => {
               qc.invalidateQueries({ queryKey: ["brews"] });
@@ -174,10 +186,15 @@ export default function ValmistaminePage() {
         {tab === "tee" && (
           <TeeVaru
             teas={teas}
+            formula={formula}
             authFetch={authFetch}
             onChange={() => {
               qc.invalidateQueries({ queryKey: ["brews-tea-stock"] });
               flash("Tee varu uuendatud");
+            }}
+            onFormulaChange={() => {
+              qc.invalidateQueries({ queryKey: ["brews-formula-settings"] });
+              flash("Valem salvestatud");
             }}
             onError={flashError}
           />
@@ -185,10 +202,15 @@ export default function ValmistaminePage() {
         {tab === "suhkur" && (
           <SuhkruVaru
             sugars={sugars}
+            formula={formula}
             authFetch={authFetch}
             onChange={() => {
               qc.invalidateQueries({ queryKey: ["brews-sugar-stock"] });
               flash("Suhkru varu uuendatud");
+            }}
+            onFormulaChange={() => {
+              qc.invalidateQueries({ queryKey: ["brews-formula-settings"] });
+              flash("Valem salvestatud");
             }}
             onError={flashError}
           />
@@ -240,12 +262,14 @@ const emptyPortion = (): PortionForm => ({
 function UusPruulimine({
   teas,
   sugars,
+  formula,
   authFetch,
   onSaved,
   onError,
 }: {
   teas: Tea[];
   sugars: Sugar[];
+  formula: FormulaSettings;
   authFetch: ReturnType<typeof useAuthFetch>;
   onSaved: () => void;
   onError: (msg: string) => void;
@@ -266,6 +290,7 @@ function UusPruulimine({
   const [portions, setPortions] = useState<PortionForm[]>([emptyPortion()]);
 
   const pct = parseInt(starterPct) || 0;
+  const { teaRatioGPerL, teaBaseG, sugarRatioGPerL } = formula;
   const portionCalcs = portions.map((p) => {
     const boiled = parseFloat(p.boiledL) || 0;
     const cold = p.coldEdited ? parseFloat(p.coldWaterL) || 0 : boiled;
@@ -274,8 +299,8 @@ function UusPruulimine({
       boiled,
       cold,
       totalL,
-      teaG: boiled > 0 ? Math.round(boiled * 5 + 5) : 0,
-      sugarG: Math.round(totalL * 80),
+      teaG: boiled > 0 ? Math.round(boiled * teaRatioGPerL + teaBaseG) : 0,
+      sugarG: Math.round(totalL * sugarRatioGPerL),
       starterG: Math.round(totalL * 10 * pct),
     };
   });
@@ -466,7 +491,7 @@ function UusPruulimine({
                   ))}
                 </select>
               </Field>
-              <Field label="Tee, g" hint="Arvutatud: L × 5 + 5">
+              <Field label="Tee, g" hint={`Arvutatud: L × ${teaRatioGPerL} + ${teaBaseG}`}>
                 <input value={calc.teaG} readOnly className={calcCls} />
               </Field>
               <div className="grid grid-cols-2 gap-3">
@@ -523,7 +548,7 @@ function UusPruulimine({
             <p className="text-xs text-red-600 -mt-2">Varust ei jätku — laos {sel.qtyG} g, kulub {totalSugarG} g (puudu {-remaining} g)</p>
           );
         })()}
-        <Field label="Suhkur, g" hint="Arvutatud: kogu vedelik × 80">
+        <Field label="Suhkur, g" hint={`Arvutatud: kogu vedelik × ${sugarRatioGPerL}`}>
           <input value={totalSugarG} readOnly className={calcCls} />
         </Field>
         {!isMulti && (
@@ -613,19 +638,39 @@ function UusPruulimine({
 
 function TeeVaru({
   teas,
+  formula,
   authFetch,
   onChange,
+  onFormulaChange,
   onError,
 }: {
   teas: Tea[];
+  formula: FormulaSettings;
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
+  onFormulaChange: () => void;
   onError: (msg: string) => void;
 }) {
   const [name, setName] = useState("");
   const [existing, setExisting] = useState<number | "">("");
   const [qty, setQty] = useState("");
   const [mode, setMode] = useState<"olemasolev" | "uus">("olemasolev");
+  const [fRatio, setFRatio] = useState(String(formula.teaRatioGPerL));
+  const [fBase, setFBase] = useState(String(formula.teaBaseG));
+
+  useEffect(() => {
+    setFRatio(String(formula.teaRatioGPerL));
+    setFBase(String(formula.teaBaseG));
+  }, [formula.teaRatioGPerL, formula.teaBaseG]);
+
+  const formulaMut = useMutation({
+    mutationFn: async (body: unknown) => {
+      const res = await authFetch("/brews/formula-settings", { method: "PATCH", body: JSON.stringify(body) });
+      return res.json();
+    },
+    onSuccess: () => onFormulaChange(),
+    onError: (err: Error) => onError(err.message || "Salvestamine ebaõnnestus"),
+  });
 
   const mut = useMutation({
     mutationFn: async (body: unknown) => {
@@ -770,6 +815,32 @@ function TeeVaru({
         </div>
       </div>
 
+      <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-serif text-base text-stone-900">Tee arvutusvalem</h3>
+          <span className="text-xs text-stone-400">praegu: L × {formula.teaRatioGPerL} + {formula.teaBaseG} g</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Suhe (g/L)">
+            <input type="number" min={0} step={0.1} value={fRatio} onChange={(e) => setFRatio(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="Aluskogus (g)">
+            <input type="number" min={0} step={0.1} value={fBase} onChange={(e) => setFBase(e.target.value)} className={inputCls} />
+          </Field>
+        </div>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-stone-400">Valem: keedetud L × {fRatio !== "" ? fRatio : formula.teaRatioGPerL} + {fBase !== "" ? fBase : formula.teaBaseG} g</p>
+          <button
+            type="button"
+            onClick={() => formulaMut.mutate({ teaRatioGPerL: parseFloat(fRatio) || formula.teaRatioGPerL, teaBaseG: parseFloat(fBase) || formula.teaBaseG })}
+            disabled={formulaMut.isPending}
+            className="rounded-lg bg-amber-700 px-4 py-2 text-sm text-white hover:bg-amber-800 disabled:opacity-50"
+          >
+            {formulaMut.isPending ? "Salvestan…" : "Salvesta valem"}
+          </button>
+        </div>
+      </div>
+
       <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-stone-100 text-stone-500 text-left">
@@ -903,13 +974,17 @@ function TeeVaru({
 
 function SuhkruVaru({
   sugars,
+  formula,
   authFetch,
   onChange,
+  onFormulaChange,
   onError,
 }: {
   sugars: Sugar[];
+  formula: FormulaSettings;
   authFetch: ReturnType<typeof useAuthFetch>;
   onChange: () => void;
+  onFormulaChange: () => void;
   onError: (msg: string) => void;
 }) {
   const [name, setName] = useState("");
@@ -919,6 +994,20 @@ function SuhkruVaru({
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameVal, setRenameVal] = useState("");
   const [historyId, setHistoryId] = useState<number | null>(null);
+  const [fRatio, setFRatio] = useState(String(formula.sugarRatioGPerL));
+
+  useEffect(() => {
+    setFRatio(String(formula.sugarRatioGPerL));
+  }, [formula.sugarRatioGPerL]);
+
+  const formulaMut = useMutation({
+    mutationFn: async (body: unknown) => {
+      const res = await authFetch("/brews/formula-settings", { method: "PATCH", body: JSON.stringify(body) });
+      return res.json();
+    },
+    onSuccess: () => onFormulaChange(),
+    onError: (err: Error) => onError(err.message || "Salvestamine ebaõnnestus"),
+  });
 
   const movementsQuery = useQuery<SugarMovement[]>({
     queryKey: ["sugar-movements", historyId],
@@ -1050,6 +1139,27 @@ function SuhkruVaru({
             className="rounded-lg bg-amber-700 px-4 text-white shrink-0 disabled:opacity-50"
           >
             Lisa
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-serif text-base text-stone-900">Suhkru arvutusvalem</h3>
+          <span className="text-xs text-stone-400">praegu: kogu L × {formula.sugarRatioGPerL}</span>
+        </div>
+        <Field label="Suhe (g/L)">
+          <input type="number" min={0} step={0.1} value={fRatio} onChange={(e) => setFRatio(e.target.value)} className={inputCls} />
+        </Field>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-stone-400">Valem: kogu L × {fRatio !== "" ? fRatio : formula.sugarRatioGPerL} g</p>
+          <button
+            type="button"
+            onClick={() => formulaMut.mutate({ sugarRatioGPerL: parseFloat(fRatio) || formula.sugarRatioGPerL })}
+            disabled={formulaMut.isPending}
+            className="rounded-lg bg-amber-700 px-4 py-2 text-sm text-white hover:bg-amber-800 disabled:opacity-50"
+          >
+            {formulaMut.isPending ? "Salvestan…" : "Salvesta valem"}
           </button>
         </div>
       </div>
