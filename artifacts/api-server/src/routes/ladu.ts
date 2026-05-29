@@ -571,6 +571,8 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
   }
 });
 
+class UserError extends Error {}
+
 router.put("/ladu/movements/:id", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const id = parseInt(req.params.id, 10);
@@ -578,7 +580,7 @@ router.put("/ladu/movements/:id", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const { capId } = req.body as { capId?: number | null };
+  const { capId, quantity } = req.body as { capId?: number | null; quantity?: number };
   try {
     const [movement] = await db
       .select()
@@ -589,6 +591,114 @@ router.put("/ladu/movements/:id", requireAuth, async (req, res) => {
       return;
     }
     const deltas = movement.deltas as StoredDelta[];
+
+    // Handle quantity change for villimine movements
+    if (quantity !== undefined && movement.type === "villimine") {
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        res.status(400).json({ error: "Kogus peab olema positiivne täisarv" });
+        return;
+      }
+      const fgDelta = deltas.find((d): d is { kind: "finished_goods"; flavorId: number; size: number; amount: number } => d.kind === "finished_goods");
+      if (!fgDelta) {
+        res.status(400).json({ error: "Villimiskanne on vigane — finished_goods delta puudub" });
+        return;
+      }
+      const oldQty = fgDelta.amount;
+      if (quantity !== oldQty) {
+        const updatedDeltas: StoredDelta[] = deltas.map((d) => {
+          if (d.kind === "trace") return d;
+          const newAmount = Math.round((d.amount * quantity) / oldQty);
+          return { ...d, amount: newAmount } as StoredDelta;
+        });
+
+        await db.transaction(async (tx) => {
+          for (let i = 0; i < deltas.length; i++) {
+            const delta = deltas[i];
+            const updated = updatedDeltas[i];
+            if (delta.kind === "trace") continue;
+            const correction = (updated as { amount: number }).amount - delta.amount;
+            if (correction === 0) continue;
+
+            if (delta.kind === "bottle") {
+              const [row] = await tx.select().from(laduBottlesTable)
+                .where(and(eq(laduBottlesTable.userId, userId), eq(laduBottlesTable.size, delta.key)));
+              if (!row) continue;
+              const newQtyInTable = row.qty + correction;
+              if (newQtyInTable < 0) throw new UserError(`Pudelite varu (${delta.key} ml) läheks miinusesse`);
+              await tx.update(laduBottlesTable).set({ qty: newQtyInTable }).where(eq(laduBottlesTable.id, row.id));
+            } else if (delta.kind === "cap") {
+              const [row] = await tx.select().from(laduCapsTable)
+                .where(and(eq(laduCapsTable.userId, userId), eq(laduCapsTable.id, delta.key)));
+              if (!row) continue;
+              const newQtyInTable = row.qty + correction;
+              if (newQtyInTable < 0) throw new UserError("Korkide varu läheks miinusesse");
+              await tx.update(laduCapsTable).set({ qty: newQtyInTable }).where(eq(laduCapsTable.id, row.id));
+            } else if (delta.kind === "custom_label_bottle") {
+              const [row] = await tx.select().from(laduCustomLabelBottlesTable)
+                .where(and(eq(laduCustomLabelBottlesTable.userId, userId), eq(laduCustomLabelBottlesTable.size, delta.size)));
+              if (!row) continue;
+              const newQtyInTable = row.qty + correction;
+              if (newQtyInTable < 0) throw new UserError("Kohandatud sildiga pudelite varu läheks miinusesse");
+              await tx.update(laduCustomLabelBottlesTable).set({ qty: newQtyInTable }).where(eq(laduCustomLabelBottlesTable.id, row.id));
+            } else if (delta.kind === "wire_cage") {
+              const [row] = await tx.select().from(laduWireCagesTable)
+                .where(eq(laduWireCagesTable.userId, userId));
+              if (!row) continue;
+              const newQtyInTable = row.qty + correction;
+              if (newQtyInTable < 0) throw new UserError("Traatkorkide varu läheks miinusesse");
+              await tx.update(laduWireCagesTable).set({ qty: newQtyInTable }).where(eq(laduWireCagesTable.id, row.id));
+            } else if (delta.kind === "reusable_cap") {
+              const [row] = await tx.select().from(laduReusableCapsTable)
+                .where(and(eq(laduReusableCapsTable.userId, userId), eq(laduReusableCapsTable.size, delta.size)));
+              if (!row) continue;
+              const newQtyInTable = row.qty + correction;
+              if (newQtyInTable < 0) throw new UserError("Punnkorkide varu läheks miinusesse");
+              await tx.update(laduReusableCapsTable).set({ qty: newQtyInTable }).where(eq(laduReusableCapsTable.id, row.id));
+            } else if (delta.kind === "blank_label") {
+              const [row] = await tx.select().from(laduBlankLabelsTable)
+                .where(and(eq(laduBlankLabelsTable.userId, userId), eq(laduBlankLabelsTable.blankLabelTypeId, delta.blankLabelTypeId), eq(laduBlankLabelsTable.size, delta.size)));
+              if (!row) continue;
+              const newQtyInTable = row.qty + correction;
+              if (newQtyInTable < 0) throw new UserError("Tühja sildi varu läheks miinusesse");
+              await tx.update(laduBlankLabelsTable).set({ qty: newQtyInTable }).where(eq(laduBlankLabelsTable.id, row.id));
+            } else if (delta.kind === "finished_goods") {
+              const [row] = await tx.select().from(laduFinishedGoodsTable)
+                .where(and(eq(laduFinishedGoodsTable.userId, userId), eq(laduFinishedGoodsTable.flavorId, delta.flavorId), eq(laduFinishedGoodsTable.size, delta.size)));
+              if (!row) continue;
+              const newQtyInTable = row.qty + correction;
+              if (newQtyInTable < 0) throw new UserError("Valmistoodangu varu läheks miinusesse");
+              await tx.update(laduFinishedGoodsTable).set({ qty: newQtyInTable }).where(eq(laduFinishedGoodsTable.id, row.id));
+            } else if (delta.kind === "returned_bottle") {
+              const [row] = await tx.select().from(laduReturnedBottlesTable)
+                .where(and(eq(laduReturnedBottlesTable.userId, userId), eq(laduReturnedBottlesTable.flavorId, delta.flavorId), eq(laduReturnedBottlesTable.size, delta.size)));
+              if (!row) continue;
+              const newQtyInTable = row.qty + correction;
+              if (newQtyInTable < 0) throw new UserError("Tagastatud pudelite varu läheks miinusesse");
+              await tx.update(laduReturnedBottlesTable).set({ qty: newQtyInTable }).where(eq(laduReturnedBottlesTable.id, row.id));
+            }
+          }
+
+          // Replace leading number in summary
+          const newSummary = movement.summary.replace(/^\d+/, String(quantity));
+
+          // Also update capId if provided
+          let finalDeltas = updatedDeltas;
+          if (capId !== undefined && capId !== null) {
+            finalDeltas = finalDeltas.map((d) => (d.kind === "cap" ? { ...d, key: capId } : d));
+          }
+
+          await tx.update(laduMovementsTable)
+            .set({ deltas: finalDeltas as unknown[], summary: newSummary })
+            .where(eq(laduMovementsTable.id, id));
+        });
+
+        const [result] = await db.select().from(laduMovementsTable).where(eq(laduMovementsTable.id, id));
+        res.json(result);
+        return;
+      }
+    }
+
+    // No quantity change — update capId only (existing behaviour)
     const updatedDeltas = capId !== undefined && capId !== null
       ? deltas.map((d) => (d.kind === "cap" ? { ...d, key: capId } : d))
       : deltas;
@@ -599,6 +709,10 @@ router.put("/ladu/movements/:id", requireAuth, async (req, res) => {
       .returning();
     res.json(updated);
   } catch (err) {
+    if (err instanceof UserError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
     req.log.error({ err }, "Failed to update movement");
     res.status(500).json({ error: "Internal server error" });
   }

@@ -474,6 +474,7 @@ export default function LaduPage() {
             ferms={fermsTraceQ.data ?? []}
             flavEvents={eventsTraceQ.data ?? []}
             flash={flash}
+            flashError={flashError}
           />
         )}
       </div>
@@ -2277,6 +2278,7 @@ function AjaluguTab({
   ferms,
   flavEvents,
   flash,
+  flashError,
 }: {
   data: LaduData;
   undoMutation: ReturnType<typeof useMutation<void, Error, number>>;
@@ -2284,18 +2286,21 @@ function AjaluguTab({
   ferms: FermMin[];
   flavEvents: EventMin[];
   flash: (msg: string) => void;
+  flashError: (msg: string) => void;
 }) {
   const authFetch = useAuthFetch();
   const qc = useQueryClient();
   const [editingMovId, setEditingMovId] = useState<number | null>(null);
   const [editCapId, setEditCapId] = useState<number | "">("");
+  const [editQty, setEditQty] = useState<string>("");
 
   const updateMovMutation = useMutation({
-    mutationFn: async ({ id, capId }: { id: number; capId: number | null }) => {
+    mutationFn: async ({ id, capId, quantity }: { id: number; capId: number | null; quantity?: number }) => {
       const res = await authFetch(`/ladu/movements/${id}`, {
         method: "PUT",
-        body: JSON.stringify({ capId }),
+        body: JSON.stringify({ capId, quantity }),
       });
+      if (!res.ok) throw new Error((await res.json()).error ?? `HTTP ${res.status}`);
       return res.json();
     },
     onSuccess: () => {
@@ -2303,7 +2308,7 @@ function AjaluguTab({
       setEditingMovId(null);
       flash("Kanne uuendatud");
     },
-    onError: (err: Error) => flash(err.message),
+    onError: (err: Error) => flashError(err.message),
   });
 
   if (data.movements.length === 0)
@@ -2329,7 +2334,9 @@ function AjaluguTab({
 
   function startEdit(m: Movement) {
     const capDelta = (m.deltas as Array<{ kind: string; key?: number }>).find((d) => d.kind === "cap");
+    const fgDelta = (m.deltas as Array<{ kind: string; amount?: number }>).find((d) => d.kind === "finished_goods");
     setEditCapId(capDelta?.key ?? "");
+    setEditQty(fgDelta?.amount != null ? String(fgDelta.amount) : "");
     setEditingMovId(m.id);
   }
 
@@ -2396,43 +2403,71 @@ function AjaluguTab({
               </div>
             </div>
 
-            {isEditing && (
-              <div className="mt-3 pt-3 border-t border-stone-100">
-                <div className="text-xs font-medium text-stone-500 mb-2">Korrigeeri kannet (laoseis ei muutu)</div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="text-xs text-stone-500 shrink-0">Kork:</label>
-                  <select
-                    value={editCapId}
-                    onChange={(e) => setEditCapId(e.target.value ? Number(e.target.value) : "")}
-                    className="flex-1 min-w-[180px] rounded-lg border border-stone-300 px-2 py-1.5 text-xs text-stone-800 focus:border-amber-600 focus:outline-none"
-                  >
-                    <option value="">— kork valimata —</option>
-                    {data.caps.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.size}ml · {c.type}{c.color ? ` · ${c.color}` : ""} ({c.qty} tk laos)
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => updateMovMutation.mutate({ id: m.id, capId: editCapId ? Number(editCapId) : null })}
-                    disabled={updateMovMutation.isPending || !editCapId}
-                    className="flex items-center gap-1 text-xs px-3 py-1.5 bg-amber-700 text-white rounded-lg hover:bg-amber-800 disabled:opacity-40"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    {updateMovMutation.isPending ? "Salvestan…" : "Salvesta"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingMovId(null)}
-                    className="flex items-center gap-1 text-xs px-3 py-1.5 border border-stone-300 rounded-lg hover:bg-stone-50"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    Tühista
-                  </button>
+            {isEditing && (() => {
+              const parsedQty = parseInt(editQty);
+              const qtyValid = !isNaN(parsedQty) && parsedQty > 0;
+              const fgAmt = (m.deltas as Array<{ kind: string; amount?: number }>).find((d) => d.kind === "finished_goods")?.amount;
+              const qtyChanged = qtyValid && parsedQty !== fgAmt;
+              return (
+                <div className="mt-3 pt-3 border-t border-stone-100">
+                  <div className="text-xs font-medium text-stone-500 mb-2">Korrigeeri kannet (laoseis uueneb koguse muutumisel)</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {editQty !== "" && (
+                      <>
+                        <label className="text-xs text-stone-500 shrink-0">Kogus:</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={editQty}
+                          onChange={(e) => setEditQty(e.target.value)}
+                          className="w-20 rounded-lg border border-stone-300 px-2 py-1.5 text-xs text-stone-800 focus:border-amber-600 focus:outline-none"
+                        />
+                        {qtyChanged && (
+                          <span className="text-xs text-amber-600">laoseis uueneb</span>
+                        )}
+                      </>
+                    )}
+                    <label className="text-xs text-stone-500 shrink-0">Kork:</label>
+                    <select
+                      value={editCapId}
+                      onChange={(e) => setEditCapId(e.target.value ? Number(e.target.value) : "")}
+                      className="flex-1 min-w-[180px] rounded-lg border border-stone-300 px-2 py-1.5 text-xs text-stone-800 focus:border-amber-600 focus:outline-none"
+                    >
+                      <option value="">— kork valimata —</option>
+                      {data.caps.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.size}ml · {c.type}{c.color ? ` · ${c.color}` : ""} ({c.qty} tk laos)
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editQty !== "" && !qtyValid) return flashError("Kogus peab olema positiivne arv");
+                        updateMovMutation.mutate({
+                          id: m.id,
+                          capId: editCapId ? Number(editCapId) : null,
+                          quantity: editQty !== "" && qtyValid ? parsedQty : undefined,
+                        });
+                      }}
+                      disabled={updateMovMutation.isPending}
+                      className="flex items-center gap-1 text-xs px-3 py-1.5 bg-amber-700 text-white rounded-lg hover:bg-amber-800 disabled:opacity-40"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      {updateMovMutation.isPending ? "Salvestan…" : "Salvesta"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingMovId(null)}
+                      className="flex items-center gap-1 text-xs px-3 py-1.5 border border-stone-300 rounded-lg hover:bg-stone-50"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Tühista
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         );
       })}
