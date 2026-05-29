@@ -281,9 +281,11 @@ export default function PhotosPage() {
 
       {/* Upload modal */}
       {showUpload && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm px-4 pt-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
-          <div className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-md p-6 max-h-[90dvh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-5">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:px-4">
+          <div className="bg-background sm:rounded-2xl border border-border shadow-xl w-full sm:max-w-md flex flex-col max-h-[92dvh] sm:max-h-[90dvh] rounded-t-2xl">
+
+            {/* Sticky header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0 border-b border-border/50">
               <h2 className="font-serif font-semibold text-lg">Lisa foto</h2>
               <button
                 onClick={() => { setShowUpload(false); setSelectedPhase(null); setSelectedBatchId(null); setActiveBatches([]); setUploadError(null); }}
@@ -293,7 +295,8 @@ export default function PhotosPage() {
               </button>
             </div>
 
-            <div className="space-y-4">
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-4 space-y-4">
               {/* Phase selector */}
               <div>
                 <label className="block text-sm font-medium mb-2">Protsessi etapp</label>
@@ -402,7 +405,7 @@ export default function PhotosPage() {
 
               {uploadError && <p className="text-red-600 text-sm">{uploadError}</p>}
 
-              {/* File input */}
+              {/* Hidden file input */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -413,8 +416,11 @@ export default function PhotosPage() {
                   if (file) handleUpload(file);
                 }}
               />
+            </div>
 
-              <div className="flex gap-2 pt-1">
+            {/* Sticky footer with action buttons */}
+            <div className="shrink-0 px-6 pt-3 pb-6 border-t border-border/50" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
+              <div className="flex gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -443,6 +449,7 @@ export default function PhotosPage() {
                 </Button>
               </div>
             </div>
+
           </div>
         </div>
       )}
