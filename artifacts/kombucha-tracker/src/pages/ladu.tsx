@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Package, Boxes, FlaskConical, Tags, History, Plus, RotateCcw, Trash2, AlertTriangle, Pencil, Check, X, PenLine, ShoppingBag, Leaf, Minus, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { Layout } from "@/components/Layout";
 
-const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+import { API_BASE } from "@/lib/apiBase";
 const SIZES = [330, 500, 750];
 const CAP_TYPES = ["kroonkork", "punnkork"];
 const LADU_QUERY_KEY = ["ladu"] as const;
@@ -132,7 +132,7 @@ function useAuthFetch() {
   const { getToken } = useAuth();
   return async (path: string, options?: RequestInit) => {
     const token = await getToken();
-    const res = await fetch(`${BASE_URL}/api${path}`, {
+    const res = await fetch(`${API_BASE}/api${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",

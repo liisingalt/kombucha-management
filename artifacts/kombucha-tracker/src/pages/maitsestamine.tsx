@@ -5,7 +5,7 @@ import { Leaf } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
-const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+import { API_BASE } from "@/lib/apiBase";
 
 type Variant = { id: number; name: string; olek: string; paritolu: string; coefficient: number; qtyG: number };
 type Method = { id: number; name: string };
@@ -30,7 +30,7 @@ function useAuthFetch() {
   const { getToken } = useAuth();
   return async (path: string, options?: RequestInit) => {
     const token = await getToken();
-    const res = await fetch(`${BASE_URL}/api${path}`, {
+    const res = await fetch(`${API_BASE}/api${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",

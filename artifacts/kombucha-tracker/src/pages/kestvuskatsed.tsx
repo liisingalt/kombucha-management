@@ -5,6 +5,7 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Plus, FlaskConical, Trash2, CheckCircle, X, Download, Pencil, ChevronDown, ChevronUp, Sparkles, Loader2, GitBranch, BarChart2 } from "lucide-react";
+import { API_BASE } from "@/lib/apiBase";
 
 type BottleTest = {
   id: number;
@@ -76,8 +77,6 @@ type JourneyData = {
   brew: { id: number; date: string; teaSort: string | null; teaG: number; sugarG: number; boiledL: number; coldWaterL: number; steepMin: number | null; temp: number | null; starterPct: number; starterG: number } | null;
   f2Days: number | null;
 };
-
-const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 function urgencyClass(nextTasting: string) {
   const days = differenceInDays(new Date(nextTasting), new Date());
@@ -214,7 +213,7 @@ export default function KestvuskatsedPage() {
   const fetchItems = useCallback(async () => {
     try {
       const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/bottle-tests`, {
+      const res = await fetch(`${API_BASE}/api/bottle-tests`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Laadimine ebaõnnestus");
@@ -231,7 +230,7 @@ export default function KestvuskatsedPage() {
   const fetchFlavEvents = useCallback(async () => {
     try {
       const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/flavoring/events`, {
+      const res = await fetch(`${API_BASE}/api/flavoring/events`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -247,7 +246,7 @@ export default function KestvuskatsedPage() {
     setAnalyticsError(null);
     try {
       const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/bottle-tests/analytics`, {
+      const res = await fetch(`${API_BASE}/api/bottle-tests/analytics`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Statistika laadimine ebaõnnestus");
@@ -265,7 +264,7 @@ export default function KestvuskatsedPage() {
     setAiSummaryLoading(true);
     try {
       const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/bottle-tests/analytics/ai-summary`, {
+      const res = await fetch(`${API_BASE}/api/bottle-tests/analytics/ai-summary`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       });
@@ -349,7 +348,7 @@ export default function KestvuskatsedPage() {
     setJourneyLoading(item.id);
     try {
       const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/bottle-tests/${item.id}/journey`, {
+      const res = await fetch(`${API_BASE}/api/bottle-tests/${item.id}/journey`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -366,7 +365,7 @@ export default function KestvuskatsedPage() {
     setAiLoadingId(item.id);
     try {
       const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/bottle-tests/${item.id}/ai-insight`, {
+      const res = await fetch(`${API_BASE}/api/bottle-tests/${item.id}/ai-insight`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       });
@@ -389,7 +388,7 @@ export default function KestvuskatsedPage() {
     setAddLoading(true);
     try {
       const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/bottle-tests`, {
+      const res = await fetch(`${API_BASE}/api/bottle-tests`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -429,7 +428,7 @@ export default function KestvuskatsedPage() {
     setTasteLoading(true);
     try {
       const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/bottle-tests/${tasteTarget.id}/taste`, {
+      const res = await fetch(`${API_BASE}/api/bottle-tests/${tasteTarget.id}/taste`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -459,7 +458,7 @@ export default function KestvuskatsedPage() {
     if (!confirm(`Kustuta "${item.product} (${item.bottleId})"?`)) return;
     try {
       const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/bottle-tests/${item.id}`, {
+      const res = await fetch(`${API_BASE}/api/bottle-tests/${item.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -511,7 +510,7 @@ export default function KestvuskatsedPage() {
         body.conclusion = editForm.conclusion.trim();
         body.tastedDate = editForm.tastedDate;
       }
-      const res = await fetch(`${BASE_URL}/api/bottle-tests/${editTarget.id}`, {
+      const res = await fetch(`${API_BASE}/api/bottle-tests/${editTarget.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

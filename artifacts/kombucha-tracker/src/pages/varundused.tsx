@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+import { API_BASE } from "@/lib/apiBase";
 
 interface BackupInfo {
   filename: string;
@@ -28,7 +28,7 @@ function useAuthFetch() {
   const { getToken } = useAuth();
   return async (path: string, options: RequestInit = {}): Promise<Response> => {
     const token = await getToken();
-    return fetch(`${BASE_URL}/api${path}`, {
+    return fetch(`${API_BASE}/api${path}`, {
       ...options,
       headers: {
         ...(options.headers ?? {}),

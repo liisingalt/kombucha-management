@@ -5,7 +5,7 @@ import { Image as ImageIcon, FlaskConical, Droplets, Leaf, Upload, X, Calendar, 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+import { API_BASE } from "@/lib/apiBase";
 
 type Phase = "brew" | "fermentation" | "flavoring";
 type Photo = {
@@ -59,8 +59,8 @@ export default function PhotosPage() {
     try {
       const token = await getToken();
       const url = filterPhase !== "all"
-        ? `${BASE_URL}/api/photos?phase=${filterPhase}`
-        : `${BASE_URL}/api/photos`;
+        ? `${API_BASE}/api/photos?phase=${filterPhase}`
+        : `${API_BASE}/api/photos`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
         const data = await res.json();
@@ -82,7 +82,7 @@ export default function PhotosPage() {
     setSelectedBatchId(null);
     try {
       const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/photos/active-batches?phase=${phase}`, {
+      const res = await fetch(`${API_BASE}/api/photos/active-batches?phase=${phase}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) setActiveBatches(await res.json());
@@ -104,7 +104,7 @@ export default function PhotosPage() {
     try {
       const token = await getToken();
 
-      const urlRes = await fetch(`${BASE_URL}/api/storage/uploads/request-url`, {
+      const urlRes = await fetch(`${API_BASE}/api/storage/uploads/request-url`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type || "image/jpeg" }),
@@ -119,7 +119,7 @@ export default function PhotosPage() {
       });
       if (!putRes.ok) throw new Error("Faili üleslaadimine ebaõnnestus");
 
-      const regRes = await fetch(`${BASE_URL}/api/photos`, {
+      const regRes = await fetch(`${API_BASE}/api/photos`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -151,7 +151,7 @@ export default function PhotosPage() {
     if (!confirm("Kustuta foto?")) return;
     try {
       const token = await getToken();
-      await fetch(`${BASE_URL}/api/photos/${photo.id}`, {
+      await fetch(`${API_BASE}/api/photos/${photo.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -161,7 +161,7 @@ export default function PhotosPage() {
   }
 
   function getPhotoUrl(objectPath: string) {
-    return `${BASE_URL}/api${objectPath}`;
+    return `${API_BASE}/api${objectPath}`;
   }
 
   const displayed = filterPhase === "all" ? photos : photos.filter((p) => p.phase === filterPhase);

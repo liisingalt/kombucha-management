@@ -12,7 +12,7 @@ import { Plus, ArrowRight, Beaker, Sparkles, FlaskConical, Package, Pencil, Chec
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
-const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+import { API_BASE } from "@/lib/apiBase";
 const F2_EST_DAYS = 3;
 
 type FermBatch = {
@@ -59,7 +59,7 @@ export default function DashboardPage() {
     queryKey: ["dashboard-fermentations"],
     queryFn: async () => {
       const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/fermentations`, {
+      const res = await fetch(`${API_BASE}/api/fermentations`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return res.json();
@@ -70,7 +70,7 @@ export default function DashboardPage() {
     queryKey: ["dashboard-flavoring-events"],
     queryFn: async () => {
       const token = await getToken();
-      const res = await fetch(`${BASE_URL}/api/flavoring/events`, {
+      const res = await fetch(`${API_BASE}/api/flavoring/events`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return res.json();
@@ -87,7 +87,7 @@ export default function DashboardPage() {
     setSavingBottling(true);
     try {
       const token = await getToken();
-      await fetch(`${BASE_URL}/api/flavoring/events/${flavoringEventId}`, {
+      await fetch(`${API_BASE}/api/flavoring/events/${flavoringEventId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ bottlingDate: date || null }),

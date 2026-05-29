@@ -20,13 +20,14 @@ import { useUser, useAuth } from "@clerk/react";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Upload, Loader2, FileText, Key, ShieldCheck, Lock, Users, Copy, Check, UserMinus, Link } from "lucide-react";
 
+import { API_BASE } from "@/lib/apiBase";
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 function useAuthFetch() {
   const { getToken } = useAuth();
   return async (path: string, options: RequestInit = {}): Promise<Response> => {
     const token = await getToken();
-    return fetch(`${BASE_URL}/api${path}`, {
+    return fetch(`${API_BASE}/api${path}`, {
       ...options,
       headers: {
         ...(options.headers ?? {}),

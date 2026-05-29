@@ -4,6 +4,7 @@ import { useAuth, SignIn } from "@clerk/react";
 import { Layout } from "@/components/Layout";
 import { FlaskConical, Loader2, CheckCircle, XCircle } from "lucide-react";
 
+import { API_BASE } from "@/lib/apiBase";
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 type Status = "loading" | "success" | "already" | "error" | "need-auth";
@@ -26,7 +27,7 @@ export default function JoinPage() {
     (async () => {
       try {
         const clerkToken = await getToken();
-        const res = await fetch(`${BASE_URL}/api/team/accept/${token}`, {
+        const res = await fetch(`${API_BASE}/api/team/accept/${token}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

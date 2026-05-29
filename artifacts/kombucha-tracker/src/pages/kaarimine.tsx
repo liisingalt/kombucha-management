@@ -5,7 +5,7 @@ import { Droplets } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
-const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+import { API_BASE, BASE_PATH } from "@/lib/apiBase";
 
 type Tea = { id: number; name: string; qtyG: number };
 type Brew = { id: number; date: string; teaSort: string; boiledL: number; sessionId: number | null };
@@ -40,7 +40,7 @@ function useAuthFetch() {
   const { getToken } = useAuth();
   return async (path: string, options?: RequestInit) => {
     const token = await getToken();
-    const res = await fetch(`${BASE_URL}/api${path}`, {
+    const res = await fetch(`${API_BASE}/api${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
@@ -452,7 +452,7 @@ function UusKaarimine({
       </div>
 
       <a
-        href={`${BASE_URL}/maitsestamine`}
+        href={`${BASE_PATH}/maitsestamine`}
         className="w-full rounded-lg border-2 border-dashed border-amber-400 py-3 text-amber-700 font-medium hover:bg-amber-50 flex items-center justify-center gap-2"
       >
         <span className="text-lg leading-none">+</span> lisa maitsestus

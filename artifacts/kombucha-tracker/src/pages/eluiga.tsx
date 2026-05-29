@@ -8,13 +8,13 @@ import {
 } from "lucide-react";
 import { Layout } from "@/components/Layout";
 
-const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+import { API_BASE, BASE_PATH } from "@/lib/apiBase";
 
 function useAuthFetch() {
   const { getToken } = useAuth();
   return async (path: string, options?: RequestInit) => {
     const token = await getToken();
-    const res = await fetch(`${BASE_URL}/api${path}`, {
+    const res = await fetch(`${API_BASE}/api${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
@@ -589,13 +589,13 @@ function LifecycleCard({
           {/* ── Links to editing pages ── */}
           <div className="flex gap-2 pt-1">
             <a
-              href={`${BASE_URL}/kaarimine`}
+              href={`${BASE_PATH}/kaarimine`}
               className="text-xs text-amber-700 hover:text-amber-900 border border-stone-200 hover:border-amber-300 rounded-lg px-3 py-1.5 transition"
             >
               Käärimine →
             </a>
             <a
-              href={`${BASE_URL}/maitsestamine`}
+              href={`${BASE_PATH}/maitsestamine`}
               className="text-xs text-amber-700 hover:text-amber-900 border border-stone-200 hover:border-amber-300 rounded-lg px-3 py-1.5 transition"
             >
               Maitsestamine →
@@ -787,7 +787,7 @@ export default function EluigaPage() {
             <div className="text-sm font-medium text-stone-500">Käärimispartii pole veel lisatud</div>
             <div className="text-xs mt-1 mb-4">Lisa esimene partii Käärimine lehelt.</div>
             <a
-              href={`${BASE_URL}/kaarimine`}
+              href={`${BASE_PATH}/kaarimine`}
               className="inline-flex items-center gap-2 text-sm text-amber-700 border border-amber-300 rounded-lg px-4 py-2 hover:bg-amber-50 transition"
             >
               Mine Käärimine lehele →

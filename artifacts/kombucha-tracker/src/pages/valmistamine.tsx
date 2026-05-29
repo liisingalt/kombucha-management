@@ -5,7 +5,7 @@ import { FlaskConical, Pencil, Check, X, Star } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
-const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+import { API_BASE } from "@/lib/apiBase";
 
 type Tea = { id: number; name: string; qtyG: number; isDefault: boolean };
 type Sugar = { id: number; name: string; qtyG: number; isDefault: boolean };
@@ -56,7 +56,7 @@ function useAuthFetch() {
   const { getToken } = useAuth();
   return async (path: string, options?: RequestInit) => {
     const token = await getToken();
-    const res = await fetch(`${BASE_URL}/api${path}`, {
+    const res = await fetch(`${API_BASE}/api${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",

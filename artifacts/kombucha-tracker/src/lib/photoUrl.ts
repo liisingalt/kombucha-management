@@ -1,8 +1,8 @@
-const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+import { API_BASE } from "@/lib/apiBase";
 
 export function getPhotoUrl(objectPath: string): string {
   const stripped = objectPath.startsWith("/objects/")
     ? objectPath.slice("/objects/".length)
     : objectPath.replace(/^\/+/, "");
-  return `${basePath}/api/storage/objects/${stripped}`;
+  return `${API_BASE}/api/storage/objects/${stripped}`;
 }
