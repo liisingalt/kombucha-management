@@ -1465,6 +1465,7 @@ function LisaVaruTab({
             <Seg options={SIZES.map((s) => ({ value: s, label: `${s}` }))} value={lSize} onChange={(v) => setLSize(v as number)} />
           </div>
         </div>
+        {(() => { const n = lFlavor !== "" ? (data.labels.find((l) => l.flavorId === lFlavor && l.size === lSize)?.qty ?? 0) : null; return n !== null ? <p className={`text-xs mt-2 ${n === 0 ? "text-amber-600" : "text-stone-400"}`}>Laos: {n} tk</p> : null; })()}
         <div className="mt-3 flex gap-2">
           <Num value={lQty} onChange={setLQty} onKeyDown={(e) => { if (e.key === "Enter") addLabels(); }} className="flex-1" />
           <button type="button" onClick={addLabels} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
@@ -1473,6 +1474,7 @@ function LisaVaruTab({
 
       <Card title="Traatkorgi">
         <p className="text-xs text-stone-400 mb-3">750 ml punnkorkide jaoks — üks traatkork ühe pudeli kohta.</p>
+        {(() => { const n = data.wireCageQty; return <p className={`text-xs mb-2 ${n === 0 ? "text-amber-600" : "text-stone-400"}`}>Laos: {n} tk</p>; })()}
         <div className="flex gap-2">
           <Num value={wcQty} onChange={setWcQty} onKeyDown={(e) => { if (e.key === "Enter") addWireCages(); }} className="flex-1" />
           <button type="button" onClick={addWireCages} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
@@ -1481,6 +1483,7 @@ function LisaVaruTab({
 
       <Card title="Korduvkasutatavad punnkorgid">
         <p className="text-xs text-stone-400 mb-3">Puhtad punnkorgid, valmis taaskasutusse — villimise ajal arvatakse laost maha.</p>
+        {(() => { const n = data.reusableCaps.find((r) => r.size === 750)?.qty ?? 0; return <p className={`text-xs mb-2 ${n === 0 ? "text-amber-600" : "text-stone-400"}`}>Laos: {n} tk</p>; })()}
         <div className="flex gap-2">
           <Num value={rcQty} onChange={setRcQty} onKeyDown={(e) => { if (e.key === "Enter") addReusableCaps(); }} className="flex-1" />
           <button type="button" onClick={addReusableCaps} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
@@ -1501,9 +1504,12 @@ function LisaVaruTab({
             {data.caps.length === 0 ? (
               <p className="text-xs text-stone-400">Pole korke. Lisa "Uus kork" alt.</p>
             ) : (
-              <select value={cExisting} onChange={(e) => setCExisting(Number(e.target.value))} className="w-full rounded-lg border border-stone-300 px-3 py-2">
-                {data.caps.map((c) => <option key={c.id} value={c.id}>{capLabel(c)}</option>)}
-              </select>
+              <>
+                <select value={cExisting} onChange={(e) => setCExisting(Number(e.target.value))} className="w-full rounded-lg border border-stone-300 px-3 py-2">
+                  {data.caps.map((c) => <option key={c.id} value={c.id}>{capLabel(c)}</option>)}
+                </select>
+                {cExisting !== "" && (() => { const n = data.caps.find((c) => c.id === cExisting)?.qty ?? 0; return <p className={`text-xs mt-1 ${n === 0 ? "text-amber-600" : "text-stone-400"}`}>Laos: {n} tk</p>; })()}
+              </>
             )}
           </div>
         ) : (

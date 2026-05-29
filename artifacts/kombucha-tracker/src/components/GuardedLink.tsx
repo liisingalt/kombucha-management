@@ -4,22 +4,21 @@ import { useNavigationGuard } from "@/contexts/NavigationGuardContext";
 
 type LinkProps = React.ComponentProps<typeof Link>;
 
-export function GuardedLink({ href, onClick, children, ...props }: LinkProps) {
+export function GuardedLink(props: LinkProps) {
   const { isDirty, requestNavigation } = useNavigationGuard();
   const [, setLocation] = useLocation();
 
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    const href = "href" in props ? (props.href as string) : (props.to as string);
     if (!isDirty) {
-      onClick?.(e);
+      props.onClick?.(e);
       return;
     }
     e.preventDefault();
-    requestNavigation(() => setLocation(href as string));
+    requestNavigation(() => setLocation(href));
   };
 
   return (
-    <Link href={href} onClick={handleClick} {...props}>
-      {children}
-    </Link>
+    <Link {...props} onClick={handleClick} />
   );
 }
