@@ -29,7 +29,7 @@ const actions = [
   },
   {
     href: "/ladu",
-    label: "Lisa aldu",
+    label: "Halda ladu",
     description: "Villimine ja laohaldus",
     icon: Package,
     color: "bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100",
