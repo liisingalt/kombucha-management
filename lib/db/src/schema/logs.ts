@@ -1,11 +1,11 @@
 import { pgTable, serial, integer, text, real, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { batchesTable } from "./batches";
+import { fermentationBatchTable } from "./fermentations";
 
 export const logsTable = pgTable("logs", {
   id: serial("id").primaryKey(),
-  batchId: integer("batch_id").notNull().references(() => batchesTable.id, { onDelete: "cascade" }),
+  batchId: integer("batch_id").notNull().references(() => fermentationBatchTable.id, { onDelete: "cascade" }),
   dayNumber: integer("day_number").notNull(),
   temperature: real("temperature"),
   scobylook: text("scobylook"),

@@ -15,6 +15,7 @@ import flavoringRouter from "./flavoring";
 import backupsRouter from "./backups";
 import adminRouter from "./admin";
 import teamRouter from "./team";
+import logsRouter from "./logs";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(flavoringRouter);
 router.use(backupsRouter);
 router.use(adminRouter);
 router.use(teamRouter);
+router.use(logsRouter);
 
 export default router;

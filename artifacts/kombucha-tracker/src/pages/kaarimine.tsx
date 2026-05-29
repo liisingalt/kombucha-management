@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
-import { Droplets } from "lucide-react";
+import { Droplets, Sparkles, ChevronDown, ChevronUp, Plus, Loader2 } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
@@ -32,6 +32,21 @@ type Batch = {
   brew: BrewSummary | null;
 };
 type FlavEvent = { id: number; date: string; fermentationBatchId: number | null };
+type Log = {
+  id: number;
+  batchId: number;
+  dayNumber: number;
+  temperature: number | null;
+  ph: number | null;
+  smell: string | null;
+  color: string | null;
+  taste: string[] | null;
+  carbonation: string | null;
+  notes: string | null;
+  scobylook: string | null;
+  aiTip: string | null;
+  loggedAt: string;
+};
 
 const inputCls =
   "w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600";
@@ -623,6 +638,69 @@ function BatchCard({
     save();
   };
 
+  // Daily log hooks — must be declared before any early return
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logFormOpen, setLogFormOpen] = useState(false);
+  const [logDay, setLogDay] = useState("");
+  const [logTemp, setLogTemp] = useState("");
+  const [logPh, setLogPh] = useState("");
+  const [logSmell, setLogSmell] = useState("");
+  const [logColor, setLogColor] = useState("");
+  const [logTaste, setLogTaste] = useState("");
+  const [logCarbonation, setLogCarbonation] = useState("");
+  const [logScobylook, setLogScobylook] = useState("");
+  const [logNotes, setLogNotes] = useState("");
+
+  const logsQ = useQuery<Log[]>({
+    queryKey: ["batch-logs", batch.id],
+    queryFn: async () => {
+      const res = await authFetch(`/fermentations/${batch.id}/logs`);
+      return res.json();
+    },
+    enabled: logsOpen,
+  });
+
+  const addLog = useMutation({
+    mutationFn: async (body: unknown) => {
+      const res = await authFetch(`/fermentations/${batch.id}/logs`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      logsQ.refetch();
+      setLogFormOpen(false);
+      setLogDay("");
+      setLogTemp("");
+      setLogPh("");
+      setLogSmell("");
+      setLogColor("");
+      setLogTaste("");
+      setLogCarbonation("");
+      setLogScobylook("");
+      setLogNotes("");
+      flash("Päeviku kanne salvestatud");
+    },
+    onError: (err: Error) => flashError(err.message || "Salvestamine ebaõnnestus"),
+  });
+
+  const saveLog = () => {
+    const day = parseInt(logDay);
+    if (!logDay || isNaN(day)) return;
+    addLog.mutate({
+      dayNumber: day,
+      temperature: logTemp ? parseFloat(logTemp) : null,
+      ph: logPh ? parseFloat(logPh) : null,
+      smell: logSmell || null,
+      color: logColor || null,
+      taste: logTaste ? logTaste.split(",").map((t) => t.trim()).filter(Boolean) : null,
+      carbonation: logCarbonation || null,
+      scobylook: logScobylook || null,
+      notes: logNotes || null,
+    });
+  };
+
   if (editOpen) {
     return (
       <div className="rounded-xl border border-amber-300 bg-white p-4 space-y-4" onKeyDown={onEditKey}>
@@ -849,6 +927,188 @@ function BatchCard({
           {batch.notes && <p className="text-sm text-stone-600">{batch.notes}</p>}
         </div>
       )}
+
+      {/* Daily log section */}
+      <div className="mt-3 pt-3 border-t border-stone-100">
+        <button
+          onClick={() => setLogsOpen((o) => !o)}
+          className="flex items-center gap-1.5 text-xs text-stone-500 hover:text-amber-700 transition"
+        >
+          {logsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          Päeviku kanded
+          {logsQ.data && logsQ.data.length > 0 && (
+            <span className="ml-1 bg-stone-100 text-stone-600 rounded-full px-1.5 py-0.5 text-[10px] font-medium">
+              {logsQ.data.length}
+            </span>
+          )}
+        </button>
+
+        {logsOpen && (
+          <div className="mt-3 space-y-3">
+            {logsQ.isLoading && (
+              <div className="flex items-center gap-2 text-xs text-stone-400">
+                <Loader2 size={12} className="animate-spin" /> Laen…
+              </div>
+            )}
+
+            {logsQ.data?.map((log) => (
+              <div key={log.id} className="rounded-lg border border-stone-100 bg-stone-50 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-stone-700">Päev {log.dayNumber}</span>
+                  <span className="text-[10px] text-stone-400">
+                    {new Date(log.loggedAt).toLocaleDateString("et-EE")}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-stone-600">
+                  {log.temperature != null && <span>🌡 {log.temperature}°C</span>}
+                  {log.ph != null && <span>⚗️ pH {log.ph}</span>}
+                  {log.smell && <span>👃 {log.smell}</span>}
+                  {log.color && <span>🎨 {log.color}</span>}
+                  {log.carbonation && <span>🫧 {log.carbonation}</span>}
+                  {log.taste && log.taste.length > 0 && <span>👅 {log.taste.join(", ")}</span>}
+                  {log.scobylook && <span>🔬 {log.scobylook}</span>}
+                </div>
+                {log.notes && <p className="text-xs text-stone-500 italic">{log.notes}</p>}
+                {log.aiTip && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 flex gap-2">
+                    <Sparkles size={13} className="text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-xs text-amber-800 leading-relaxed">{log.aiTip}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {logsQ.data?.length === 0 && !logsQ.isLoading && (
+              <p className="text-xs text-stone-400">Veel ühtegi kannet pole.</p>
+            )}
+
+            {!logFormOpen ? (
+              <button
+                onClick={() => setLogFormOpen(true)}
+                className="flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-900 transition"
+              >
+                <Plus size={13} /> Lisa kanne
+              </button>
+            ) : (
+              <div className="rounded-lg border border-amber-200 bg-white p-3 space-y-3">
+                <p className="text-xs font-medium text-stone-700">Uus päeviku kanne</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-1">Päev *</label>
+                    <input
+                      type="number"
+                      value={logDay}
+                      onChange={(e) => setLogDay(e.target.value)}
+                      className={inputCls}
+                      placeholder="1"
+                      min={1}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-1">Temp °C</label>
+                    <input
+                      type="number"
+                      value={logTemp}
+                      onChange={(e) => setLogTemp(e.target.value)}
+                      className={inputCls}
+                      placeholder="22"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-1">pH</label>
+                    <input
+                      type="number"
+                      value={logPh}
+                      onChange={(e) => setLogPh(e.target.value)}
+                      className={inputCls}
+                      placeholder="3.2"
+                      step="0.1"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-1">Lõhn</label>
+                    <input
+                      value={logSmell}
+                      onChange={(e) => setLogSmell(e.target.value)}
+                      className={inputCls}
+                      placeholder="äädikjas, puuviljane…"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-1">Värvus</label>
+                    <input
+                      value={logColor}
+                      onChange={(e) => setLogColor(e.target.value)}
+                      className={inputCls}
+                      placeholder="pruunikas, selge…"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-1">Maitse</label>
+                    <input
+                      value={logTaste}
+                      onChange={(e) => setLogTaste(e.target.value)}
+                      className={inputCls}
+                      placeholder="hapu, magus (komaga)"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-stone-500 mb-1">Karbonisatsioon</label>
+                    <input
+                      value={logCarbonation}
+                      onChange={(e) => setLogCarbonation(e.target.value)}
+                      className={inputCls}
+                      placeholder="madal, keskmine…"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-stone-500 mb-1">SCOBY välimus</label>
+                  <input
+                    value={logScobylook}
+                    onChange={(e) => setLogScobylook(e.target.value)}
+                    className={inputCls}
+                    placeholder="valge, tervislik, paksenenud…"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-stone-500 mb-1">Märkmed</label>
+                  <textarea
+                    value={logNotes}
+                    onChange={(e) => setLogNotes(e.target.value)}
+                    rows={2}
+                    className={inputCls}
+                    placeholder="vabatekst vaatluste kohta"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveLog}
+                    disabled={addLog.isPending || !logDay}
+                    className="flex-1 rounded-lg bg-amber-700 py-2 text-white text-xs font-medium hover:bg-amber-800 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    {addLog.isPending ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" /> Genereerin AI nõuannet…
+                      </>
+                    ) : (
+                      "Salvesta kanne"
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setLogFormOpen(false)}
+                    className="px-3 py-2 text-xs text-stone-500 hover:text-stone-700"
+                  >
+                    tühista
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

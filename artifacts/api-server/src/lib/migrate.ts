@@ -312,6 +312,20 @@ export async function runMigrations(): Promise<void> {
       );
     `);
 
+    // Fix logs.batch_id FK to point at fermentation_batch instead of batches
+    await client.query(`ALTER TABLE logs DROP CONSTRAINT IF EXISTS logs_batch_id_batches_id_fk`);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'logs_batch_id_fermentation_batch_fk'
+        ) THEN
+          ALTER TABLE logs ADD CONSTRAINT logs_batch_id_fermentation_batch_fk
+            FOREIGN KEY (batch_id) REFERENCES fermentation_batch(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
+    `);
+
     logger.info("Migrations complete");
   } finally {
     client.release();
