@@ -893,11 +893,11 @@ function TeeVaru({
                           )}
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 group">
+                        <div className="flex items-center gap-2">
                           <span>{t.name}</span>
                           <button
                             onClick={() => startEdit(t)}
-                            className="opacity-0 group-hover:opacity-100 p-0.5 text-stone-400 hover:text-amber-700 transition-opacity"
+                            className="p-0.5 text-stone-300 hover:text-amber-700 active:text-amber-700 transition-colors"
                             title="Muuda nime"
                           >
                             <Pencil className="w-3.5 h-3.5" />
