@@ -276,6 +276,42 @@ router.post("/brews", requireAuth, async (req, res) => {
   }
 });
 
+router.put("/brews/tea-stock/:id/default", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = Number(req.params.id);
+  try {
+    const [row] = await db.select().from(teaStockTable).where(and(eq(teaStockTable.id, id), eq(teaStockTable.userId, userId)));
+    if (!row) { res.status(404).json({ error: "ei leitud" }); return; }
+    const newDefault = !row.isDefault;
+    await db.update(teaStockTable).set({ isDefault: false }).where(eq(teaStockTable.userId, userId));
+    if (newDefault) {
+      await db.update(teaStockTable).set({ isDefault: true }).where(eq(teaStockTable.id, id));
+    }
+    res.json({ ok: true, isDefault: newDefault });
+  } catch (err) {
+    req.log.error({ err }, "Failed to set tea default");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.put("/brews/sugar-stock/:id/default", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = Number(req.params.id);
+  try {
+    const [row] = await db.select().from(sugarStockTable).where(and(eq(sugarStockTable.id, id), eq(sugarStockTable.userId, userId)));
+    if (!row) { res.status(404).json({ error: "ei leitud" }); return; }
+    const newDefault = !row.isDefault;
+    await db.update(sugarStockTable).set({ isDefault: false }).where(eq(sugarStockTable.userId, userId));
+    if (newDefault) {
+      await db.update(sugarStockTable).set({ isDefault: true }).where(eq(sugarStockTable.id, id));
+    }
+    res.json({ ok: true, isDefault: newDefault });
+  } catch (err) {
+    req.log.error({ err }, "Failed to set sugar default");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.patch("/brews/tea-stock/:id", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const id = Number(req.params.id);

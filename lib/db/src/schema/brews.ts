@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, real, timestamp, boolean } from "drizzle-orm/pg-core";
 
 export const brewSessionsTable = pgTable("brew_sessions", {
   id: serial("id").primaryKey(),
@@ -11,6 +11,7 @@ export const teaStockTable = pgTable("tea_stock", {
   userId: text("user_id").notNull(),
   name: text("name").notNull(),
   qtyG: integer("qty_g").notNull().default(0),
+  isDefault: boolean("is_default").notNull().default(false),
 });
 
 export const sugarStockTable = pgTable("sugar_stock", {
@@ -18,6 +19,7 @@ export const sugarStockTable = pgTable("sugar_stock", {
   userId: text("user_id").notNull(),
   name: text("name").notNull(),
   qtyG: integer("qty_g").notNull().default(0),
+  isDefault: boolean("is_default").notNull().default(false),
 });
 
 export const brewsTable = pgTable("brews", {

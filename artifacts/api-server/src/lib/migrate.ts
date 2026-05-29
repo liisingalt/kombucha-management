@@ -280,6 +280,11 @@ export async function runMigrations(): Promise<void> {
       DELETE FROM ladu_blank_label_types WHERE name != '__default__';
     `);
 
+    await client.query(`
+      ALTER TABLE tea_stock ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE sugar_stock ADD COLUMN IF NOT EXISTS is_default BOOLEAN NOT NULL DEFAULT false;
+    `);
+
     logger.info("Migrations complete");
   } finally {
     client.release();

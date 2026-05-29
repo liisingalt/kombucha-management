@@ -1,14 +1,14 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
-import { FlaskConical, Pencil, Check, X } from "lucide-react";
+import { FlaskConical, Pencil, Check, X, Star } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
-type Tea = { id: number; name: string; qtyG: number };
-type Sugar = { id: number; name: string; qtyG: number };
+type Tea = { id: number; name: string; qtyG: number; isDefault: boolean };
+type Sugar = { id: number; name: string; qtyG: number; isDefault: boolean };
 type SugarMovement = {
   id: number;
   sugarStockId: number;
@@ -289,12 +289,32 @@ function UusPruulimine({
   const addPortion = () => setPortions((prev) => [...prev, emptyPortion()]);
   const removePortion = (i: number) => setPortions((prev) => prev.filter((_, idx) => idx !== i));
 
+  const defaultTeaId = teas.find((t) => t.isDefault)?.id ?? "";
+  const defaultSugarId = sugars.find((s) => s.isDefault)?.id ?? "";
+
+  const autoFilledRef = useRef(false);
+  useEffect(() => {
+    if (autoFilledRef.current) return;
+    const defTea = teas.find((t) => t.isDefault);
+    const defSugar = sugars.find((s) => s.isDefault);
+    if (teas.length === 0 && sugars.length === 0) return;
+    autoFilledRef.current = true;
+    if (defTea) {
+      setPortions((prev) =>
+        prev.map((p, i) => (i === 0 && p.teaStockId === "" ? { ...p, teaStockId: defTea.id } : p))
+      );
+    }
+    if (defSugar) {
+      setSugarStockId((prev) => (prev === "" ? defSugar.id : prev));
+    }
+  }, [teas, sugars]);
+
   const isDirty =
     date !== today ||
     startBoilTime !== "" ||
     tempReachedMin !== "" ||
     temp !== "" ||
-    sugarStockId !== "" ||
+    sugarStockId !== defaultSugarId ||
     coolStartTime !== "" ||
     coolPlace !== "" ||
     coolTemp !== "" ||
@@ -305,7 +325,7 @@ function UusPruulimine({
     portions.some(
       (p) =>
         p.boiledL !== "" ||
-        p.teaStockId !== "" ||
+        p.teaStockId !== defaultTeaId ||
         p.steepMin !== "10" ||
         p.steepHeat !== "0" ||
         p.coldEdited
@@ -620,6 +640,15 @@ function TeeVaru({
     onError: (err: Error) => onError(err.message || "Salvestamine ebaõnnestus"),
   });
 
+  const defaultMut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await authFetch(`/brews/tea-stock/${id}/default`, { method: "PUT" });
+      return res.json();
+    },
+    onSuccess: () => onChange(),
+    onError: (err: Error) => onError(err.message || "Vaikimisi seadistamine ebaõnnestus"),
+  });
+
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -810,15 +839,25 @@ function TeeVaru({
                       {t.qtyG} g
                     </td>
                     <td className="px-4 py-2 text-right">
-                      {confirmDeleteId !== t.id && (
+                      <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => setConfirmDeleteId(t.id)}
-                          className="text-stone-400 hover:text-red-600 text-xs transition"
-                          title="Kustuta sort"
+                          onClick={() => defaultMut.mutate(t.id)}
+                          disabled={defaultMut.isPending}
+                          title={t.isDefault ? "Eemaldas vaikimisi" : "Määra vaikimisi pruulimise teeks"}
+                          className={`transition ${t.isDefault ? "text-amber-500" : "text-stone-300 hover:text-amber-400"}`}
                         >
-                          kustuta
+                          <Star className="w-3.5 h-3.5" fill={t.isDefault ? "currentColor" : "none"} />
                         </button>
-                      )}
+                        {confirmDeleteId !== t.id && (
+                          <button
+                            onClick={() => setConfirmDeleteId(t.id)}
+                            className="text-stone-400 hover:text-red-600 text-xs transition"
+                            title="Kustuta sort"
+                          >
+                            kustuta
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                   {confirmDeleteId === t.id && (
@@ -901,6 +940,15 @@ function SuhkruVaru({
       setName("");
     },
     onError: (err: Error) => onError(err.message || "Salvestamine ebaõnnestus"),
+  });
+
+  const defaultMut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await authFetch(`/brews/sugar-stock/${id}/default`, { method: "PUT" });
+      return res.json();
+    },
+    onSuccess: () => onChange(),
+    onError: (err: Error) => onError(err.message || "Vaikimisi seadistamine ebaõnnestus"),
   });
 
   const renameMut = useMutation({
@@ -1066,6 +1114,14 @@ function SuhkruVaru({
                   </td>
                   <td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-3">
+                      <button
+                        onClick={() => defaultMut.mutate(s.id)}
+                        disabled={defaultMut.isPending}
+                        title={s.isDefault ? "Eemalda vaikimisi" : "Määra vaikimisi pruulimise suhkruks"}
+                        className={`transition ${s.isDefault ? "text-amber-500" : "text-stone-300 hover:text-amber-400"}`}
+                      >
+                        <Star className="w-3.5 h-3.5" fill={s.isDefault ? "currentColor" : "none"} />
+                      </button>
                       <button
                         onClick={() => setHistoryId(historyId === s.id ? null : s.id)}
                         className={`text-xs transition ${historyId === s.id ? "text-amber-700 font-medium" : "text-stone-400 hover:text-amber-700"}`}
