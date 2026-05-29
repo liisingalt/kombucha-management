@@ -823,7 +823,7 @@ function TeeVaru({
           <Field label="Suhe (g/L)">
             <input type="number" min={0} step={0.1} value={fRatio} onChange={(e) => setFRatio(e.target.value)} className={inputCls} />
           </Field>
-          <Field label="Aluskogus (g)">
+          <Field label="Lisakogus (g)">
             <input type="number" min={0} step={0.1} value={fBase} onChange={(e) => setFBase(e.target.value)} className={inputCls} />
           </Field>
         </div>
