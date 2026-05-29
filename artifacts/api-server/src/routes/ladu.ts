@@ -89,6 +89,7 @@ const commitSchema = z.object({
   type: z.string().min(1),
   summary: z.string().min(1),
   deltas: z.array(deltaSchema),
+  bottlingDate: z.string().optional(),
   villimineGoods: z
     .object({
       flavorId: z.number().int(),
@@ -274,7 +275,7 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
     return;
   }
-  const { type, summary, deltas, villimineGoods } = parsed.data;
+  const { type, summary, deltas, villimineGoods, bottlingDate } = parsed.data;
 
   try {
     await db.transaction(async (tx) => {
@@ -546,18 +547,25 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
         storedDeltas.push({ kind: "finished_goods", flavorId: vFlavorId, size: vSize, amount: vAmount });
         if (villimineGoods.flavoringEventId != null) {
           storedDeltas.push({ kind: "trace", flavoringEventId: villimineGoods.flavoringEventId });
-          if (villimineGoods.savedStarterG != null) {
+          const eventUpdate: { savedStarterG?: number; bottlingDate?: string } = {};
+          if (villimineGoods.savedStarterG != null) eventUpdate.savedStarterG = villimineGoods.savedStarterG;
+          if (bottlingDate) eventUpdate.bottlingDate = bottlingDate;
+          if (Object.keys(eventUpdate).length > 0) {
             await tx
               .update(flavoringEventTable)
-              .set({ savedStarterG: villimineGoods.savedStarterG })
+              .set(eventUpdate)
               .where(and(eq(flavoringEventTable.id, villimineGoods.flavoringEventId), eq(flavoringEventTable.userId, userId)));
           }
         }
       }
 
+      const movementCreatedAt = bottlingDate ? new Date(bottlingDate) : undefined;
       await tx
         .insert(laduMovementsTable)
-        .values({ userId, type, summary, deltas: storedDeltas as unknown[] });
+        .values({
+          userId, type, summary, deltas: storedDeltas as unknown[],
+          ...(movementCreatedAt ? { createdAt: movementCreatedAt } : {}),
+        });
     });
 
     res.json(await fetchAll(userId));

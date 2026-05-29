@@ -195,10 +195,10 @@ export default function LaduPage() {
   });
 
   const commitMutation = useMutation({
-    mutationFn: async ({ deltas, type, summary, villimineGoods }: { deltas: unknown[]; type: string; summary: string; villimineGoods?: { flavorId: number; size: number; amount: number; flavoringEventId?: number } }) => {
+    mutationFn: async ({ deltas, type, summary, villimineGoods, bottlingDate }: { deltas: unknown[]; type: string; summary: string; villimineGoods?: { flavorId: number; size: number; amount: number; flavoringEventId?: number }; bottlingDate?: string }) => {
       const res = await authFetch("/ladu/commit", {
         method: "POST",
-        body: JSON.stringify({ type, summary, deltas, ...(villimineGoods ? { villimineGoods } : {}) }),
+        body: JSON.stringify({ type, summary, deltas, ...(villimineGoods ? { villimineGoods } : {}), ...(bottlingDate ? { bottlingDate } : {}) }),
       });
       return res.json() as Promise<LaduData>;
     },
@@ -488,7 +488,7 @@ export default function LaduPage() {
   );
 }
 
-type CommitMutation = ReturnType<typeof useMutation<LaduData, Error, { deltas: unknown[]; type: string; summary: string; villimineGoods?: { flavorId: number; size: number; amount: number; flavoringEventId?: number } }>>;
+type CommitMutation = ReturnType<typeof useMutation<LaduData, Error, { deltas: unknown[]; type: string; summary: string; villimineGoods?: { flavorId: number; size: number; amount: number; flavoringEventId?: number }; bottlingDate?: string }>>;
 
 function LaduTab({ data, flavorName, bottleQty, updateCapMutation, flash }: { data: LaduData; flavorName: (id: number) => string; bottleQty: (size: number) => number; updateCapMutation: ReturnType<typeof useMutation<Cap, Error, { id: number; size: number; type: string; color: string }>>; flash: (msg: string) => void }) {
   const [editingCapId, setEditingCapId] = useState<number | null>(null);
@@ -772,8 +772,11 @@ function LaduTab({ data, flavorName, bottleQty, updateCapMutation, flash }: { da
 }
 
 function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, ferms, brews }: { data: LaduData; flavorName: (id: number) => string; commitMutation: CommitMutation; flash: (msg: string) => void; flavEvents: EventMin[]; ferms: FermMin[]; brews: BrewMin[] }) {
+  const today = new Date().toISOString().slice(0, 10);
   const [flavorId, setFlavorId] = useState<number | "">(data.flavors[0]?.id ?? "");
   const [size, setSize] = useState<number>(330);
+  const [date, setDate] = useState(today);
+  const [selectedBrewId, setSelectedBrewId] = useState<number | "">("");
   const [linkedEventId, setLinkedEventId] = useState<number | "">("");
   const [savedStarterG, setSavedStarterG] = useState("");
   const [total, setTotal] = useState("");
@@ -810,8 +813,39 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
     fromBlank !== "0" ||
     savedStarterG !== "" ||
     linkedEventId !== "" ||
-    oldCaps !== "";
+    oldCaps !== "" ||
+    date !== today ||
+    selectedBrewId !== "";
   useUnsavedChanges(isDirtyVillimine);
+
+  const brewFermIds = selectedBrewId !== ""
+    ? new Set(ferms.filter((f) => f.brewId === (selectedBrewId as number)).map((f) => f.id))
+    : null;
+  const filteredEvents = flavEvents
+    .filter((e) => e.fermentationBatchId != null && (brewFermIds === null || brewFermIds.has(e.fermentationBatchId)))
+    .sort((a, b) => b.id - a.id)
+    .slice(0, 40);
+
+  useEffect(() => {
+    if (linkedEventId === "" || brewFermIds === null) return;
+    const stillInFilter = filteredEvents.some((e) => e.id === linkedEventId);
+    if (!stillInFilter) setLinkedEventId("");
+  }, [selectedBrewId]);
+
+  const brewOptionLabel = (b: BrewMin): string => {
+    const dateStr = new Date(b.date).toLocaleDateString("et-EE");
+    if (b.sessionId != null) {
+      const sessionBrews = brews.filter((x) => x.sessionId === b.sessionId).sort((a, c) => a.id - c.id);
+      const idx = sessionBrews.findIndex((x) => x.id === b.id) + 1;
+      return `${dateStr} · Ports ${idx}/${sessionBrews.length}`;
+    }
+    return dateStr;
+  };
+
+  const brewsWithEvents = brews.filter((b) => {
+    const bFermIds = new Set(ferms.filter((f) => f.brewId === b.id).map((f) => f.id));
+    return flavEvents.some((e) => e.fermentationBatchId != null && bFermIds.has(e.fermentationBatchId));
+  }).sort((a, b) => b.id - a.id);
 
   const sizeCaps = data.caps.filter((c) => c.size === size);
 
@@ -871,6 +905,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
         deltas,
         type: "villimine",
         summary: parts.join(" · "),
+        bottlingDate: date,
         villimineGoods: {
           flavorId: flavorId as number,
           size,
@@ -882,7 +917,7 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
       {
         onSuccess: () => {
           flash("Villimine kirja pandud");
-          setTotal(""); setReturned(""); setFromCustom(""); setFromBlank("0"); setOldCaps(""); setLinkedEventId(""); setSavedStarterG("");
+          setTotal(""); setReturned(""); setFromCustom(""); setFromBlank("0"); setOldCaps(""); setLinkedEventId(""); setSavedStarterG(""); setDate(today); setSelectedBrewId("");
         },
       }
     );
@@ -908,25 +943,41 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
           )}
         </div>
 
+        <div>
+          <label className="block text-sm text-stone-600 mb-1">Villimise kuupäev</label>
+          <input
+            type="date"
+            value={date}
+            max={today}
+            onChange={(e) => setDate(e.target.value || today)}
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 focus:border-amber-600 focus:outline-none"
+          />
+        </div>
+
+        {brewsWithEvents.length > 0 && (
+          <div>
+            <label className="block text-sm text-stone-600 mb-1">
+              Pruulimine <span className="text-stone-400">(filtreerib maitsestamise kirjeid)</span>
+            </label>
+            <select
+              value={selectedBrewId}
+              onChange={(e) => setSelectedBrewId(e.target.value === "" ? "" : Number(e.target.value))}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 focus:border-amber-600 focus:outline-none"
+            >
+              <option value="">— kõik pruulimised —</option>
+              {brewsWithEvents.map((b) => (
+                <option key={b.id} value={b.id}>{brewOptionLabel(b)}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {(() => {
-          const linkableEvents = flavEvents
-            .filter((e) => e.fermentationBatchId != null)
-            .sort((a, b) => b.id - a.id)
-            .slice(0, 20);
-          if (linkableEvents.length === 0) return null;
-          const selectedEvent = linkableEvents.find((e) => e.id === linkedEventId);
+          if (filteredEvents.length === 0) return null;
+          const selectedEvent = filteredEvents.find((e) => e.id === linkedEventId);
           const selectedFerm = selectedEvent?.fermentationBatchId != null ? ferms.find((f) => f.id === selectedEvent.fermentationBatchId) : null;
           const selectedBrew = selectedFerm?.brewId != null ? brews.find((b) => b.id === selectedFerm.brewId) : null;
-          let brewLabel: string | null = null;
-          if (selectedBrew) {
-            if (selectedBrew.sessionId != null) {
-              const sessionBrews = brews.filter((b) => b.sessionId === selectedBrew.sessionId).sort((a, b) => a.id - b.id);
-              const idx = sessionBrews.findIndex((b) => b.id === selectedBrew.id) + 1;
-              brewLabel = `Pruulimine: ${new Date(selectedBrew.date).toLocaleDateString("et-EE")} · Ports ${idx}/${sessionBrews.length}`;
-            } else {
-              brewLabel = `Pruulimine: ${new Date(selectedBrew.date).toLocaleDateString("et-EE")}`;
-            }
-          }
+          const brewLabel = selectedBrew ? brewOptionLabel(selectedBrew) : null;
           return (
             <div>
               <label className="block text-sm text-stone-600 mb-1">Seo maitsestamise kirjega <span className="text-stone-400">(jälgitavus, valikuline)</span></label>
@@ -936,14 +987,14 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
                 className="w-full rounded-lg border border-stone-300 px-3 py-2 focus:border-amber-600 focus:outline-none"
               >
                 <option value="">— ei seo —</option>
-                {linkableEvents.map((e) => (
+                {filteredEvents.map((e) => (
                   <option key={e.id} value={e.id}>
                     {new Date(e.date).toLocaleDateString("et-EE")}{e.bottlingDate ? ` → villimine ${new Date(e.bottlingDate).toLocaleDateString("et-EE")}` : ""}
                   </option>
                 ))}
               </select>
               {brewLabel && (
-                <p className="text-xs text-amber-700 mt-1">{brewLabel}</p>
+                <p className="text-xs text-amber-700 mt-1">Pruulimine: {brewLabel}</p>
               )}
             </div>
           );
@@ -2427,7 +2478,9 @@ function AjaluguTab({
                     {m.type}
                   </span>
                   <span className="text-xs text-stone-400">
-                    {new Date(m.createdAt).toLocaleString("et-EE")}
+                    {m.type === "villimine"
+                      ? new Date(m.createdAt).toLocaleDateString("et-EE")
+                      : new Date(m.createdAt).toLocaleString("et-EE")}
                   </span>
                 </div>
                 <div className="text-sm text-stone-700">{m.summary}</div>
