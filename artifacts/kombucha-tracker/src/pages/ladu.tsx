@@ -2271,6 +2271,8 @@ function formatQty(n: number | null | undefined): string {
   return rounded % 1 === 0 ? String(rounded) : rounded.toLocaleString("et-EE");
 }
 
+const SALE_TYPES = ["müük", "väljastamine", "kinkimine"];
+
 function AjaluguTab({
   data,
   undoMutation,
@@ -2294,6 +2296,12 @@ function AjaluguTab({
   const [editCapId, setEditCapId] = useState<number | "">("");
   const [editQty, setEditQty] = useState<string>("");
 
+  const [editingSaleMovId, setEditingSaleMovId] = useState<number | null>(null);
+  const [editSaleSold, setEditSaleSold] = useState("0");
+  const [editSaleGiven, setEditSaleGiven] = useState("0");
+  const [editSaleNote, setEditSaleNote] = useState("");
+  const [editSaleError, setEditSaleError] = useState<string | null>(null);
+
   const updateMovMutation = useMutation({
     mutationFn: async ({ id, capId, quantity }: { id: number; capId: number | null; quantity?: number }) => {
       const res = await authFetch(`/ladu/movements/${id}`, {
@@ -2309,6 +2317,23 @@ function AjaluguTab({
       flash("Kanne uuendatud");
     },
     onError: (err: Error) => flashError(err.message),
+  });
+
+  const patchSaleMutation = useMutation({
+    mutationFn: async ({ id, sold, given, note }: { id: number; sold: number; given: number; note: string }) => {
+      const res = await authFetch(`/ladu/movements/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ sold, given, note }),
+      });
+      return res.json() as Promise<LaduData>;
+    },
+    onSuccess: (updated) => {
+      qc.setQueryData(LADU_QUERY_KEY, updated);
+      setEditingSaleMovId(null);
+      setEditSaleError(null);
+      flash("Müügikanne uuendatud");
+    },
+    onError: (err: Error) => setEditSaleError(err.message || "Salvestamine ebaõnnestus"),
   });
 
   if (data.movements.length === 0)
@@ -2340,6 +2365,45 @@ function AjaluguTab({
     setEditingMovId(m.id);
   }
 
+  function startEditSale(m: Movement) {
+    const fgDelta = (m.deltas as Array<{ kind: string; flavorId?: number; size?: number; amount?: number }>)
+      .find((d) => d.kind === "finished_goods");
+    const total = Math.abs(fgDelta?.amount ?? 0);
+    let sold = 0;
+    let given = 0;
+    if (m.type === "müük") {
+      sold = total;
+      given = 0;
+    } else if (m.type === "kinkimine") {
+      sold = 0;
+      given = total;
+    } else {
+      const soldMatch = m.summary.match(/müüdud:\s*(\d+)/);
+      sold = soldMatch ? parseInt(soldMatch[1], 10) : 0;
+      given = total - sold;
+    }
+    const parts = m.summary.split(" · ");
+    const noteParts = parts.filter(
+      (p) => !p.match(/^müüdud:\s*\d+$/) && !p.match(/^ära antud:\s*\d+$/) && parts.indexOf(p) !== 0
+    );
+    setEditSaleSold(String(sold));
+    setEditSaleGiven(String(given));
+    setEditSaleNote(noteParts.join(" · "));
+    setEditSaleError(null);
+    setEditingSaleMovId(m.id);
+    setEditingMovId(null);
+  }
+
+  function saveSaleEdit(movId: number) {
+    const sold = parseInt(editSaleSold, 10) || 0;
+    const given = parseInt(editSaleGiven, 10) || 0;
+    if (sold + given <= 0) {
+      setEditSaleError("Sisesta vähemalt üks kogus");
+      return;
+    }
+    patchSaleMutation.mutate({ id: movId, sold, given, note: editSaleNote });
+  }
+
   return (
     <div className="space-y-2">
       {data.movements.map((m) => {
@@ -2347,6 +2411,7 @@ function AjaluguTab({
         const capDelta = (m.deltas as Array<{ kind: string; key?: number; amount?: number }>).find((d) => d.kind === "cap");
         const currentCap = capDelta?.key ? data.caps.find((c) => c.id === capDelta.key) : undefined;
         const isEditing = editingMovId === m.id;
+        const isEditingSale = editingSaleMovId === m.id;
         const blankLabelCount = m.type === "villimine"
           ? (m.deltas as Array<{ kind: string; amount?: number }>)
               .filter((d) => d.kind === "blank_label")
@@ -2383,10 +2448,19 @@ function AjaluguTab({
                 )}
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
-                {m.type === "villimine" && !isEditing && (
+                {m.type === "villimine" && !isEditing && !isEditingSale && (
                   <button
                     type="button"
                     onClick={() => startEdit(m)}
+                    className="text-stone-400 hover:text-amber-700 flex items-center gap-1 text-xs"
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> muuda
+                  </button>
+                )}
+                {SALE_TYPES.includes(m.type) && !isEditingSale && !isEditing && (
+                  <button
+                    type="button"
+                    onClick={() => startEditSale(m)}
                     className="text-stone-400 hover:text-amber-700 flex items-center gap-1 text-xs"
                   >
                     <Pencil className="w-3.5 h-3.5" /> muuda
@@ -2468,6 +2542,73 @@ function AjaluguTab({
                 </div>
               );
             })()}
+
+            {isEditingSale && (
+              <div className="mt-3 pt-3 border-t border-stone-100 space-y-3">
+                <div className="text-xs font-medium text-stone-500">Korrigeeri müügikannet</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-stone-500 mb-1">Müüdud (tk)</label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      value={editSaleSold}
+                      onChange={(e) => setEditSaleSold(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveSaleEdit(m.id); if (e.key === "Escape") { setEditingSaleMovId(null); setEditSaleError(null); } }}
+                      className="w-full rounded-lg border border-stone-300 px-2 py-1.5 text-xs text-stone-800 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-stone-500 mb-1">Ära antud (tk)</label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      value={editSaleGiven}
+                      onChange={(e) => setEditSaleGiven(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveSaleEdit(m.id); if (e.key === "Escape") { setEditingSaleMovId(null); setEditSaleError(null); } }}
+                      className="w-full rounded-lg border border-stone-300 px-2 py-1.5 text-xs text-stone-800 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-stone-500 mb-1">Märkus (valikuline)</label>
+                  <input
+                    type="text"
+                    value={editSaleNote}
+                    onChange={(e) => setEditSaleNote(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveSaleEdit(m.id); if (e.key === "Escape") { setEditingSaleMovId(null); setEditSaleError(null); } }}
+                    placeholder="nt. tellijale, kliendiüritus…"
+                    className="w-full rounded-lg border border-stone-300 px-2 py-1.5 text-xs text-stone-800 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600"
+                  />
+                </div>
+                {editSaleError && (
+                  <div className="text-xs text-red-600 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {editSaleError}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => saveSaleEdit(m.id)}
+                    disabled={patchSaleMutation.isPending}
+                    className="flex items-center gap-1 text-xs px-3 py-1.5 bg-amber-700 text-white rounded-lg hover:bg-amber-800 disabled:opacity-40"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    {patchSaleMutation.isPending ? "Salvestan…" : "Salvesta"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setEditingSaleMovId(null); setEditSaleError(null); }}
+                    className="flex items-center gap-1 text-xs px-3 py-1.5 border border-stone-300 rounded-lg hover:bg-stone-50"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Tühista
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
       })}

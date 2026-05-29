@@ -573,6 +573,111 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
 
 class UserError extends Error {}
 
+const patchSaleMovementSchema = z.object({
+  sold: z.number().int().min(0),
+  given: z.number().int().min(0),
+  note: z.string().optional(),
+});
+
+router.patch("/ladu/movements/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const parsed = patchSaleMovementSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
+    return;
+  }
+  const { sold, given, note } = parsed.data;
+  const totalOut = sold + given;
+  if (totalOut <= 0) {
+    res.status(400).json({ error: "Sisesta müüdud või ära antud kogus" });
+    return;
+  }
+  try {
+    await db.transaction(async (tx) => {
+      const [movement] = await tx
+        .select()
+        .from(laduMovementsTable)
+        .where(and(eq(laduMovementsTable.id, id), eq(laduMovementsTable.userId, userId)));
+      if (!movement) {
+        throw Object.assign(new Error("Kannet ei leitud"), { code: "NOT_FOUND" });
+      }
+      if (!["müük", "väljastamine", "kinkimine"].includes(movement.type)) {
+        throw Object.assign(new Error("Seda tüüpi kannet ei saa muuta"), { code: "FORBIDDEN" });
+      }
+      const deltas = movement.deltas as StoredDelta[];
+      const fgDelta = deltas.find((d): d is Extract<StoredDelta, { kind: "finished_goods" }> => d.kind === "finished_goods");
+      if (!fgDelta) {
+        throw Object.assign(new Error("Kanne pole korrektne"), { code: "BAD_REQUEST" });
+      }
+      const oldAmount = fgDelta.amount;
+      const newAmount = -totalOut;
+      const diff = newAmount - oldAmount;
+      const [existing] = await tx
+        .select()
+        .from(laduFinishedGoodsTable)
+        .where(and(
+          eq(laduFinishedGoodsTable.userId, userId),
+          eq(laduFinishedGoodsTable.flavorId, fgDelta.flavorId),
+          eq(laduFinishedGoodsTable.size, fgDelta.size)
+        ));
+      const currentQty = existing?.qty ?? 0;
+      const newQty = currentQty + diff;
+      if (newQty < 0) {
+        const insufficientErr = new Error(`Laos pole piisavalt valmistoodangut — laos ${currentQty + (-oldAmount)}, sooviti ${totalOut}`);
+        (insufficientErr as any).code = "INSUFFICIENT_STOCK";
+        throw insufficientErr;
+      }
+      if (existing) {
+        await tx.update(laduFinishedGoodsTable)
+          .set({ qty: newQty })
+          .where(eq(laduFinishedGoodsTable.id, existing.id));
+      } else {
+        await tx.insert(laduFinishedGoodsTable).values({
+          userId,
+          flavorId: fgDelta.flavorId,
+          size: fgDelta.size,
+          qty: newQty,
+        });
+      }
+      const [flavor] = await tx
+        .select()
+        .from(laduFlavorsTable)
+        .where(and(eq(laduFlavorsTable.id, fgDelta.flavorId), eq(laduFlavorsTable.userId, userId)));
+      const flavorName = flavor?.name ?? String(fgDelta.flavorId);
+      const parts: string[] = [`${flavorName} ${fgDelta.size} ml`];
+      if (sold > 0) parts.push(`müüdud: ${sold}`);
+      if (given > 0) parts.push(`ära antud: ${given}`);
+      if (note?.trim()) parts.push(note.trim());
+      const type = sold > 0 && given > 0 ? "väljastamine" : sold > 0 ? "müük" : "kinkimine";
+      const newDelta: StoredDelta = { kind: "finished_goods", flavorId: fgDelta.flavorId, size: fgDelta.size, amount: newAmount };
+      await tx.update(laduMovementsTable)
+        .set({ type, summary: parts.join(" · "), deltas: [newDelta] as unknown[] })
+        .where(eq(laduMovementsTable.id, id));
+    });
+    res.json(await fetchAll(userId));
+  } catch (err) {
+    if ((err as any).code === "NOT_FOUND") {
+      res.status(404).json({ error: (err as Error).message });
+      return;
+    }
+    if ((err as any).code === "FORBIDDEN") {
+      res.status(403).json({ error: (err as Error).message });
+      return;
+    }
+    if ((err as any).code === "INSUFFICIENT_STOCK") {
+      res.status(409).json({ error: (err as Error).message });
+      return;
+    }
+    req.log.error({ err }, "Failed to patch sale movement");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.put("/ladu/movements/:id", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const id = parseInt(req.params.id, 10);
