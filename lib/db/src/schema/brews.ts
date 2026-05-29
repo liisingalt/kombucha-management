@@ -26,6 +26,7 @@ export const brewsTable = pgTable("brews", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  createdByName: text("created_by_name"),
   date: text("date").notNull(),
   boiledL: real("boiled_l").notNull(),
   startBoilTime: text("start_boil_time").default(""),
@@ -58,6 +59,7 @@ export const sugarStockMovementsTable = pgTable("sugar_stock_movements", {
   reason: text("reason").notNull(),
   brewId: integer("brew_id"),
   note: text("note"),
+  createdByName: text("created_by_name"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -19,6 +19,7 @@ import {
 } from "@workspace/db";
 import { eq, and, gt, ne } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { resolveActorName } from "../lib/actorName";
 
 const router = Router();
 
@@ -269,7 +270,8 @@ router.get("/ladu", requireAuth, async (req, res) => {
 });
 
 router.post("/ladu/commit", requireAuth, async (req, res) => {
-  const { userId } = req as AuthenticatedRequest;
+  const { userId, actualUserId } = req as AuthenticatedRequest;
+  const createdByName = await resolveActorName(actualUserId);
   const parsed = commitSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
@@ -563,7 +565,7 @@ router.post("/ladu/commit", requireAuth, async (req, res) => {
       await tx
         .insert(laduMovementsTable)
         .values({
-          userId, type, summary, deltas: storedDeltas as unknown[],
+          userId, type, summary, deltas: storedDeltas as unknown[], createdByName,
           ...(movementCreatedAt ? { createdAt: movementCreatedAt } : {}),
         });
     });
@@ -1332,7 +1334,8 @@ router.get("/ladu/finished-goods", requireAuth, async (req, res) => {
 });
 
 router.post("/ladu/finished-goods/commit", requireAuth, async (req, res) => {
-  const { userId } = req as AuthenticatedRequest;
+  const { userId, actualUserId } = req as AuthenticatedRequest;
+  const createdByName = await resolveActorName(actualUserId);
   const parsed = finishedGoodsCommitSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
@@ -1377,7 +1380,7 @@ router.post("/ladu/finished-goods/commit", requireAuth, async (req, res) => {
       if (note?.trim()) parts.push(note.trim());
       const type = sold > 0 && given > 0 ? "väljastamine" : sold > 0 ? "müük" : "kinkimine";
       const storedDelta: StoredDelta = { kind: "finished_goods", flavorId, size, amount: -totalOut };
-      await tx.insert(laduMovementsTable).values({ userId, type, summary: parts.join(" · "), deltas: [storedDelta] as unknown[] });
+      await tx.insert(laduMovementsTable).values({ userId, type, summary: parts.join(" · "), deltas: [storedDelta] as unknown[], createdByName });
     });
     res.json(await fetchAll(userId));
   } catch (err) {

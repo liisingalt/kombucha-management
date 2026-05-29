@@ -29,7 +29,7 @@ type EventMin = { id: number; date: string; bottlingDate: string | null; ferment
 type Label = { id: number; flavorId: number; size: number; qty: number };
 type Cap = { id: number; size: number; type: string; color: string; qty: number };
 type CustomLabelBottle = { id: number; size: number; qty: number };
-type Movement = { id: number; type: string; summary: string; deltas: unknown[]; createdAt: string };
+type Movement = { id: number; type: string; summary: string; deltas: unknown[]; createdByName?: string | null; createdAt: string };
 type BlankLabelType = { id: number; userId: string; name: string };
 type BlankLabel = { id: number; userId: string; blankLabelTypeId: number; size: number; qty: number };
 type FinishedGoods = { id: number; flavorId: number; size: number; qty: number };
@@ -2778,6 +2778,9 @@ function AjaluguTab({
                       ? new Date(m.createdAt).toLocaleDateString("et-EE")
                       : new Date(m.createdAt).toLocaleString("et-EE")}
                   </span>
+                  {m.createdByName && (
+                    <span className="text-xs text-stone-400">· {m.createdByName}</span>
+                  )}
                 </div>
                 <div className="text-sm text-stone-700">{m.summary}</div>
                 {currentCap && !isEditing && (

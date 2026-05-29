@@ -290,6 +290,11 @@ export async function runMigrations(): Promise<void> {
       ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sugar_ratio_g_per_l REAL NOT NULL DEFAULT 80;
     `);
     await client.query(`
+      ALTER TABLE ladu_movements ADD COLUMN IF NOT EXISTS created_by_name TEXT;
+      ALTER TABLE brews ADD COLUMN IF NOT EXISTS created_by_name TEXT;
+      ALTER TABLE sugar_stock_movements ADD COLUMN IF NOT EXISTS created_by_name TEXT;
+    `);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS team_invites (
         id           SERIAL PRIMARY KEY,
         owner_user_id TEXT NOT NULL,

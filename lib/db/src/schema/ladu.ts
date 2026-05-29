@@ -57,6 +57,7 @@ export const laduMovementsTable = pgTable("ladu_movements", {
   type: text("type").notNull(),
   summary: text("summary").notNull(),
   deltas: jsonb("deltas").notNull(),
+  createdByName: text("created_by_name"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

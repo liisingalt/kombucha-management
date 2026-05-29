@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { teaStockTable, sugarStockTable, sugarStockMovementsTable, brewsTable, brewSessionsTable, profilesTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
+import { resolveActorName } from "../lib/actorName";
 
 const router = Router();
 
@@ -171,7 +172,8 @@ router.get("/brews", requireAuth, async (req, res) => {
 });
 
 router.post("/brews", requireAuth, async (req, res) => {
-  const { userId } = req as AuthenticatedRequest;
+  const { userId, actualUserId } = req as AuthenticatedRequest;
+  const createdByName = await resolveActorName(actualUserId);
   const b = req.body;
 
   type PortionPayload = {
@@ -215,6 +217,7 @@ router.post("/brews", requireAuth, async (req, res) => {
 
         await tx.insert(brewsTable).values({
           userId,
+          createdByName,
           sessionId,
           date: b.date,
           boiledL: Number(p.boiledL) || 0,
@@ -263,7 +266,7 @@ router.post("/brews", requireAuth, async (req, res) => {
               .set({ qtyG: ss.qtyG - sugarG })
               .where(eq(sugarStockTable.id, sugarStockId));
             await tx.insert(sugarStockMovementsTable).values({
-              userId, sugarStockId, deltaG: -sugarG, reason: "brew", note: b.date ?? null,
+              userId, sugarStockId, deltaG: -sugarG, reason: "brew", note: b.date ?? null, createdByName,
             });
           }
         }

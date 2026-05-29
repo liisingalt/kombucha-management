@@ -25,6 +25,7 @@ type Brew = {
   date: string;
   boiledL: number;
   startBoilTime: string;
+  createdByName?: string | null;
   tempReachedMin: number | null;
   temp: number | null;
   teaStockId: number | null;
@@ -1482,6 +1483,7 @@ function BrewCard({
           <div className="text-xs text-stone-500 mt-0.5">
             Tee {brew.teaG} g · suhkur {brew.sugarG} g · juuretis {brew.starterG} g
             {brew.electricityKwh != null ? ` · ${brew.electricityKwh} kW/h` : ""}
+            {brew.createdByName ? ` · ${brew.createdByName}` : ""}
           </div>
         </div>
         <div className="flex gap-3 shrink-0">
