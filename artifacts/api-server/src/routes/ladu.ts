@@ -1000,6 +1000,185 @@ router.delete("/ladu/movements/:id", requireAuth, async (req, res) => {
   }
 });
 
+router.put("/ladu/bottling/:id", requireAuth, async (req, res) => {
+  const { userId } = req as AuthenticatedRequest;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const parsed = commitSchema.safeParse({ ...req.body, type: "villimine" });
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid input", issues: parsed.error.issues });
+    return;
+  }
+  const { summary, deltas, villimineGoods, bottlingDate } = parsed.data;
+  try {
+    await db.transaction(async (tx) => {
+      const [movement] = await tx
+        .select()
+        .from(laduMovementsTable)
+        .where(and(eq(laduMovementsTable.id, id), eq(laduMovementsTable.userId, userId)));
+      if (!movement) throw Object.assign(new Error("Kannet ei leitud"), { code: "NOT_FOUND" });
+      if (movement.type !== "villimine") throw Object.assign(new Error("Ainult villimise kannet saab täisvormi kaudu muuta"), { code: "FORBIDDEN" });
+
+      // Reverse old deltas
+      const oldDeltas = movement.deltas as StoredDelta[];
+      for (const delta of oldDeltas) {
+        if (delta.kind === "bottle") {
+          const [row] = await tx.select().from(laduBottlesTable).where(and(eq(laduBottlesTable.userId, userId), eq(laduBottlesTable.size, delta.key)));
+          if (row) await tx.update(laduBottlesTable).set({ qty: row.qty - delta.amount }).where(eq(laduBottlesTable.id, row.id));
+        } else if (delta.kind === "label") {
+          const [row] = await tx.select().from(laduLabelsTable).where(and(eq(laduLabelsTable.userId, userId), eq(laduLabelsTable.flavorId, delta.flavorId), eq(laduLabelsTable.size, delta.size)));
+          if (row) await tx.update(laduLabelsTable).set({ qty: row.qty - delta.amount }).where(eq(laduLabelsTable.id, row.id));
+        } else if (delta.kind === "cap") {
+          const [row] = await tx.select().from(laduCapsTable).where(and(eq(laduCapsTable.userId, userId), eq(laduCapsTable.id, delta.key)));
+          if (row) await tx.update(laduCapsTable).set({ qty: row.qty - delta.amount }).where(eq(laduCapsTable.id, row.id));
+        } else if (delta.kind === "custom_label_bottle") {
+          const [row] = await tx.select().from(laduCustomLabelBottlesTable).where(and(eq(laduCustomLabelBottlesTable.userId, userId), eq(laduCustomLabelBottlesTable.size, delta.size)));
+          if (row) await tx.update(laduCustomLabelBottlesTable).set({ qty: row.qty - delta.amount }).where(eq(laduCustomLabelBottlesTable.id, row.id));
+        } else if (delta.kind === "wire_cage") {
+          const [row] = await tx.select().from(laduWireCagesTable).where(eq(laduWireCagesTable.userId, userId));
+          if (row) await tx.update(laduWireCagesTable).set({ qty: row.qty - delta.amount }).where(eq(laduWireCagesTable.id, row.id));
+        } else if (delta.kind === "reusable_cap") {
+          const [row] = await tx.select().from(laduReusableCapsTable).where(and(eq(laduReusableCapsTable.userId, userId), eq(laduReusableCapsTable.size, delta.size)));
+          if (row) await tx.update(laduReusableCapsTable).set({ qty: row.qty - delta.amount }).where(eq(laduReusableCapsTable.id, row.id));
+        } else if (delta.kind === "blank_label") {
+          const [row] = await tx.select().from(laduBlankLabelsTable).where(and(eq(laduBlankLabelsTable.userId, userId), eq(laduBlankLabelsTable.blankLabelTypeId, delta.blankLabelTypeId), eq(laduBlankLabelsTable.size, delta.size)));
+          if (row) await tx.update(laduBlankLabelsTable).set({ qty: row.qty - delta.amount }).where(eq(laduBlankLabelsTable.id, row.id));
+        } else if (delta.kind === "finished_goods") {
+          const [row] = await tx.select().from(laduFinishedGoodsTable).where(and(eq(laduFinishedGoodsTable.userId, userId), eq(laduFinishedGoodsTable.flavorId, delta.flavorId), eq(laduFinishedGoodsTable.size, delta.size)));
+          if (row) await tx.update(laduFinishedGoodsTable).set({ qty: row.qty - delta.amount }).where(eq(laduFinishedGoodsTable.id, row.id));
+        } else if (delta.kind === "returned_bottle") {
+          const [row] = await tx.select().from(laduReturnedBottlesTable).where(and(eq(laduReturnedBottlesTable.userId, userId), eq(laduReturnedBottlesTable.flavorId, delta.flavorId), eq(laduReturnedBottlesTable.size, delta.size)));
+          if (row) await tx.update(laduReturnedBottlesTable).set({ qty: row.qty - delta.amount }).where(eq(laduReturnedBottlesTable.id, row.id));
+        }
+      }
+
+      // Apply new deltas (same logic as POST /ladu/commit)
+      const storedDeltas: StoredDelta[] = [];
+      for (const delta of deltas) {
+        if (delta.kind === "bottle") {
+          const [existing] = await tx.select().from(laduBottlesTable).where(and(eq(laduBottlesTable.userId, userId), eq(laduBottlesTable.size, delta.key)));
+          if (existing) {
+            await tx.update(laduBottlesTable).set({ qty: existing.qty + delta.amount }).where(eq(laduBottlesTable.id, existing.id));
+          } else {
+            await tx.insert(laduBottlesTable).values({ userId, size: delta.key, qty: delta.amount });
+          }
+          storedDeltas.push({ kind: "bottle", key: delta.key, amount: delta.amount });
+        } else if (delta.kind === "label") {
+          const [existing] = await tx.select().from(laduLabelsTable).where(and(eq(laduLabelsTable.userId, userId), eq(laduLabelsTable.flavorId, delta.flavorId), eq(laduLabelsTable.size, delta.size)));
+          if (existing) {
+            await tx.update(laduLabelsTable).set({ qty: existing.qty + delta.amount }).where(eq(laduLabelsTable.id, existing.id));
+          } else {
+            await tx.insert(laduLabelsTable).values({ userId, flavorId: delta.flavorId, size: delta.size, qty: delta.amount });
+          }
+          storedDeltas.push({ kind: "label", flavorId: delta.flavorId, size: delta.size, amount: delta.amount });
+        } else if (delta.kind === "cap") {
+          if (delta.key !== 0) {
+            const [existing] = await tx.select().from(laduCapsTable).where(and(eq(laduCapsTable.userId, userId), eq(laduCapsTable.id, delta.key)));
+            if (existing) await tx.update(laduCapsTable).set({ qty: existing.qty + delta.amount }).where(eq(laduCapsTable.id, existing.id));
+            storedDeltas.push({ kind: "cap", key: delta.key, amount: delta.amount });
+          }
+        } else if (delta.kind === "custom_label_bottle") {
+          const [existing] = await tx.select().from(laduCustomLabelBottlesTable).where(and(eq(laduCustomLabelBottlesTable.userId, userId), eq(laduCustomLabelBottlesTable.size, delta.size)));
+          if (existing) {
+            await tx.update(laduCustomLabelBottlesTable).set({ qty: existing.qty + delta.amount }).where(eq(laduCustomLabelBottlesTable.id, existing.id));
+          } else {
+            await tx.insert(laduCustomLabelBottlesTable).values({ userId, size: delta.size, qty: delta.amount });
+          }
+          storedDeltas.push({ kind: "custom_label_bottle", size: delta.size, amount: delta.amount });
+        } else if (delta.kind === "wire_cage") {
+          const [existing] = await tx.select().from(laduWireCagesTable).where(eq(laduWireCagesTable.userId, userId));
+          if (existing) {
+            await tx.update(laduWireCagesTable).set({ qty: existing.qty + delta.amount }).where(eq(laduWireCagesTable.id, existing.id));
+          } else {
+            await tx.insert(laduWireCagesTable).values({ userId, qty: delta.amount });
+          }
+          storedDeltas.push({ kind: "wire_cage", amount: delta.amount });
+        } else if (delta.kind === "reusable_cap") {
+          const [existing] = await tx.select().from(laduReusableCapsTable).where(and(eq(laduReusableCapsTable.userId, userId), eq(laduReusableCapsTable.size, delta.size)));
+          if (existing) {
+            await tx.update(laduReusableCapsTable).set({ qty: existing.qty + delta.amount }).where(eq(laduReusableCapsTable.id, existing.id));
+          } else {
+            await tx.insert(laduReusableCapsTable).values({ userId, size: delta.size, qty: delta.amount });
+          }
+          storedDeltas.push({ kind: "reusable_cap", size: delta.size, amount: delta.amount });
+        } else if (delta.kind === "blank_label") {
+          const resolvedTypeId = delta.blankLabelTypeId === 0 ? await resolveDefaultBlankLabelType(tx, userId) : delta.blankLabelTypeId;
+          const [existing] = await tx.select().from(laduBlankLabelsTable).where(and(eq(laduBlankLabelsTable.userId, userId), eq(laduBlankLabelsTable.blankLabelTypeId, resolvedTypeId), eq(laduBlankLabelsTable.size, delta.size)));
+          if (existing) {
+            await tx.update(laduBlankLabelsTable).set({ qty: existing.qty + delta.amount }).where(eq(laduBlankLabelsTable.id, existing.id));
+          } else {
+            await tx.insert(laduBlankLabelsTable).values({ userId, blankLabelTypeId: resolvedTypeId, size: delta.size, qty: delta.amount });
+          }
+          storedDeltas.push({ kind: "blank_label", blankLabelTypeId: resolvedTypeId, size: delta.size, amount: delta.amount });
+        } else if (delta.kind === "finished_goods") {
+          const [existing] = await tx.select().from(laduFinishedGoodsTable).where(and(eq(laduFinishedGoodsTable.userId, userId), eq(laduFinishedGoodsTable.flavorId, delta.flavorId), eq(laduFinishedGoodsTable.size, delta.size)));
+          const currentQty = existing?.qty ?? 0;
+          if (currentQty + delta.amount < 0) {
+            const err = new Error(`Laos pole piisavalt valmistoodangut — laos ${currentQty}, sooviti ${-delta.amount}`);
+            (err as any).code = "INSUFFICIENT_STOCK";
+            throw err;
+          }
+          if (existing) {
+            await tx.update(laduFinishedGoodsTable).set({ qty: currentQty + delta.amount }).where(eq(laduFinishedGoodsTable.id, existing.id));
+          } else {
+            await tx.insert(laduFinishedGoodsTable).values({ userId, flavorId: delta.flavorId, size: delta.size, qty: delta.amount });
+          }
+          storedDeltas.push({ kind: "finished_goods", flavorId: delta.flavorId, size: delta.size, amount: delta.amount });
+        } else if (delta.kind === "returned_bottle") {
+          const [existing] = await tx.select().from(laduReturnedBottlesTable).where(and(eq(laduReturnedBottlesTable.userId, userId), eq(laduReturnedBottlesTable.flavorId, delta.flavorId), eq(laduReturnedBottlesTable.size, delta.size)));
+          const currentQty = existing?.qty ?? 0;
+          if (currentQty + delta.amount < 0) {
+            const err = new Error(`Tagastatud pudeleid pole piisavalt — laos ${currentQty}, sooviti ${-delta.amount}`);
+            (err as any).code = "INSUFFICIENT_STOCK";
+            throw err;
+          }
+          if (existing) {
+            await tx.update(laduReturnedBottlesTable).set({ qty: currentQty + delta.amount }).where(eq(laduReturnedBottlesTable.id, existing.id));
+          } else {
+            await tx.insert(laduReturnedBottlesTable).values({ userId, flavorId: delta.flavorId, size: delta.size, qty: delta.amount });
+          }
+          storedDeltas.push({ kind: "returned_bottle", flavorId: delta.flavorId, size: delta.size, amount: delta.amount });
+        }
+      }
+
+      if (villimineGoods) {
+        const { flavorId: vFlavorId, size: vSize, amount: vAmount } = villimineGoods;
+        const [vExisting] = await tx.select().from(laduFinishedGoodsTable).where(and(eq(laduFinishedGoodsTable.userId, userId), eq(laduFinishedGoodsTable.flavorId, vFlavorId), eq(laduFinishedGoodsTable.size, vSize)));
+        if (vExisting) {
+          await tx.update(laduFinishedGoodsTable).set({ qty: vExisting.qty + vAmount }).where(eq(laduFinishedGoodsTable.id, vExisting.id));
+        } else {
+          await tx.insert(laduFinishedGoodsTable).values({ userId, flavorId: vFlavorId, size: vSize, qty: vAmount });
+        }
+        storedDeltas.push({ kind: "finished_goods", flavorId: vFlavorId, size: vSize, amount: vAmount });
+        if (villimineGoods.flavoringEventId != null) {
+          storedDeltas.push({ kind: "trace", flavoringEventId: villimineGoods.flavoringEventId });
+          const eventUpdate: { savedStarterG?: number; bottlingDate?: string } = {};
+          if (villimineGoods.savedStarterG != null) eventUpdate.savedStarterG = villimineGoods.savedStarterG;
+          if (bottlingDate) eventUpdate.bottlingDate = bottlingDate;
+          if (Object.keys(eventUpdate).length > 0) {
+            await tx.update(flavoringEventTable).set(eventUpdate).where(and(eq(flavoringEventTable.id, villimineGoods.flavoringEventId), eq(flavoringEventTable.userId, userId)));
+          }
+        }
+      }
+
+      const movementCreatedAt = bottlingDate ? new Date(bottlingDate) : undefined;
+      await tx.update(laduMovementsTable)
+        .set({ summary, deltas: storedDeltas as unknown[], ...(movementCreatedAt ? { createdAt: movementCreatedAt } : {}) })
+        .where(eq(laduMovementsTable.id, id));
+    });
+    res.json(await fetchAll(userId));
+  } catch (err) {
+    if ((err as any).code === "NOT_FOUND") { res.status(404).json({ error: (err as Error).message }); return; }
+    if ((err as any).code === "FORBIDDEN") { res.status(403).json({ error: (err as Error).message }); return; }
+    if ((err as any).code === "INSUFFICIENT_STOCK") { res.status(409).json({ error: (err as Error).message }); return; }
+    req.log.error({ err }, "Failed to edit bottling movement");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.post("/ladu/flavors", requireAuth, async (req, res) => {
   const { userId } = req as AuthenticatedRequest;
   const parsed = flavorSchema.safeParse(req.body);

@@ -2316,6 +2316,301 @@ function TooraineTab({
   );
 }
 
+function BottlingEditPanel({
+  movId,
+  movement,
+  data,
+  flavEvents,
+  ferms,
+  brews,
+  onDone,
+  onCancel,
+  flashError,
+}: {
+  movId: number;
+  movement: Movement;
+  data: LaduData;
+  flavEvents: EventMin[];
+  ferms: FermMin[];
+  brews: BrewMin[];
+  onDone: (updated: LaduData) => void;
+  onCancel: () => void;
+  flashError: (msg: string) => void;
+}) {
+  const authFetch = useAuthFetch();
+
+  type AnyDelta = { kind: string; key?: number; flavorId?: number; size?: number; amount?: number; flavoringEventId?: number; blankLabelTypeId?: number };
+  const rawDeltas = movement.deltas as AnyDelta[];
+  const fgDelta = rawDeltas.find((d) => d.kind === "finished_goods");
+  const capDelta = rawDeltas.find((d) => d.kind === "cap");
+  const retDelta = rawDeltas.find((d) => d.kind === "returned_bottle");
+  const customDelta = rawDeltas.find((d) => d.kind === "custom_label_bottle");
+  const blankDelta = rawDeltas.find((d) => d.kind === "blank_label");
+  const reusableDelta = rawDeltas.find((d) => d.kind === "reusable_cap");
+  const traceDelta = rawDeltas.find((d) => d.kind === "trace");
+
+  const initFlavorId: number | "" = fgDelta?.flavorId ?? (data.flavors[0]?.id ?? "");
+  const initSize: number = fgDelta?.size ?? 330;
+  const initTotal = fgDelta?.amount != null ? String(fgDelta.amount) : "";
+  const initReturned = retDelta?.amount != null ? String(Math.abs(retDelta.amount)) : "";
+  const initFromCustom = customDelta?.amount != null ? String(Math.abs(customDelta.amount)) : "";
+  const initFromBlank = blankDelta?.amount != null ? String(Math.abs(blankDelta.amount)) : "0";
+  const initCapId: number | "" = capDelta?.key ?? "";
+  const initOldCaps = reusableDelta?.amount != null ? String(Math.abs(reusableDelta.amount)) : "";
+  const initLinkedEventId: number | "" = traceDelta?.flavoringEventId ?? "";
+  const initDate = movement.createdAt.slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [flavorId, setFlavorId] = useState<number | "">(initFlavorId);
+  const [size, setSize] = useState<number>(initSize);
+  const [date, setDate] = useState(initDate);
+  const [total, setTotal] = useState(initTotal);
+  const [returned, setReturned] = useState(initReturned);
+  const [fromCustom, setFromCustom] = useState(initFromCustom);
+  const [fromBlank, setFromBlank] = useState(initFromBlank);
+  const [capId, setCapId] = useState<number | "">(initCapId);
+  const [oldCaps, setOldCaps] = useState(initOldCaps);
+  const [linkedEventId, setLinkedEventId] = useState<number | "">(initLinkedEventId);
+  const [savedStarterG, setSavedStarterG] = useState("");
+  const [selectedBrewId, setSelectedBrewId] = useState<number | "">("");
+  const isFirstRender = React.useRef(true);
+
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    const capsForSize = data.caps.filter((c) => c.size === size);
+    if (!flavorId) { setCapId(capsForSize.length > 0 ? capsForSize[0].id : ""); return; }
+    const flavor = data.flavors.find((f) => f.id === flavorId);
+    const defaultCap = flavor?.defaultCapId ? data.caps.find((c) => c.id === flavor.defaultCapId) : null;
+    if (defaultCap && defaultCap.size === size) { setCapId(defaultCap.id); }
+    else if (capsForSize.length > 0) { setCapId(capsForSize[0].id); }
+    else { setCapId(""); }
+  }, [flavorId, size]);
+
+  const brewFermIds = selectedBrewId !== "" ? new Set(ferms.filter((f) => f.brewId === (selectedBrewId as number)).map((f) => f.id)) : null;
+  const filteredEvents = flavEvents.filter((e) => e.fermentationBatchId != null && (brewFermIds === null || brewFermIds.has(e.fermentationBatchId))).sort((a, b) => b.id - a.id).slice(0, 40);
+
+  useEffect(() => {
+    if (linkedEventId === "" || brewFermIds === null) return;
+    if (!filteredEvents.some((e) => e.id === linkedEventId)) setLinkedEventId("");
+  }, [selectedBrewId]);
+
+  const brewOptionLabel = (b: BrewMin): string => {
+    const dateStr = new Date(b.date).toLocaleDateString("et-EE");
+    if (b.sessionId != null) {
+      const sessionBrews = brews.filter((x) => x.sessionId === b.sessionId).sort((a, c) => a.id - c.id);
+      const idx = sessionBrews.findIndex((x) => x.id === b.id) + 1;
+      return `${dateStr} · Ports ${idx}/${sessionBrews.length}`;
+    }
+    return dateStr;
+  };
+
+  const brewsWithEvents = brews.filter((b) => {
+    const bFermIds = new Set(ferms.filter((f) => f.brewId === b.id).map((f) => f.id));
+    return flavEvents.some((e) => e.fermentationBatchId != null && bFermIds.has(e.fermentationBatchId));
+  }).sort((a, b) => b.id - a.id);
+
+  const flavorName = (id: number) => data.flavors.find((f) => f.id === id)?.name ?? "?";
+  const t = Math.max(0, parseInt(total) || 0);
+  const ret = Math.min(t, Math.max(0, parseInt(returned) || 0));
+  const newCount = t - ret;
+  const fromCust = Math.min(newCount, Math.max(0, parseInt(fromCustom) || 0));
+  const fromBlankRaw = Math.max(0, parseInt(fromBlank) || 0);
+  const fromBlankUsed = Math.min(fromBlankRaw, newCount - fromCust);
+  const old = Math.min(t, Math.max(0, parseInt(oldCaps) || 0));
+  const selectedCap = data.caps.find((c) => c.id === capId);
+  const isPunnkork = selectedCap?.type === "punnkork";
+  const reusableStock = data.reusableCaps.find((r) => r.size === size)?.qty ?? 0;
+  const blankLabelStock = data.blankLabels.filter((l) => l.size === size).reduce((sum, l) => sum + l.qty, 0);
+  const bottleDeduct = newCount - fromCust;
+  const customLabelBottleDeduct = fromCust;
+  const labelDeduct = newCount - fromCust - fromBlankUsed;
+  const blankLabelDeduct = fromBlankUsed;
+  const capDeduct = capId !== "" ? t - old : 0;
+  const wireCageDeduct = size === 750 && isPunnkork ? t : 0;
+  const reusableCapDeduct = isPunnkork ? old : 0;
+  const sizeCaps = data.caps.filter((c) => c.size === size);
+  const returnedStock = flavorId !== "" ? (data.returnedBottles.find((r) => r.flavorId === (flavorId as number) && r.size === size)?.qty ?? 0) : 0;
+  const labelStock = flavorId !== "" ? (data.labels.find((l) => l.flavorId === (flavorId as number) && l.size === size)?.qty ?? 0) : null;
+
+  const [isPending, setIsPending] = useState(false);
+
+  const handleSave = async () => {
+    if (!flavorId) return flashError("Vali maitse");
+    if (t <= 0) return flashError("Sisesta pudelite arv");
+    const deltas: unknown[] = [];
+    if (bottleDeduct > 0) deltas.push({ kind: "bottle", key: size, amount: -bottleDeduct });
+    if (customLabelBottleDeduct > 0) deltas.push({ kind: "custom_label_bottle", size, amount: -customLabelBottleDeduct });
+    if (labelDeduct > 0) deltas.push({ kind: "label", flavorId, size, amount: -labelDeduct });
+    if (blankLabelDeduct > 0) deltas.push({ kind: "blank_label", blankLabelTypeId: 0, size, amount: -blankLabelDeduct });
+    if (capId !== "" && capDeduct > 0) deltas.push({ kind: "cap", key: capId, amount: -capDeduct });
+    if (wireCageDeduct > 0) deltas.push({ kind: "wire_cage", amount: -wireCageDeduct });
+    if (reusableCapDeduct > 0) deltas.push({ kind: "reusable_cap", size, amount: -reusableCapDeduct });
+    if (ret > 0) deltas.push({ kind: "returned_bottle", flavorId, size, amount: -ret });
+    const parts = [`Villisin ${t} × ${flavorName(flavorId as number)} ${size} ml`];
+    if (ret) parts.push(`${ret} tagasi tulnud pudelit`);
+    if (fromCust) parts.push(`${fromCust} kohandatud sildiga pudelit`);
+    if (fromBlankUsed > 0) parts.push(`${fromBlankUsed} vabalt kirjutatava sildiga pudelit`);
+    if (reusableCapDeduct > 0) parts.push(`${reusableCapDeduct} korduvkasutatavat punnkorki`);
+    if (selectedCap) parts.push(`kork: ${capLabel(selectedCap)}`);
+    if (wireCageDeduct > 0) parts.push(`${wireCageDeduct} traatkorki`);
+    const savedG = parseInt(savedStarterG) || 0;
+    const body: Record<string, unknown> = {
+      type: "villimine",
+      summary: parts.join(" · "),
+      deltas,
+      bottlingDate: date,
+      villimineGoods: {
+        flavorId: flavorId as number,
+        size,
+        amount: t,
+        ...(linkedEventId !== "" ? { flavoringEventId: linkedEventId as number } : {}),
+        ...(linkedEventId !== "" && savedG > 0 ? { savedStarterG: savedG } : {}),
+      },
+    };
+    try {
+      setIsPending(true);
+      const res = await authFetch(`/ladu/bottling/${movId}`, { method: "PUT", body: JSON.stringify(body) });
+      const updated = await res.json() as LaduData;
+      onDone(updated);
+    } catch (err) {
+      flashError((err as Error).message || "Salvestamine ebaõnnestus");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 pt-3 border-t border-stone-100 space-y-4">
+      <div className="text-xs font-medium text-stone-500">Korrigeeri villimise kannet</div>
+
+      <div>
+        <label className="block text-xs text-stone-500 mb-1">Maitse</label>
+        <select value={flavorId} onChange={(e) => setFlavorId(Number(e.target.value))}
+          className="w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-amber-600 focus:outline-none">
+          {data.flavors.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-xs text-stone-500 mb-1">Suurus</label>
+        <Seg options={SIZES.map((s) => ({ value: s, label: `${s} ml` }))} value={size} onChange={(v) => setSize(v as number)} />
+      </div>
+
+      <div>
+        <label className="block text-xs text-stone-500 mb-1">Villimise kuupäev</label>
+        <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value || today)}
+          className="w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-amber-600 focus:outline-none" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Mitu pudelit kokku</label>
+          <Num value={total} onChange={setTotal} />
+        </div>
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Tagasi tulnud pudelit</label>
+          <Num value={returned} onChange={setReturned} />
+          <p className="text-xs text-stone-400 mt-1">Laos: {returnedStock} tk</p>
+        </div>
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Kohandatud sildiga pudelit</label>
+          <Num value={fromCustom} onChange={setFromCustom} />
+        </div>
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Vabalt kirjutatava sildiga</label>
+          <Num value={fromBlank} onChange={setFromBlank} />
+          <p className="text-xs text-stone-400 mt-1">Laos: {blankLabelStock} tk</p>
+        </div>
+      </div>
+
+      {brewsWithEvents.length > 0 && (
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Pruulimine <span className="text-stone-400">(filtreerib maitsestamise kirjeid)</span></label>
+          <select value={selectedBrewId} onChange={(e) => setSelectedBrewId(e.target.value === "" ? "" : Number(e.target.value))}
+            className="w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-amber-600 focus:outline-none">
+            <option value="">— kõik pruulimised —</option>
+            {brewsWithEvents.map((b) => <option key={b.id} value={b.id}>{brewOptionLabel(b)}</option>)}
+          </select>
+        </div>
+      )}
+
+      {filteredEvents.length > 0 && (
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Seo maitsestamise kirjega <span className="text-stone-400">(valikuline)</span></label>
+          <select value={linkedEventId} onChange={(e) => setLinkedEventId(e.target.value === "" ? "" : Number(e.target.value))}
+            className="w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-amber-600 focus:outline-none">
+            <option value="">— ei seo —</option>
+            {filteredEvents.map((e) => (
+              <option key={e.id} value={e.id}>
+                {new Date(e.date).toLocaleDateString("et-EE")}{e.bottlingDate ? ` → villimine ${new Date(e.bottlingDate).toLocaleDateString("et-EE")}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {linkedEventId !== "" && (
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Juuretist salvestatud (g)</label>
+          <Num value={savedStarterG} onChange={setSavedStarterG} />
+        </div>
+      )}
+
+      <div>
+        <label className="block text-xs text-stone-500 mb-1">Kork</label>
+        <select value={capId} onChange={(e) => setCapId(e.target.value ? Number(e.target.value) : "")}
+          className="w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm focus:border-amber-600 focus:outline-none">
+          {sizeCaps.length === 0
+            ? <option value="">— korkide varu puudub —</option>
+            : <>
+                {capId === "" && <option value="" disabled>— vali kork —</option>}
+                {sizeCaps.map((c) => {
+                  const isDefault = data.flavors.find((f) => f.id === flavorId)?.defaultCapId === c.id;
+                  return <option key={c.id} value={c.id}>{capLabel(c)}{isDefault ? " (vaikimisi)" : ""}</option>;
+                })}
+              </>
+          }
+        </select>
+      </div>
+
+      {isPunnkork && (
+        <div>
+          <label className="block text-xs text-stone-500 mb-1">Korduvkasutatavaid korke kasutatud</label>
+          <Num value={oldCaps} onChange={setOldCaps} />
+          <p className="text-xs text-stone-400 mt-1">Laos: {reusableStock} tk</p>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-stone-700">
+        <p className="font-medium text-amber-900 mb-1">Laost arvatakse maha:</p>
+        <ul className="space-y-0.5">
+          <li>Tühjad pudelid {size} ml: <b>{bottleDeduct}</b></li>
+          <li>Kohandatud sildiga pudelid: <b>{customLabelBottleDeduct}</b></li>
+          <li>Sildid {flavorId ? flavorName(flavorId as number) : "—"} {size} ml: <b>{labelDeduct}</b>{labelStock != null ? <span className="text-stone-400"> (laos: {labelStock} tk)</span> : null}</li>
+          <li>Vabalt kirjutatavad sildid: <b>{blankLabelDeduct}</b></li>
+          <li>Korgid: <b>{capId !== "" ? capDeduct : 0}</b>{selectedCap ? <span className="text-stone-500"> ({capLabel(selectedCap)})</span> : null}</li>
+          {wireCageDeduct > 0 && <li>Traatkorki: <b>{wireCageDeduct}</b></li>}
+          {reusableCapDeduct > 0 && <li>Korduvkasutatavad punnkorgid: <b>{reusableCapDeduct}</b></li>}
+          <li className="text-amber-800 font-medium">Valmistoodang + <b>{t}</b></li>
+        </ul>
+      </div>
+
+      <div className="flex gap-2">
+        <button type="button" onClick={handleSave} disabled={isPending}
+          className="flex items-center gap-1 text-xs px-3 py-1.5 bg-amber-700 text-white rounded-lg hover:bg-amber-800 disabled:opacity-40">
+          <Check className="w-3.5 h-3.5" />
+          {isPending ? "Salvestan…" : "Salvesta muutused"}
+        </button>
+        <button type="button" onClick={onCancel}
+          className="flex items-center gap-1 text-xs px-3 py-1.5 border border-stone-300 rounded-lg hover:bg-stone-50">
+          <X className="w-3.5 h-3.5" />
+          Tühista
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function formatQty(n: number | null | undefined): string {
   if (n == null) return "0";
   const rounded = Math.round(n * 1000) / 1000;
@@ -2343,6 +2638,7 @@ function AjaluguTab({
 }) {
   const authFetch = useAuthFetch();
   const qc = useQueryClient();
+  const [fullEditMovId, setFullEditMovId] = useState<number | null>(null);
   const [editingMovId, setEditingMovId] = useState<number | null>(null);
   const [editCapId, setEditCapId] = useState<number | "">("");
   const [editQty, setEditQty] = useState<string>("");
@@ -2501,10 +2797,10 @@ function AjaluguTab({
                 )}
               </div>
               <div className="flex flex-col items-end gap-1 shrink-0">
-                {m.type === "villimine" && !isEditing && !isEditingSale && (
+                {m.type === "villimine" && fullEditMovId !== m.id && !isEditingSale && (
                   <button
                     type="button"
-                    onClick={() => startEdit(m)}
+                    onClick={() => { setFullEditMovId(m.id); setEditingMovId(null); }}
                     className="text-stone-400 hover:text-amber-700 flex items-center gap-1 text-xs"
                   >
                     <Pencil className="w-3.5 h-3.5" /> muuda
@@ -2595,6 +2891,24 @@ function AjaluguTab({
                 </div>
               );
             })()}
+
+            {fullEditMovId === m.id && (
+              <BottlingEditPanel
+                movId={m.id}
+                movement={m}
+                data={data}
+                flavEvents={flavEvents}
+                ferms={ferms}
+                brews={brews}
+                onDone={(updated) => {
+                  qc.setQueryData(LADU_QUERY_KEY, updated);
+                  setFullEditMovId(null);
+                  flash("Villimine uuendatud");
+                }}
+                onCancel={() => setFullEditMovId(null)}
+                flashError={flashError}
+              />
+            )}
 
             {isEditingSale && (
               <div className="mt-3 pt-3 border-t border-stone-100 space-y-3">
