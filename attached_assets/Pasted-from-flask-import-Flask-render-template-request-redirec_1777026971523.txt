@@ -1,0 +1,83 @@
+from flask import Flask, render_template, request, redirect
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+import json
+import os
+
+app = Flask(__name__)
+
+DATA_FILE = "kestvuskatsed.json"
+
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+def save_data(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+@app.route("/")
+def index():
+    data = load_data()
+    # Sorteerime esmalt maitsmata joogid kuupäeva järgi
+    data.sort(key=lambda x: (
+        x["status"] == "maitsitud",
+        x["next_tasting"] if x["next_tasting"] else "9999-12-31"
+    ))
+    return render_template("index.html", data=data)
+
+@app.route("/add", methods=["POST"])
+def add():
+    data = load_data()
+
+    product = request.form["product"]
+    bottle_id = request.form["bottle_id"]
+    bottled_date = request.form["bottled_date"]
+    interval_months = int(request.form["interval_months"])
+
+    bottled_dt = datetime.strptime(bottled_date, "%Y-%m-%d")
+    next_tasting = bottled_dt + relativedelta(months=interval_months)
+
+    new_entry = {
+        "id": int(datetime.now().timestamp()),
+        "product": product,
+        "bottle_id": bottle_id,
+        "bottled_date": bottled_date,
+        "interval_months": interval_months,
+        "next_tasting": next_tasting.strftime("%Y-%m-%d"),
+        "status": "ootab",
+        "result": "",
+        "conclusion": ""
+    }
+
+    data.append(new_entry)
+    save_data(data)
+
+    return redirect("/")
+
+@app.route("/taste/<int:item_id>", methods=["POST"])
+def taste(item_id):
+    data = load_data()
+
+    for item in data:
+        if item["id"] == item_id:
+            item["status"] = "maitsitud"
+            item["result"] = request.form["result"]
+            item["conclusion"] = request.form["conclusion"]
+            item["next_tasting"] = ""
+            item["tasted_date"] = datetime.now().strftime("%Y-%m-%d")
+
+    save_data(data)
+    return redirect("/")
+
+@app.route("/delete/<int:item_id>")
+def delete(item_id):
+    data = load_data()
+    data = [item for item in data if item["id"] != item_id]
+    save_data(data)
+    return redirect("/")
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=81)
