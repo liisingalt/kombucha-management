@@ -1430,6 +1430,7 @@ function LisaVaruTab({
       <Card title="Pudelid">
         <label className="block text-sm text-stone-600 mb-1">Suurus</label>
         <Seg options={SIZES.map((s) => ({ value: s, label: `${s} ml` }))} value={bSize} onChange={(v) => setBSize(v as number)} />
+        {(() => { const n = data.bottles.find((b) => b.size === bSize)?.qty ?? 0; return <p className={`text-xs mt-1 ${n === 0 ? "text-amber-600" : "text-stone-400"}`}>Laos: {n} tk</p>; })()}
         <div className="mt-3 flex gap-2">
           <Num value={bQty} onChange={setBQty} onKeyDown={(e) => { if (e.key === "Enter") addBottles(); }} className="flex-1" />
           <button type="button" onClick={addBottles} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
@@ -1440,6 +1441,7 @@ function LisaVaruTab({
         <p className="text-xs text-stone-400 mb-3">Tühi kohandatud silt peal — maitsekleeps lisatakse villimise ajal.</p>
         <label className="block text-sm text-stone-600 mb-1">Suurus</label>
         <Seg options={SIZES.map((s) => ({ value: s, label: `${s} ml` }))} value={clbSize} onChange={(v) => setClbSize(v as number)} />
+        {(() => { const n = data.customLabelBottles.find((b) => b.size === clbSize)?.qty ?? 0; return <p className={`text-xs mt-1 ${n === 0 ? "text-amber-600" : "text-stone-400"}`}>Laos: {n} tk</p>; })()}
         <div className="mt-3 flex gap-2">
           <Num value={clbQty} onChange={setClbQty} onKeyDown={(e) => { if (e.key === "Enter") addCustomLabelBottles(); }} className="flex-1" />
           <button type="button" onClick={addCustomLabelBottles} disabled={commitMutation.isPending} className="rounded-lg bg-amber-700 px-4 text-white hover:bg-amber-800 disabled:opacity-60">Lisa</button>
