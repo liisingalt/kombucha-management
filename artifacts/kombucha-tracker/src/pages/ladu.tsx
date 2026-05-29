@@ -923,8 +923,16 @@ function VillimineTab({ data, flavorName, commitMutation, flash, flavEvents, fer
     );
   };
 
+  const onVillimineKey = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || commitMutation.isPending) return;
+    const t = e.target as HTMLElement;
+    if (t.tagName === "TEXTAREA") return;
+    e.preventDefault();
+    villi();
+  };
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" onKeyDown={onVillimineKey}>
       <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
         <div>
           <label className="block text-sm text-stone-600 mb-1">Maitse</label>
@@ -1259,11 +1267,11 @@ function ValmistoodangTab({ data, flavorName, finishedGoodsCommitMutation, flash
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm text-stone-600 mb-1">Müüdud</label>
-                <Num value={sold} onChange={setSold} />
+                <Num value={sold} onChange={setSold} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
               </div>
               <div>
                 <label className="block text-sm text-stone-600 mb-1">Ära antud</label>
-                <Num value={given} onChange={setGiven} />
+                <Num value={given} onChange={setGiven} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
               </div>
             </div>
 
@@ -1273,6 +1281,7 @@ function ValmistoodangTab({ data, flavorName, finishedGoodsCommitMutation, flash
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submit(); }}
                 placeholder="nt Turu laupäev"
                 className="w-full rounded-lg border border-stone-300 px-3 py-2 text-stone-800 focus:border-amber-600 focus:outline-none"
               />
@@ -2072,6 +2081,7 @@ function TooraineTab({
                     <input
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) saveEdit(m); if (e.key === "Escape") setEditingId(null); }}
                       className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
                     />
                   </div>
@@ -2090,6 +2100,7 @@ function TooraineTab({
                         <input
                           value={editCustomUnit}
                           onChange={(e) => setEditCustomUnit(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) saveEdit(m); if (e.key === "Escape") setEditingId(null); }}
                           placeholder="ühik"
                           className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
                         />
@@ -2105,6 +2116,7 @@ function TooraineTab({
                       step="any"
                       value={editMinStock}
                       onChange={(e) => setEditMinStock(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) saveEdit(m); if (e.key === "Escape") setEditingId(null); }}
                       placeholder="nt 0.5"
                       className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-600 focus:outline-none"
                     />

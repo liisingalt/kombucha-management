@@ -358,17 +358,13 @@ function UusPruulimine({
     );
   useUnsavedChanges(isDirty);
 
-  const formRef = useRef<HTMLDivElement>(null);
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key !== "Enter") return;
+    if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
     const target = e.target as HTMLElement;
     if (target.tagName === "TEXTAREA") return;
+    if (m.isPending) return;
     e.preventDefault();
-    const els = Array.from(
-      formRef.current?.querySelectorAll<HTMLElement>("input, select, textarea") ?? []
-    ).filter((el) => !(el as HTMLInputElement).disabled && !(el as HTMLInputElement).readOnly);
-    const idx = els.indexOf(target);
-    els[idx + 1]?.focus();
+    save();
   };
 
   const m = useMutation({
@@ -431,7 +427,7 @@ function UusPruulimine({
   };
 
   return (
-    <div className="space-y-5" ref={formRef} onKeyDown={onKey}>
+    <div className="space-y-5" onKeyDown={onKey}>
       <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-serif text-lg text-stone-900">Keetmine</h3>
@@ -793,6 +789,7 @@ function TeeVaru({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) add(); }}
             placeholder="nt roheline Mozum"
             className={inputCls}
           />
@@ -802,6 +799,7 @@ function TeeVaru({
             type="number"
             value={qty}
             onChange={(e) => setQty(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) add(); }}
             placeholder="grammid"
             className={inputCls}
           />
@@ -1121,6 +1119,7 @@ function SuhkruVaru({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) add(); }}
             placeholder="nt valge suhkur"
             className={inputCls}
           />
@@ -1130,6 +1129,7 @@ function SuhkruVaru({
             type="number"
             value={qty}
             onChange={(e) => setQty(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) add(); }}
             placeholder="grammid"
             className={inputCls}
           />

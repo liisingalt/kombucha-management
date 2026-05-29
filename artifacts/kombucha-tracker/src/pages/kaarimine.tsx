@@ -277,8 +277,16 @@ function UusKaarimine({
     });
   };
 
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || m.isPending) return;
+    const target = e.target as HTMLElement;
+    if (target.tagName === "TEXTAREA") return;
+    e.preventDefault();
+    save();
+  };
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" onKeyDown={onKey}>
       <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
         <div>
           <label className="block text-sm text-stone-600 mb-1">Seo pruulimisega (valikuline)</label>
@@ -607,9 +615,17 @@ function BatchCard({
     });
   };
 
+  const onEditKey = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || patch.isPending) return;
+    const target = e.target as HTMLElement;
+    if (target.tagName === "TEXTAREA") return;
+    e.preventDefault();
+    save();
+  };
+
   if (editOpen) {
     return (
-      <div className="rounded-xl border border-amber-300 bg-white p-4 space-y-4">
+      <div className="rounded-xl border border-amber-300 bg-white p-4 space-y-4" onKeyDown={onEditKey}>
         <div className="flex items-center justify-between">
           <h3 className="font-serif text-base text-stone-900">Muuda käärimist</h3>
           <button
